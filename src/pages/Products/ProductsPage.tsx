@@ -1362,82 +1362,10 @@ export default function ProductsPage() {
                 </>
               )}
 
-              {editingProductId ? (
-                <div className="branch-section">
-                  <div className="branch-section-header">
-                    <span>Tên chi nhánh</span>
-                    <span>Tồn kho</span>
-                    <span>Trạng thái kinh doanh</span>
-                  </div>
-                  {branchConfigs.map((config) => (
-                    <div key={config.branchId} className="branch-row">
-                      <span>{config.branchName}</span>
-                      <input
-                        className={`branch-stock-input ${productFieldErrors.branchConfigs ? 'field-invalid' : ''}`}
-                        type="text"
-                        inputMode="decimal"
-                        value={config.stock}
-                        onFocus={(event) => {
-                          if (event.target.value === '0') {
-                            setBranchConfigs((prev) =>
-                              prev.map((item) =>
-                                item.branchId === config.branchId ? { ...item, stock: '' } : item,
-                              ),
-                            );
-                          } else {
-                            event.target.select();
-                          }
-                        }}
-                        onBlur={() => {
-                          setBranchConfigs((prev) =>
-                            prev.map((item) =>
-                              item.branchId === config.branchId
-                                ? { ...item, stock: item.stock.trim() === '' ? '0' : item.stock }
-                                : item,
-                            ),
-                          );
-                        }}
-                        onChange={(event) => {
-                          if (productFieldErrors.branchConfigs) {
-                            setProductFieldErrors((prev) => ({ ...prev, branchConfigs: undefined }));
-                          }
-                          const value = normalizeDecimalInput(event.target.value, 3);
-                          setBranchConfigs((prev) =>
-                            prev.map((item) =>
-                              item.branchId === config.branchId ? { ...item, stock: value } : item,
-                            ),
-                          );
-                        }}
-                      />
-                      <label className="switch">
-                        <input
-                          type="checkbox"
-                          checked={config.isActive}
-                          onChange={(event) => {
-                            if (productFieldErrors.branchConfigs) {
-                              setProductFieldErrors((prev) => ({ ...prev, branchConfigs: undefined }));
-                            }
-                            setBranchConfigs((prev) =>
-                              prev.map((item) =>
-                                item.branchId === config.branchId
-                                  ? { ...item, isActive: event.target.checked }
-                                  : item,
-                              ),
-                            );
-                          }}
-                        />
-                        <span className="slider" />
-                      </label>
-                    </div>
-                  ))}
-                  <FormFieldError message={productFieldErrors.branchConfigs} />
-                </div>
-              ) : (
-                <div className="modal-tip">
-                  Hàng hóa mới sẽ tự gán vào chi nhánh đang chọn ({branches.find((b) => b.id === getPreferredBranchId())?.name ||
-                    'chi nhánh mặc định'}).
-                </div>
-              )}
+              <div className="modal-tip">
+                Hàng hóa sẽ gán theo chi nhánh đang chọn ({branches.find((b) => b.id === getPreferredBranchId())?.name ||
+                  'chi nhánh mặc định'}).
+              </div>
 
               {error && <div className="products-error">{error}</div>}
 

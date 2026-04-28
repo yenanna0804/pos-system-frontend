@@ -660,12 +660,17 @@
   padding: 0 14px 12px;
 }
 
+.combo-toolbar .ghost-btn {
+  font-size: 14px;
+  font-weight: 400;
+}
+
 .combo-toolbar label {
   align-items: center;
   color: #1d2939;
   display: inline-flex;
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 400;
   gap: 10px;
 }
 
