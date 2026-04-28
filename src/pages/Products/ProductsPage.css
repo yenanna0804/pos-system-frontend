@@ -241,6 +241,12 @@
   gap: 8px;
 }
 
+.pagination-actions .ghost-btn.active {
+  background-color: #1890ff;
+  color: white;
+  border-color: #1890ff;
+}
+
 .row-actions {
   display: flex;
   gap: 6px;

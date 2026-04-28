@@ -676,6 +676,46 @@ export default function ProductsPage() {
           <button className="ghost-btn" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
             Trước
           </button>
+          {totalPages <= 7 ? (
+            Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+              <button
+                key={pageNum}
+                className={`ghost-btn ${pageNum === page ? 'active' : ''}`}
+                disabled={pageNum === page}
+                onClick={() => setPage(pageNum)}
+              >
+                {pageNum}
+              </button>
+            ))
+          ) : (
+            <>
+              {page > 3 && (
+                <>
+                  <button className="ghost-btn" onClick={() => setPage(1)}>1</button>
+                  {page > 4 && <span>...</span>}
+                </>
+              )}
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const start = Math.max(1, Math.min(page - 2, totalPages - 4));
+                return start + i;
+              }).filter((p) => p >= 1 && p <= totalPages).map((pageNum) => (
+                <button
+                  key={pageNum}
+                  className={`ghost-btn ${pageNum === page ? 'active' : ''}`}
+                  disabled={pageNum === page}
+                  onClick={() => setPage(pageNum)}
+                >
+                  {pageNum}
+                </button>
+              ))}
+              {page < totalPages - 2 && (
+                <>
+                  {page < totalPages - 3 && <span>...</span>}
+                  <button className="ghost-btn" onClick={() => setPage(totalPages)}>{totalPages}</button>
+                </>
+              )}
+            </>
+          )}
           <button
             className="ghost-btn"
             disabled={page >= totalPages}
