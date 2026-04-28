@@ -51,7 +51,6 @@ export const productService = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
-  deleteImage: (imageUrl: string) => api.post('/products/delete-image', { imageUrl }),
 };
 
 export const categoryService = {
