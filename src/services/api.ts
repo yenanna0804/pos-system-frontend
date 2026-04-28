@@ -47,6 +47,7 @@ export const productService = {
     categoryId?: string;
     stockStatus?: 'all' | 'in_stock' | 'out_of_stock';
     branchId?: string;
+    search?: string;
   }) => api.get('/products', { params }),
   getById: (id: string) => api.get(`/products/${id}`),
   create: (payload: ProductPayload) => api.post('/products', payload),

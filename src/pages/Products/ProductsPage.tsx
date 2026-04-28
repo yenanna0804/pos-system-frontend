@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, MouseEvent } from 'react';
 import { branchService, categoryService, productService } from '../../services/api';
 import './ProductsPage.css';
@@ -136,8 +136,10 @@ export default function ProductsPage() {
   const [filterCategoryId, setFilterCategoryId] = useState('');
   const [filterStock, setFilterStock] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
   const [filterBranchId, setFilterBranchId] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [page, setPage] = useState(1);
-  const pageSize = 20;
+  const pageSize = 7;
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [isListLoading, setIsListLoading] = useState(false);
@@ -163,6 +165,7 @@ export default function ProductsPage() {
           categoryId: filterCategoryId || undefined,
           stockStatus: filterStock,
           branchId: filterBranchId || undefined,
+          search: searchTerm || undefined,
         }),
         categoryService.list(),
         branchService.getAll(),
@@ -199,13 +202,29 @@ export default function ProductsPage() {
 
   useEffect(() => {
     loadData().catch(() => setError('Không tải được dữ liệu hàng hóa'));
-  }, [page, filterCategoryId, filterStock, filterBranchId]);
+  }, [page, filterCategoryId, filterStock, filterBranchId, searchTerm]);
 
   useEffect(() => {
     return () => {
       if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
     };
   }, [pendingPreviewUrl]);
+
+  // Debounce search term
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    searchTimeoutRef.current = setTimeout(() => {
+      setPage(1);
+    }, 500); // Search after 500ms pause
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchTerm]);
 
   const openCreateModal = () => {
     setEditingProductId(null);
@@ -525,6 +544,26 @@ export default function ProductsPage() {
       </div>
 
       <div className="products-filters">
+        <label className="search-label">
+          Tìm kiếm
+          <div className="search-input-wrap">
+            <input
+              type="text"
+              placeholder="Tên hàng hóa, nhóm hàng..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+              }}
+            />
+            <button className="search-icon-btn" onClick={() => setPage(1)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" />
+                <path d="M21 21l-4.35-4.35" />
+              </svg>
+            </button>
+          </div>
+        </label>
+
         <label>
           Nhóm hàng
           <select
@@ -622,7 +661,7 @@ export default function ProductsPage() {
             ) : products.length === 0 ? (
               <tr>
                 <td colSpan={12} className="empty-row">
-                  Không có hàng hóa phù hợp bộ lọc
+                  {searchTerm ? 'Không tìm thấy dữ liệu' : 'Không có hàng hóa phù hợp bộ lọc'}
                 </td>
               </tr>
             ) : (
