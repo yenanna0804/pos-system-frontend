@@ -30,7 +30,7 @@ export default function Dashboard() {
       <header className="dashboard-header">
         <h1>POS System</h1>
         <div className="header-right">
-          <span className="branch-name">Chi nhánh: {branchId || 'Chưa chọn'}</span>
+          <span className="branch-name">Chi nhánh: {user?.branchName || branchId || 'Chưa chọn'}</span>
           <span className="user-name">Xin chào, {user?.fullName || user?.username}</span>
           <button onClick={handleLogout} className="logout-btn">
             Đăng xuất
