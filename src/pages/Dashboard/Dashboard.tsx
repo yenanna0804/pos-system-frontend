@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import ProductsPage from '../Products/ProductsPage';
+import TablesPage from '../Tables/TablesPage';
 import './Dashboard.css';
 
 type TabKey = 'overview' | 'products' | 'tables' | 'orders' | 'printers';
@@ -108,7 +109,9 @@ export default function Dashboard() {
 
         {activeTab === 'products' && <ProductsPage />}
 
-        {activeTab !== 'overview' && activeTab !== 'products' && (
+        {activeTab === 'tables' && <TablesPage />}
+
+        {activeTab !== 'overview' && activeTab !== 'products' && activeTab !== 'tables' && (
           <div className="placeholder-card">Chức năng đang được phát triển.</div>
         )}
       </main>

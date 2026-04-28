@@ -69,4 +69,44 @@ export const categoryService = {
   remove: (id: string) => api.delete(`/categories/${id}`),
 };
 
+export type AreaPayload = { name: string; branchId?: string };
+export type RoomPayload = { name: string; areaId: string; branchId?: string };
+export type DiningTablePayload = {
+  name: string;
+  areaId: string;
+  roomId?: string | null;
+  branchId?: string;
+  capacity?: number;
+};
+
+export const areaService = {
+  list: (branchId?: string) => api.get('/areas', { params: { branchId } }),
+  create: (payload: AreaPayload) => api.post('/areas', payload),
+  update: (id: string, payload: AreaPayload) => api.patch(`/areas/${id}`, payload),
+  remove: (id: string) => api.delete(`/areas/${id}`),
+};
+
+export const roomService = {
+  list: (params?: { areaId?: string; branchId?: string }) => api.get('/rooms', { params }),
+  create: (payload: RoomPayload) => api.post('/rooms', payload),
+  update: (id: string, payload: RoomPayload) => api.patch(`/rooms/${id}`, payload),
+  remove: (id: string) => api.delete(`/rooms/${id}`),
+};
+
+export const diningTableService = {
+  list: (params?: {
+    branchId?: string;
+    areaId?: string;
+    roomId?: string;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  }) =>
+    api.get('/dining-tables', { params }),
+  options: (params?: { branchId?: string }) => api.get('/dining-tables/options', { params }),
+  create: (payload: DiningTablePayload) => api.post('/dining-tables', payload),
+  update: (id: string, payload: DiningTablePayload) => api.patch(`/dining-tables/${id}`, payload),
+  remove: (id: string) => api.delete(`/dining-tables/${id}`),
+};
+
 export default api;

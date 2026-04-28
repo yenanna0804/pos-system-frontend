@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, MouseEvent } from 'react';
 import { branchService, categoryService, productService } from '../../services/api';
+import { DeleteActionIcon, EditActionIcon } from '../../components/ActionIcons';
+import { useAuth } from '../../contexts/AuthContext';
 import './ProductsPage.css';
 
 const API_ASSET_ORIGIN = import.meta.env.VITE_API_ASSET_ORIGIN || import.meta.env.VITE_API_PROXY_TARGET || '';
@@ -52,6 +54,15 @@ type Toast = {
   id: number;
   type: 'success' | 'error' | 'info';
   message: string;
+};
+
+type ConfirmDialogState = {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  danger?: boolean;
 };
 
 type ProductForm = {
@@ -120,9 +131,11 @@ const buildDefaultBranchConfigs = (rows: Branch[]): BranchConfig[] =>
   }));
 
 export default function ProductsPage() {
+  const { branchId: authBranchId } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
@@ -147,6 +160,8 @@ export default function ProductsPage() {
   const [, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({ open: false, title: '', message: '' });
+  const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
 
   const pushToast = (type: Toast['type'], message: string) => {
     const id = Date.now() + Math.floor(Math.random() * 1000);
@@ -156,27 +171,65 @@ export default function ProductsPage() {
     }, 3000);
   };
 
+  const confirmAction = (config: Omit<ConfirmDialogState, 'open'>) => {
+    setConfirmDialog({ open: true, ...config });
+    return new Promise<boolean>((resolve) => {
+      confirmResolverRef.current = resolve;
+    });
+  };
+
+  const closeConfirmDialog = (confirmed: boolean) => {
+    setConfirmDialog({ open: false, title: '', message: '' });
+    const resolver = confirmResolverRef.current;
+    confirmResolverRef.current = null;
+    if (resolver) resolver(confirmed);
+  };
+
+  const getPreferredBranchId = () => filterBranchId || authBranchId || branches[0]?.id || '';
+
+  const buildCreateBranchConfigs = () => {
+    const preferredBranchId = getPreferredBranchId();
+    if (!preferredBranchId) return [] as BranchConfig[];
+
+    const preferredBranch = branches.find((branch) => branch.id === preferredBranchId);
+    const existingConfig = branchConfigs.find((item) => item.branchId === preferredBranchId);
+
+    return [
+      {
+        branchId: preferredBranchId,
+        branchName: preferredBranch?.name || 'Chi nhánh mặc định',
+        isActive: true,
+        stock: existingConfig?.stock || '0',
+      },
+    ];
+  };
+
+  const loadBranches = async () => {
+    const branchRows: Branch[] = (await branchService.getAll()).data || [];
+    setBranches(branchRows);
+    setBranchConfigs(buildDefaultBranchConfigs(branchRows));
+  };
+
+  const loadCategories = async (force = false) => {
+    if (categoriesLoaded && !force) return;
+    const categoryRows: Category[] = (await categoryService.list()).data || [];
+    setCategories(categoryRows);
+    setCategoriesLoaded(true);
+  };
+
   const loadData = async () => {
     setIsListLoading(true);
     try {
-      const [productResult, categoryResult, branchResult] = await Promise.allSettled([
-        productService.list({
-          page,
-          pageSize,
-          categoryId: filterCategoryId || undefined,
-          stockStatus: filterStock,
-          branchId: filterBranchId || undefined,
-          search: debouncedSearch || undefined,
-        }),
-        categoryService.list(),
-        branchService.getAll(),
-      ]);
+      const productResult = await productService.list({
+        page,
+        pageSize,
+        categoryId: filterCategoryId || undefined,
+        stockStatus: filterStock,
+        branchId: filterBranchId || undefined,
+        search: debouncedSearch || undefined,
+      });
 
-      if (productResult.status !== 'fulfilled') {
-        throw new Error('Không tải được danh sách hàng hóa');
-      }
-
-      const productData = productResult.value.data;
+      const productData = productResult.data;
       const productRows: Product[] = Array.isArray(productData)
         ? productData
         : Array.isArray(productData?.items)
@@ -185,21 +238,14 @@ export default function ProductsPage() {
       setProducts(productRows);
       setTotalPages(productData?.pagination?.totalPages || 1);
       setTotalItems(productData?.pagination?.total || productRows.length);
-
-      const categoryRows = categoryResult.status === 'fulfilled' ? categoryResult.value.data || [] : [];
-      setCategories(categoryRows);
-
-      const branchRows: Branch[] = branchResult.status === 'fulfilled' ? branchResult.value.data || [] : [];
-      setBranches(branchRows);
-      setBranchConfigs(buildDefaultBranchConfigs(branchRows));
-
-      if (categoryResult.status !== 'fulfilled' || branchResult.status !== 'fulfilled') {
-        pushToast('info', 'Một phần dữ liệu bộ lọc chưa tải được, danh sách hàng hóa vẫn hiển thị');
-      }
     } finally {
       setIsListLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadBranches().catch(() => setError('Không tải được danh sách chi nhánh'));
+  }, []);
 
   useEffect(() => {
     loadData().catch(() => setError('Không tải được dữ liệu hàng hóa'));
@@ -229,17 +275,21 @@ export default function ProductsPage() {
   }, [searchTerm]);
 
   const openCreateModal = () => {
+    loadCategories().catch(() => pushToast('error', 'Không tải được nhóm hàng hóa'));
     setEditingProductId(null);
     setProductForm(initialForm);
     setPendingImageFile(null);
     if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
     setPendingPreviewUrl('');
-    setBranchConfigs(buildDefaultBranchConfigs(branches));
+    setBranchConfigs(buildCreateBranchConfigs());
     setError('');
     setIsAddProductOpen(true);
   };
 
   const openEditModal = async (product: Product) => {
+    await loadCategories().catch(() => {
+      pushToast('error', 'Không tải được nhóm hàng hóa');
+    });
     setLoading(true);
     let details: Product;
     try {
@@ -295,7 +345,7 @@ export default function ProductsPage() {
     setProductForm(initialForm);
     setPendingImageFile(null);
     setPendingPreviewUrl('');
-    setBranchConfigs(buildDefaultBranchConfigs(branches));
+    setBranchConfigs(buildCreateBranchConfigs());
   };
 
   const handleOverlayClick = (event: MouseEvent<HTMLDivElement>, onClose: () => void) => {
@@ -326,14 +376,20 @@ export default function ProductsPage() {
     if (costPriceValue < 0) return 'Giá vốn không hợp lệ';
     if (priceValue <= 0) return 'Giá bán phải lớn hơn 0';
 
-    for (const config of branchConfigs) {
+    const configsToValidate = editingProductId ? branchConfigs : buildCreateBranchConfigs();
+
+    for (const config of configsToValidate) {
       const stockValue = Number(config.stock || 0);
       if (!Number.isFinite(stockValue) || stockValue < 0) {
         return `Tồn kho chi nhánh ${config.branchName} không hợp lệ`;
       }
     }
 
-    if (!branchConfigs.some((item) => item.isActive)) {
+    if (configsToValidate.length === 0) {
+      return 'Không tìm thấy chi nhánh mặc định để lưu hàng hóa';
+    }
+
+    if (!configsToValidate.some((item) => item.isActive)) {
       return 'Ít nhất một chi nhánh phải bật trạng thái kinh doanh';
     }
 
@@ -369,7 +425,7 @@ export default function ProductsPage() {
         costPrice: productForm.costPrice.trim() === '' ? undefined : parseMoneyInput(productForm.costPrice),
         price: parseMoneyInput(productForm.price),
         isActive: productForm.isActive,
-        branchConfigs: branchConfigs.map((item) => ({
+        branchConfigs: (editingProductId ? branchConfigs : buildCreateBranchConfigs()).map((item) => ({
           branchId: item.branchId,
           isActive: item.isActive,
           stock: Number(item.stock || 0),
@@ -391,7 +447,7 @@ export default function ProductsPage() {
       setPendingImageFile(null);
       if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
       setPendingPreviewUrl('');
-      setBranchConfigs(buildDefaultBranchConfigs(branches));
+      setBranchConfigs(buildCreateBranchConfigs());
       setPage(1);
     } catch (message: any) {
       setError(message || 'Không thể lưu hàng hóa');
@@ -402,7 +458,13 @@ export default function ProductsPage() {
   };
 
   const onDeleteProduct = async (product: Product) => {
-    const confirmed = window.confirm(`Xóa hàng hóa "${product.name}"?`);
+    const confirmed = await confirmAction({
+      title: 'Xác nhận xóa hàng hóa',
+      message: `Xóa hàng hóa "${product.name}"?`,
+      confirmText: 'Xóa',
+      cancelText: 'Hủy',
+      danger: true,
+    });
     if (!confirmed) return;
     setError('');
     try {
@@ -454,6 +516,7 @@ export default function ProductsPage() {
     try {
       await categoryService.create(newCategoryName.trim());
       setNewCategoryName('');
+      await loadCategories(true);
       await loadData();
       pushToast('success', 'Đã thêm nhóm hàng hóa');
     } catch (message: any) {
@@ -479,7 +542,12 @@ export default function ProductsPage() {
         `Nhóm hàng "${category.name}" đang có ${category.productCount} mặt hàng.\n` +
         `Nếu đổi tên, toàn bộ mặt hàng thuộc nhóm này sẽ hiển thị theo tên mới.\n\n` +
         'Bạn có chắc muốn cập nhật?';
-      const confirmed = window.confirm(warning);
+      const confirmed = await confirmAction({
+        title: 'Xác nhận cập nhật nhóm hàng',
+        message: warning,
+        confirmText: 'Cập nhật',
+        cancelText: 'Hủy',
+      });
       if (!confirmed) return;
     }
 
@@ -488,6 +556,7 @@ export default function ProductsPage() {
       await categoryService.update(editingCategoryId, editingCategoryName.trim());
       setEditingCategoryId(null);
       setEditingCategoryName('');
+      await loadCategories(true);
       await loadData();
       pushToast('success', 'Đã cập nhật nhóm hàng hóa');
     } catch (message: any) {
@@ -505,12 +574,19 @@ export default function ProductsPage() {
         ? `Nhóm hàng "${category.name}" đang có ${category.productCount} mặt hàng.\nNếu xóa, các mặt hàng này sẽ không còn thuộc nhóm hàng hóa nào.\n\nBạn có chắc muốn xóa?`
         : `Bạn có chắc muốn xóa nhóm hàng "${category.name}"?`;
 
-    const confirmed = window.confirm(warning);
+    const confirmed = await confirmAction({
+      title: 'Xác nhận xóa nhóm hàng',
+      message: warning,
+      confirmText: 'Xóa',
+      cancelText: 'Hủy',
+      danger: true,
+    });
     if (!confirmed) return;
 
     setError('');
     try {
       const response = await categoryService.remove(id);
+      await loadCategories(true);
       await loadData();
       if (response.data?.message) {
         pushToast('info', response.data.message);
@@ -533,13 +609,45 @@ export default function ProductsPage() {
         ))}
       </div>
 
+      {confirmDialog.open && (
+        <div className="modal-overlay" onClick={() => closeConfirmDialog(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{confirmDialog.title}</h3>
+              <button className="icon-close" onClick={() => closeConfirmDialog(false)}>
+                x
+              </button>
+            </div>
+            <p style={{ whiteSpace: 'pre-line', margin: '4px 0 0', color: '#344054' }}>{confirmDialog.message}</p>
+            <div className="modal-actions" style={{ marginTop: 16 }}>
+              <button type="button" className="ghost-btn" onClick={() => closeConfirmDialog(false)}>
+                {confirmDialog.cancelText || 'Hủy'}
+              </button>
+              <button
+                type="button"
+                className={confirmDialog.danger ? 'danger-btn' : 'primary-btn'}
+                onClick={() => closeConfirmDialog(true)}
+              >
+                {confirmDialog.confirmText || 'Xác nhận'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="products-toolbar">
         <h2>Danh sách hàng hóa</h2>
         <div className="products-toolbar-actions">
           <button className="primary-btn" onClick={openCreateModal}>
             Thêm mới hàng hóa
           </button>
-          <button className="secondary-btn" onClick={() => setIsCategoryOpen(true)}>
+          <button
+            className="secondary-btn"
+            onClick={() => {
+              loadCategories().catch(() => pushToast('error', 'Không tải được nhóm hàng hóa'));
+              setIsCategoryOpen(true);
+            }}
+          >
             Quản lý nhóm hàng hóa
           </button>
         </div>
@@ -577,6 +685,9 @@ export default function ProductsPage() {
           Nhóm hàng
           <select
             value={filterCategoryId}
+            onFocus={() => {
+              loadCategories().catch(() => pushToast('error', 'Không tải được nhóm hàng hóa'));
+            }}
             onChange={(event) => {
               setFilterCategoryId(event.target.value);
               setPage(1);
@@ -701,11 +812,11 @@ export default function ProductsPage() {
                   </td>
                   <td>
                     <div className="row-actions">
-                      <button className="ghost-btn" onClick={() => openEditModal(product)}>
-                        Sửa
+                      <button className="ghost-btn icon-action-btn" title="Sửa" aria-label="Sửa" onClick={() => openEditModal(product)}>
+                        <EditActionIcon />
                       </button>
-                      <button className="danger-btn" onClick={() => onDeleteProduct(product)}>
-                        Xóa
+                      <button className="danger-btn icon-action-btn" title="Xóa" aria-label="Xóa" onClick={() => onDeleteProduct(product)}>
+                        <DeleteActionIcon />
                       </button>
                     </div>
                   </td>
@@ -804,10 +915,12 @@ export default function ProductsPage() {
                       {productForm.imageUrl && (
                         <button
                           type="button"
-                          className="ghost-btn"
+                          className="danger-btn icon-action-btn"
+                          title="Xóa ảnh"
+                          aria-label="Xóa ảnh"
                           onClick={onRemoveImage}
                         >
-                          Xóa ảnh
+                          <DeleteActionIcon />
                         </button>
                       )}
                       <small>
@@ -843,6 +956,9 @@ export default function ProductsPage() {
                   Nhóm hàng
                   <select
                     value={productForm.categoryId}
+                    onFocus={() => {
+                      loadCategories().catch(() => pushToast('error', 'Không tải được nhóm hàng hóa'));
+                    }}
                     onChange={(event) => setProductForm({ ...productForm, categoryId: event.target.value })}
                   >
                     <option value="">--Lựa chọn--</option>
@@ -928,68 +1044,75 @@ export default function ProductsPage() {
                 </label>
               </div>
 
-              <div className="branch-section">
-                <div className="branch-section-header">
-                  <span>Tên chi nhánh</span>
-                  <span>Tồn kho</span>
-                  <span>Trạng thái kinh doanh</span>
-                </div>
-                {branchConfigs.map((config) => (
-                  <div key={config.branchId} className="branch-row">
-                    <span>{config.branchName}</span>
-                    <input
-                      className="branch-stock-input"
-                      type="text"
-                      inputMode="decimal"
-                      value={config.stock}
-                      onFocus={(event) => {
-                        if (event.target.value === '0') {
-                          setBranchConfigs((prev) =>
-                            prev.map((item) =>
-                              item.branchId === config.branchId ? { ...item, stock: '' } : item,
-                            ),
-                          );
-                        } else {
-                          event.target.select();
-                        }
-                      }}
-                      onBlur={() => {
-                        setBranchConfigs((prev) =>
-                          prev.map((item) =>
-                            item.branchId === config.branchId
-                              ? { ...item, stock: item.stock.trim() === '' ? '0' : item.stock }
-                              : item,
-                          ),
-                        );
-                      }}
-                      onChange={(event) => {
-                        const value = normalizeDecimalInput(event.target.value, 3);
-                        setBranchConfigs((prev) =>
-                          prev.map((item) =>
-                            item.branchId === config.branchId ? { ...item, stock: value } : item,
-                          ),
-                        );
-                      }}
-                    />
-                    <label className="switch">
+              {editingProductId ? (
+                <div className="branch-section">
+                  <div className="branch-section-header">
+                    <span>Tên chi nhánh</span>
+                    <span>Tồn kho</span>
+                    <span>Trạng thái kinh doanh</span>
+                  </div>
+                  {branchConfigs.map((config) => (
+                    <div key={config.branchId} className="branch-row">
+                      <span>{config.branchName}</span>
                       <input
-                        type="checkbox"
-                        checked={config.isActive}
-                        onChange={(event) => {
+                        className="branch-stock-input"
+                        type="text"
+                        inputMode="decimal"
+                        value={config.stock}
+                        onFocus={(event) => {
+                          if (event.target.value === '0') {
+                            setBranchConfigs((prev) =>
+                              prev.map((item) =>
+                                item.branchId === config.branchId ? { ...item, stock: '' } : item,
+                              ),
+                            );
+                          } else {
+                            event.target.select();
+                          }
+                        }}
+                        onBlur={() => {
                           setBranchConfigs((prev) =>
                             prev.map((item) =>
                               item.branchId === config.branchId
-                                ? { ...item, isActive: event.target.checked }
+                                ? { ...item, stock: item.stock.trim() === '' ? '0' : item.stock }
                                 : item,
                             ),
                           );
                         }}
+                        onChange={(event) => {
+                          const value = normalizeDecimalInput(event.target.value, 3);
+                          setBranchConfigs((prev) =>
+                            prev.map((item) =>
+                              item.branchId === config.branchId ? { ...item, stock: value } : item,
+                            ),
+                          );
+                        }}
                       />
-                      <span className="slider" />
-                    </label>
-                  </div>
-                ))}
-              </div>
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={config.isActive}
+                          onChange={(event) => {
+                            setBranchConfigs((prev) =>
+                              prev.map((item) =>
+                                item.branchId === config.branchId
+                                  ? { ...item, isActive: event.target.checked }
+                                  : item,
+                              ),
+                            );
+                          }}
+                        />
+                        <span className="slider" />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="modal-tip">
+                  Hàng hóa mới sẽ tự gán vào chi nhánh đang chọn ({branches.find((b) => b.id === getPreferredBranchId())?.name ||
+                    'chi nhánh mặc định'}).
+                </div>
+              )}
 
               <div className="modal-actions">
                 <button type="button" className="ghost-btn" onClick={closeProductModal}>
@@ -1062,16 +1185,23 @@ export default function ProductsPage() {
                       ) : (
                         <>
                           <button
-                            className="ghost-btn"
+                            className="ghost-btn icon-action-btn"
+                            title="Sửa"
+                            aria-label="Sửa"
                             onClick={() => {
                               setEditingCategoryId(category.id);
                               setEditingCategoryName(category.name);
                             }}
                           >
-                            Sửa
+                            <EditActionIcon />
                           </button>
-                          <button className="danger-btn" onClick={() => onDeleteCategory(category.id)}>
-                            Xóa
+                          <button
+                            className="danger-btn icon-action-btn"
+                            title="Xóa"
+                            aria-label="Xóa"
+                            onClick={() => onDeleteCategory(category.id)}
+                          >
+                            <DeleteActionIcon />
                           </button>
                         </>
                       )}

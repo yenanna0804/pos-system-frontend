@@ -13,3 +13,15 @@ body {
 input, button, select {
   font-family: inherit;
 }
+
+.icon-action-btn {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  min-width: 42px;
+  padding: 8px 10px;
+}
+
+.icon-action-btn svg {
+  display: block;
+}
