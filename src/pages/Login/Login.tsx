@@ -9,6 +9,11 @@ interface Branch {
   name: string;
 }
 
+interface LoginContext {
+  role: string;
+  branchId?: string | null;
+}
+
 export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -16,6 +21,7 @@ export default function Login() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [branchLocked, setBranchLocked] = useState(false);
 
   const { login, setBranchId: setContextBranchId } = useAuth();
   const navigate = useNavigate();
@@ -35,6 +41,35 @@ export default function Login() {
       });
   }, []);
 
+  useEffect(() => {
+    const value = username.trim();
+    if (!value) {
+      setBranchLocked(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      authService
+        .loginContext(value)
+        .then((res) => {
+          const context: LoginContext = res.data;
+          if (context.role === 'ADMIN') {
+            setBranchLocked(false);
+            return;
+          }
+          if (context.branchId) {
+            setBranchId(context.branchId);
+            setBranchLocked(true);
+          }
+        })
+        .catch(() => {
+          setBranchLocked(false);
+        });
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [username]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -47,7 +82,7 @@ export default function Login() {
       const res = await authService.login(username, password, branchId);
       const { user, token } = res.data;
       
-      setContextBranchId(branchId);
+      setContextBranchId(user.branchId || branchId);
       login(user, token);
       navigate('/dashboard');
     } catch (err: any) {
@@ -90,6 +125,7 @@ export default function Login() {
             <select
               value={branchId}
               onChange={(e) => setBranchId(e.target.value)}
+              disabled={branchLocked}
             >
               <option value="">-- Chọn chi nhánh --</option>
               {branches.map((branch) => (

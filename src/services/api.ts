@@ -9,6 +9,15 @@ export const api = axios.create({
   },
 });
 
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -20,6 +29,7 @@ api.interceptors.response.use(
 export const authService = {
   login: (username: string, password: string, branchId: string) =>
     api.post('/auth/login', { username, password, branchId }),
+  loginContext: (username: string) => api.post('/auth/login-context', { username }),
 };
 
 export const branchService = {

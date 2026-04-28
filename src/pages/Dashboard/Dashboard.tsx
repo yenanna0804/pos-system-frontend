@@ -24,6 +24,7 @@ export default function Dashboard() {
   };
 
   const activeTab = routeToTab[location.pathname] || 'overview';
+  const isAdmin = user?.role === 'ADMIN';
 
   useEffect(() => {
     branchService
@@ -36,11 +37,14 @@ export default function Dashboard() {
           const defaultBranchId = user?.branchId && rows.some((b) => b.id === user.branchId) ? user.branchId : rows[0].id;
           setBranchId(defaultBranchId);
         }
+        if (!isAdmin && user?.branchId) {
+          setBranchId(user.branchId);
+        }
       })
       .catch(() => {
         setBranches([]);
       });
-  }, [branchId, setBranchId, user?.branchId]);
+  }, [branchId, isAdmin, setBranchId, user?.branchId]);
 
   const selectedBranchName = useMemo(() => {
     if (!branchId) return user?.branchName || 'Chưa chọn';
@@ -62,7 +66,7 @@ export default function Dashboard() {
             <select
               value={branchId}
               onChange={(event) => setBranchId(event.target.value)}
-              disabled={branches.length === 0}
+              disabled={branches.length === 0 || !isAdmin}
               aria-label="Chọn chi nhánh"
             >
               {!branchId && <option value="">Chọn chi nhánh</option>}
