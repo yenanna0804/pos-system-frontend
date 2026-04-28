@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent, MouseEvent } from 'react';
+import type { FormEvent } from 'react';
 import { branchService, categoryService, productService } from '../../services/api';
 import { DeleteActionIcon, EditActionIcon } from '../../components/ActionIcons';
+import FormFieldError from '../../components/FormFieldError';
 import { useAuth } from '../../contexts/AuthContext';
 import './ProductsPage.css';
 
@@ -29,6 +30,8 @@ type BranchConfig = {
 
 type Product = {
   id: string;
+  type?: 'SINGLE' | 'COMBO';
+  autoPrice?: boolean;
   sku: string;
   name: string;
   imageUrl?: string;
@@ -43,6 +46,14 @@ type Product = {
   isActive: boolean;
   branchNames?: string;
   branchConfigs?: BranchConfig[] | string;
+  comboItems?: ComboItem[] | string;
+};
+
+type ComboItem = {
+  itemProductId: string;
+  quantity: number;
+  itemName?: string;
+  itemPrice?: number;
 };
 
 type Branch = {
@@ -66,6 +77,8 @@ type ConfirmDialogState = {
 };
 
 type ProductForm = {
+  type: 'SINGLE' | 'COMBO';
+  autoPrice: boolean;
   sku: string;
   name: string;
   imageUrl: string;
@@ -78,7 +91,20 @@ type ProductForm = {
   isActive: boolean;
 };
 
+type ProductFieldErrors = {
+  name?: string;
+  sku?: string;
+  unit?: string;
+  weight?: string;
+  costPrice?: string;
+  price?: string;
+  comboItems?: string;
+  branchConfigs?: string;
+};
+
 const initialForm: ProductForm = {
+  type: 'SINGLE',
+  autoPrice: true,
   sku: '',
   name: '',
   imageUrl: '',
@@ -143,10 +169,15 @@ export default function ProductsPage() {
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
   const [pendingPreviewUrl, setPendingPreviewUrl] = useState('');
   const [branchConfigs, setBranchConfigs] = useState<BranchConfig[]>([]);
+  const [comboItems, setComboItems] = useState<ComboItem[]>([]);
+  const [comboCatalog, setComboCatalog] = useState<Product[]>([]);
+  const [comboSearchTerms, setComboSearchTerms] = useState<string[]>([]);
+  const [activeComboDropdown, setActiveComboDropdown] = useState<number | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingCategoryName, setEditingCategoryName] = useState('');
   const [filterCategoryId, setFilterCategoryId] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'SINGLE' | 'COMBO'>('all');
   const [filterStock, setFilterStock] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
   const [filterBranchId, setFilterBranchId] = useState(authBranchId || '');
   const [searchTerm, setSearchTerm] = useState('');
@@ -157,8 +188,9 @@ export default function ProductsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [isListLoading, setIsListLoading] = useState(false);
-  const [, setError] = useState('');
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [productFieldErrors, setProductFieldErrors] = useState<ProductFieldErrors>({});
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({ open: false, title: '', message: '' });
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
@@ -223,6 +255,7 @@ export default function ProductsPage() {
       const productResult = await productService.list({
         page,
         pageSize,
+        type: filterType === 'all' ? undefined : filterType,
         categoryId: filterCategoryId || undefined,
         stockStatus: filterStock,
         branchId: filterBranchId || undefined,
@@ -243,13 +276,26 @@ export default function ProductsPage() {
     }
   };
 
+  const loadComboCatalog = async () => {
+    const res = await productService.list({ page: 1, pageSize: 100, branchId: filterBranchId || undefined });
+    const data = res.data;
+    const rows: Product[] = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+    setComboCatalog(rows.filter((item) => (item.type || 'SINGLE') === 'SINGLE'));
+  };
+
+  const formatComboProductLabel = (product: Product | undefined) => {
+    if (!product) return '';
+    const unit = product.unit?.trim();
+    return unit ? `${product.name} - ${unit}` : product.name;
+  };
+
   useEffect(() => {
     loadBranches().catch(() => setError('Không tải được danh sách chi nhánh'));
   }, []);
 
   useEffect(() => {
     loadData().catch(() => setError('Không tải được dữ liệu hàng hóa'));
-  }, [page, filterCategoryId, filterStock, filterBranchId, debouncedSearch]);
+  }, [page, filterCategoryId, filterType, filterStock, filterBranchId, debouncedSearch]);
 
   useEffect(() => {
     setFilterBranchId(authBranchId || '');
@@ -279,14 +325,42 @@ export default function ProductsPage() {
     };
   }, [searchTerm]);
 
+  useEffect(() => {
+    if (productForm.type !== 'COMBO' || !productForm.autoPrice) return;
+    const total = comboItems.reduce((sum, item) => {
+      const product = comboCatalog.find((entry) => entry.id === item.itemProductId);
+      return sum + parseMoneyInput(String(product?.price || '0')) * Number(item.quantity || 0);
+    }, 0);
+    setProductForm((prev) => ({ ...prev, price: formatMoneyValue(total) || '0' }));
+  }, [comboCatalog, comboItems, productForm.autoPrice, productForm.type]);
+
+  useEffect(() => {
+    if (comboItems.length === 0) {
+      if (comboSearchTerms.length) setComboSearchTerms([]);
+      return;
+    }
+
+    setComboSearchTerms((prev) =>
+      comboItems.map((item, idx) => {
+        if (prev[idx]?.trim()) return prev[idx];
+        return formatComboProductLabel(comboCatalog.find((entry) => entry.id === item.itemProductId));
+      }),
+    );
+  }, [comboCatalog, comboItems]);
+
   const openCreateModal = () => {
     loadCategories().catch(() => pushToast('error', 'Không tải được nhóm hàng hóa'));
+    loadComboCatalog().catch(() => pushToast('error', 'Không tải được danh sách hàng hóa thành phần'));
     setEditingProductId(null);
     setProductForm(initialForm);
     setPendingImageFile(null);
     if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
     setPendingPreviewUrl('');
     setBranchConfigs(buildCreateBranchConfigs());
+    setComboItems([]);
+    setComboSearchTerms([]);
+    setActiveComboDropdown(null);
+    setProductFieldErrors({});
     setError('');
     setIsAddProductOpen(true);
   };
@@ -308,6 +382,8 @@ export default function ProductsPage() {
 
     setEditingProductId(details.id);
     setProductForm({
+      type: (details.type as 'SINGLE' | 'COMBO') || 'SINGLE',
+      autoPrice: details.autoPrice ?? true,
       sku: details.sku || '',
       name: details.name || '',
       imageUrl: details.imageUrl || '',
@@ -320,6 +396,9 @@ export default function ProductsPage() {
       isActive: Boolean(details.isActive),
     });
     setPendingImageFile(null);
+    await loadComboCatalog().catch(() => {
+      pushToast('error', 'Không tải được danh sách hàng hóa thành phần');
+    });
     if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
     setPendingPreviewUrl('');
 
@@ -338,6 +417,19 @@ export default function ProductsPage() {
       })),
     );
 
+    const rawComboItems =
+      typeof details.comboItems === 'string'
+        ? (JSON.parse(details.comboItems) as ComboItem[])
+        : (details.comboItems as ComboItem[] | undefined) || [];
+    const normalizedComboItems = rawComboItems.map((item) => ({
+      itemProductId: item.itemProductId,
+      quantity: Number(item.quantity || 1),
+    }));
+    setComboItems(normalizedComboItems);
+    setComboSearchTerms(
+      normalizedComboItems.map((item) => formatComboProductLabel(comboCatalog.find((entry) => entry.id === item.itemProductId))),
+    );
+
     setError('');
     setIsAddProductOpen(true);
     setLoading(false);
@@ -351,62 +443,75 @@ export default function ProductsPage() {
     setPendingImageFile(null);
     setPendingPreviewUrl('');
     setBranchConfigs(buildCreateBranchConfigs());
-  };
-
-  const handleOverlayClick = (event: MouseEvent<HTMLDivElement>, onClose: () => void) => {
-    if (event.target === event.currentTarget) {
-      onClose();
-    }
+    setComboItems([]);
+    setComboSearchTerms([]);
+    setActiveComboDropdown(null);
+    setProductFieldErrors({});
   };
 
   const validateProductForm = () => {
-    if (!productForm.name.trim()) return 'Tên hàng là bắt buộc';
+    const fieldErrors: ProductFieldErrors = {};
+    if (!productForm.name.trim()) fieldErrors.name = 'Tên hàng là bắt buộc';
     if (productForm.name.trim().length < 2 || productForm.name.trim().length > 255) {
-      return 'Tên hàng phải từ 2 đến 255 ký tự';
+      fieldErrors.name = 'Tên hàng phải từ 2 đến 255 ký tự';
     }
     if (productForm.sku && !/^[A-Za-z0-9_-]{3,50}$/.test(productForm.sku.trim())) {
-      return 'Mã hàng hóa chỉ gồm chữ, số, gạch dưới hoặc gạch ngang (3-50 ký tự)';
+      fieldErrors.sku = 'Mã hàng hóa chỉ gồm chữ, số, gạch dưới hoặc gạch ngang (3-50 ký tự)';
     }
     if (productForm.unit && !/^[\p{L}\p{N}\s./-]{1,30}$/u.test(productForm.unit.trim())) {
-      return 'Đơn vị tính không đúng định dạng';
+      fieldErrors.unit = 'Đơn vị tính không đúng định dạng';
     }
 
     const weightValue = Number(productForm.weight || 0);
     if (!Number.isFinite(weightValue) || weightValue < 0) {
-      return 'Trọng lượng không hợp lệ';
+      fieldErrors.weight = 'Trọng lượng không hợp lệ';
     }
 
     const costPriceValue = parseMoneyInput(productForm.costPrice);
     const priceValue = parseMoneyInput(productForm.price);
-    if (costPriceValue < 0) return 'Giá vốn không hợp lệ';
-    if (priceValue <= 0) return 'Giá bán phải lớn hơn 0';
+    if (costPriceValue < 0) fieldErrors.costPrice = 'Giá vốn không hợp lệ';
+    if (priceValue <= 0) fieldErrors.price = 'Giá bán phải lớn hơn 0';
+
+    if (productForm.type === 'COMBO') {
+      if (comboItems.length === 0) fieldErrors.comboItems = 'Combo phải có ít nhất một hàng hóa thành phần';
+      const unresolvedIdx = comboItems.findIndex((item, idx) => !item.itemProductId && (comboSearchTerms[idx] || '').trim() !== '');
+      if (unresolvedIdx >= 0) {
+        fieldErrors.comboItems = `Dòng thành phần ${unresolvedIdx + 1}: vui lòng chọn hàng hóa từ danh sách gợi ý`;
+      }
+      if (comboItems.some((item) => !item.itemProductId || Number(item.quantity) <= 0)) {
+        fieldErrors.comboItems = fieldErrors.comboItems || 'Thành phần combo không hợp lệ';
+      }
+    }
 
     const configsToValidate = editingProductId ? branchConfigs : buildCreateBranchConfigs();
 
     for (const config of configsToValidate) {
       const stockValue = Number(config.stock || 0);
       if (!Number.isFinite(stockValue) || stockValue < 0) {
-        return `Tồn kho chi nhánh ${config.branchName} không hợp lệ`;
+        fieldErrors.branchConfigs = `Tồn kho chi nhánh ${config.branchName} không hợp lệ`;
+        break;
       }
     }
 
     if (configsToValidate.length === 0) {
-      return 'Không tìm thấy chi nhánh mặc định để lưu hàng hóa';
+      fieldErrors.branchConfigs = 'Không tìm thấy chi nhánh mặc định để lưu hàng hóa';
     }
 
     if (!configsToValidate.some((item) => item.isActive)) {
-      return 'Ít nhất một chi nhánh phải bật trạng thái kinh doanh';
+      fieldErrors.branchConfigs = 'Ít nhất một chi nhánh phải bật trạng thái kinh doanh';
     }
 
-    return null;
+    const firstError = Object.values(fieldErrors).find(Boolean) || null;
+    return { fieldErrors, firstError };
   };
 
   const onSaveProduct = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
-    const validationError = validateProductForm();
-    if (validationError) {
-      setError(validationError);
+    const { fieldErrors, firstError } = validateProductForm();
+    setProductFieldErrors(fieldErrors);
+    if (firstError) {
+      setError(firstError);
       return;
     }
     setLoading(true);
@@ -420,6 +525,8 @@ export default function ProductsPage() {
       }
 
       const payload = {
+        type: productForm.type,
+        autoPrice: productForm.type === 'COMBO' ? productForm.autoPrice : false,
         sku: productForm.sku || undefined,
         name: productForm.name,
         imageUrl,
@@ -435,6 +542,10 @@ export default function ProductsPage() {
           isActive: item.isActive,
           stock: Number(item.stock || 0),
         })),
+        comboItems:
+          productForm.type === 'COMBO'
+            ? comboItems.map((item) => ({ itemProductId: item.itemProductId, quantity: Number(item.quantity) }))
+            : undefined,
       };
 
       if (editingProductId) {
@@ -453,6 +564,10 @@ export default function ProductsPage() {
       if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
       setPendingPreviewUrl('');
       setBranchConfigs(buildCreateBranchConfigs());
+      setComboItems([]);
+      setComboSearchTerms([]);
+      setActiveComboDropdown(null);
+      setProductFieldErrors({});
       setPage(1);
     } catch (message: any) {
       setError(message || 'Không thể lưu hàng hóa');
@@ -708,6 +823,21 @@ export default function ProductsPage() {
         </label>
 
         <label>
+          Loại hàng hóa
+          <select
+            value={filterType}
+            onChange={(event) => {
+              setFilterType(event.target.value as 'all' | 'SINGLE' | 'COMBO');
+              setPage(1);
+            }}
+          >
+            <option value="all">Tất cả loại</option>
+            <option value="SINGLE">Hàng riêng lẻ</option>
+            <option value="COMBO">Combo</option>
+          </select>
+        </label>
+
+        <label>
           Tồn kho
           <select
             value={filterStock}
@@ -803,7 +933,10 @@ export default function ProductsPage() {
                       )}
                     </div>
                   </td>
-                  <td>{product.name}</td>
+                  <td>
+                    {product.name}
+                    {(product.type || 'SINGLE') === 'COMBO' ? ' (Combo)' : ''}
+                  </td>
                   <td>{product.categoryName || '-'}</td>
                   <td>{product.unit || '-'}</td>
                   <td>{Number(product.costPrice || 0).toLocaleString('vi-VN')}</td>
@@ -891,7 +1024,7 @@ export default function ProductsPage() {
       </div>
 
       {isAddProductOpen && (
-        <div className="modal-overlay" onClick={(event) => handleOverlayClick(event, closeProductModal)}>
+        <div className="modal-overlay">
           <div className="modal-content modal-large" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <h3>{editingProductId ? 'Sửa hàng hóa' : 'Thêm hàng hóa'}</h3>
@@ -902,32 +1035,32 @@ export default function ProductsPage() {
 
             <form className="product-form" onSubmit={onSaveProduct}>
               <div className="form-grid">
-                <label>
-                  Hình ảnh
+                <div className="form-field">
+                  <span>Hình ảnh</span>
                   <div className="image-upload-row">
                     <div className="image-preview-box">
                       {pendingPreviewUrl || productForm.imageUrl ? (
-                        <img
-                          src={pendingPreviewUrl || resolveImageUrl(productForm.imageUrl)}
-                          alt="product preview"
-                        />
+                        <>
+                          <img
+                            src={pendingPreviewUrl || resolveImageUrl(productForm.imageUrl)}
+                            alt="product preview"
+                          />
+                          <button
+                            type="button"
+                            className="danger-btn icon-action-btn image-remove-btn"
+                            title="Xóa ảnh"
+                            aria-label="Xóa ảnh"
+                            onClick={onRemoveImage}
+                          >
+                            <DeleteActionIcon />
+                          </button>
+                        </>
                       ) : (
                         <span>Chưa có ảnh</span>
                       )}
                     </div>
                     <div className="image-upload-actions">
                       <input type="file" accept="image/*" onChange={onUploadImage} />
-                      {productForm.imageUrl && (
-                        <button
-                          type="button"
-                          className="danger-btn icon-action-btn"
-                          title="Xóa ảnh"
-                          aria-label="Xóa ảnh"
-                          onClick={onRemoveImage}
-                        >
-                          <DeleteActionIcon />
-                        </button>
-                      )}
                       <small>
                         {pendingImageFile
                           ? 'Ảnh đã chọn, sẽ upload/nén khi nhấn Lưu'
@@ -935,26 +1068,53 @@ export default function ProductsPage() {
                       </small>
                     </div>
                   </div>
+                </div>
+
+                <label>
+                  Loại hàng hóa
+                  <select
+                    value={productForm.type}
+                    onChange={(event) =>
+                      setProductForm((prev) => ({
+                        ...prev,
+                        type: event.target.value as 'SINGLE' | 'COMBO',
+                        autoPrice: event.target.value === 'COMBO' ? prev.autoPrice : false,
+                      }))
+                    }
+                  >
+                    <option value="SINGLE">Hàng hóa riêng lẻ</option>
+                    <option value="COMBO">Combo</option>
+                  </select>
                 </label>
 
                 <label>
                   Mã hàng hóa
                   <input
                     value={productForm.sku}
-                    onChange={(event) => setProductForm({ ...productForm, sku: event.target.value.toUpperCase() })}
+                    onChange={(event) => {
+                      setProductForm({ ...productForm, sku: event.target.value.toUpperCase() });
+                      if (productFieldErrors.sku) setProductFieldErrors((prev) => ({ ...prev, sku: undefined }));
+                    }}
                     placeholder="Mã hàng tự động"
                     maxLength={50}
+                    className={productFieldErrors.sku ? 'field-invalid' : ''}
                   />
+                  <FormFieldError message={productFieldErrors.sku} />
                 </label>
 
                 <label>
                   Tên hàng *
                   <input
                     value={productForm.name}
-                    onChange={(event) => setProductForm({ ...productForm, name: event.target.value })}
+                    onChange={(event) => {
+                      setProductForm({ ...productForm, name: event.target.value });
+                      if (productFieldErrors.name) setProductFieldErrors((prev) => ({ ...prev, name: undefined }));
+                    }}
                     required
                     maxLength={255}
+                    className={productFieldErrors.name ? 'field-invalid' : ''}
                   />
+                  <FormFieldError message={productFieldErrors.name} />
                 </label>
 
                 <label>
@@ -991,10 +1151,15 @@ export default function ProductsPage() {
                   Đơn vị tính
                   <input
                     value={productForm.unit}
-                    onChange={(event) => setProductForm({ ...productForm, unit: event.target.value })}
+                    onChange={(event) => {
+                      setProductForm({ ...productForm, unit: event.target.value });
+                      if (productFieldErrors.unit) setProductFieldErrors((prev) => ({ ...prev, unit: undefined }));
+                    }}
                     placeholder="Ví dụ: lon, chai, hộp"
                     maxLength={30}
+                    className={productFieldErrors.unit ? 'field-invalid' : ''}
                   />
+                  <FormFieldError message={productFieldErrors.unit} />
                 </label>
 
                 <label>
@@ -1041,13 +1206,161 @@ export default function ProductsPage() {
                         price: prev.price.trim() === '' ? '0' : formatMoneyInput(prev.price),
                       }));
                     }}
-                    onChange={(event) =>
-                      setProductForm({ ...productForm, price: formatMoneyInput(event.target.value) })
-                    }
+                    onChange={(event) => {
+                      setProductForm({ ...productForm, price: formatMoneyInput(event.target.value) });
+                      if (productFieldErrors.price) setProductFieldErrors((prev) => ({ ...prev, price: undefined }));
+                    }}
                     required
+                    disabled={productForm.type === 'COMBO' && productForm.autoPrice}
+                    className={productFieldErrors.price ? 'field-invalid' : ''}
                   />
+                  <FormFieldError message={productFieldErrors.price} />
                 </label>
               </div>
+
+              {productForm.type === 'COMBO' && (
+                <>
+                  <div className="branch-section">
+                  <div className="branch-section-header">
+                    <span>Hàng hóa thành phần</span>
+                    <span>Số lượng</span>
+                    <span>Thao tác</span>
+                  </div>
+                  {comboItems.map((item, idx) => (
+                    <div key={`combo-row-${idx}`} className="branch-row combo-row">
+                      <div className="combo-select-wrap">
+                        <input
+                          className={`combo-select ${productFieldErrors.comboItems ? 'field-invalid' : ''}`}
+                          value={comboSearchTerms[idx] || ''}
+                          onFocus={() => setActiveComboDropdown(idx)}
+                          onBlur={() => {
+                            setTimeout(() => {
+                              setActiveComboDropdown((prev) => (prev === idx ? null : prev));
+                            }, 120);
+                          }}
+                          onChange={(event) => {
+                            if (productFieldErrors.comboItems) {
+                              setProductFieldErrors((prev) => ({ ...prev, comboItems: undefined }));
+                            }
+                            const nextValue = event.target.value;
+                            const selectedProduct = comboCatalog
+                              .filter((entry) => entry.id !== editingProductId)
+                              .find((entry) => formatComboProductLabel(entry).toLowerCase() === nextValue.trim().toLowerCase());
+
+                            setComboSearchTerms((prev) =>
+                              comboItems.map((_, entryIdx) => (entryIdx === idx ? nextValue : prev[entryIdx] || '')),
+                            );
+                            setComboItems((prev) =>
+                              prev.map((entry, entryIdx) =>
+                                entryIdx === idx
+                                  ? { ...entry, itemProductId: selectedProduct?.id || '' }
+                                  : entry,
+                              ),
+                            );
+                            setActiveComboDropdown(idx);
+                          }}
+                          placeholder="Gõ để tìm hàng hóa"
+                        />
+
+                        {activeComboDropdown === idx && (
+                          <div className="combo-dropdown">
+                            {comboCatalog
+                              .filter((entry) => entry.id !== editingProductId)
+                              .filter((entry) =>
+                                formatComboProductLabel(entry).toLowerCase().includes((comboSearchTerms[idx] || '').trim().toLowerCase()),
+                              )
+                              .map((entry) => {
+                                const label = formatComboProductLabel(entry);
+                                return (
+                                  <button
+                                    key={entry.id}
+                                    type="button"
+                                    className="combo-dropdown-item"
+                                    onMouseDown={(event) => {
+                                      event.preventDefault();
+                                      if (productFieldErrors.comboItems) {
+                                        setProductFieldErrors((prev) => ({ ...prev, comboItems: undefined }));
+                                      }
+                                      setComboSearchTerms((prev) =>
+                                        comboItems.map((_, entryIdx) => (entryIdx === idx ? label : prev[entryIdx] || '')),
+                                      );
+                                      setComboItems((prev) =>
+                                        prev.map((row, rowIdx) =>
+                                          rowIdx === idx ? { ...row, itemProductId: entry.id } : row,
+                                        ),
+                                      );
+                                      setActiveComboDropdown(null);
+                                    }}
+                                  >
+                                    {label}
+                                  </button>
+                                );
+                              })}
+                          </div>
+                        )}
+                      </div>
+                      <input
+                        className="combo-qty-input"
+                        type="number"
+                        min={1}
+                        value={item.quantity}
+                        onChange={(event) =>
+                          setComboItems((prev) =>
+                            prev.map((entry, entryIdx) =>
+                              entryIdx === idx
+                                ? { ...entry, quantity: Math.max(1, Number(event.target.value) || 1) }
+                                : entry,
+                            ),
+                          )
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="danger-btn icon-action-btn combo-remove-btn"
+                        onClick={() => {
+                          setComboItems((prev) => prev.filter((_, entryIdx) => entryIdx !== idx));
+                          setComboSearchTerms((prev) => prev.filter((_, entryIdx) => entryIdx !== idx));
+                          if (productFieldErrors.comboItems) {
+                            setProductFieldErrors((prev) => ({ ...prev, comboItems: undefined }));
+                          }
+                          setActiveComboDropdown((prev) => {
+                            if (prev == null) return null;
+                            if (prev === idx) return null;
+                            return prev > idx ? prev - 1 : prev;
+                          });
+                        }}
+                      >
+                        <DeleteActionIcon />
+                      </button>
+                    </div>
+                  ))}
+                  <div className="modal-actions combo-toolbar">
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => {
+                        setComboItems((prev) => [...prev, { itemProductId: '', quantity: 1 }]);
+                        setComboSearchTerms((prev) => [...prev, '']);
+                        if (productFieldErrors.comboItems) {
+                          setProductFieldErrors((prev) => ({ ...prev, comboItems: undefined }));
+                        }
+                      }}
+                    >
+                      + Thêm thành phần
+                    </button>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={productForm.autoPrice}
+                        onChange={(event) => setProductForm((prev) => ({ ...prev, autoPrice: event.target.checked }))}
+                      />
+                      Tự động tính giá combo
+                    </label>
+                  </div>
+                  </div>
+                  <FormFieldError message={productFieldErrors.comboItems} />
+                </>
+              )}
 
               {editingProductId ? (
                 <div className="branch-section">
@@ -1060,7 +1373,7 @@ export default function ProductsPage() {
                     <div key={config.branchId} className="branch-row">
                       <span>{config.branchName}</span>
                       <input
-                        className="branch-stock-input"
+                        className={`branch-stock-input ${productFieldErrors.branchConfigs ? 'field-invalid' : ''}`}
                         type="text"
                         inputMode="decimal"
                         value={config.stock}
@@ -1085,6 +1398,9 @@ export default function ProductsPage() {
                           );
                         }}
                         onChange={(event) => {
+                          if (productFieldErrors.branchConfigs) {
+                            setProductFieldErrors((prev) => ({ ...prev, branchConfigs: undefined }));
+                          }
                           const value = normalizeDecimalInput(event.target.value, 3);
                           setBranchConfigs((prev) =>
                             prev.map((item) =>
@@ -1098,6 +1414,9 @@ export default function ProductsPage() {
                           type="checkbox"
                           checked={config.isActive}
                           onChange={(event) => {
+                            if (productFieldErrors.branchConfigs) {
+                              setProductFieldErrors((prev) => ({ ...prev, branchConfigs: undefined }));
+                            }
                             setBranchConfigs((prev) =>
                               prev.map((item) =>
                                 item.branchId === config.branchId
@@ -1111,6 +1430,7 @@ export default function ProductsPage() {
                       </label>
                     </div>
                   ))}
+                  <FormFieldError message={productFieldErrors.branchConfigs} />
                 </div>
               ) : (
                 <div className="modal-tip">
@@ -1118,6 +1438,8 @@ export default function ProductsPage() {
                     'chi nhánh mặc định'}).
                 </div>
               )}
+
+              {error && <div className="products-error">{error}</div>}
 
               <div className="modal-actions">
                 <button type="button" className="ghost-btn" onClick={closeProductModal}>
@@ -1133,7 +1455,7 @@ export default function ProductsPage() {
       )}
 
       {isCategoryOpen && (
-        <div className="modal-overlay" onClick={(event) => handleOverlayClick(event, () => setIsCategoryOpen(false))}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <h3>Quản lý nhóm hàng hóa</h3>

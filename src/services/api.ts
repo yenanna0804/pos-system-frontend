@@ -37,6 +37,8 @@ export const branchService = {
 };
 
 export type ProductPayload = {
+  type?: 'SINGLE' | 'COMBO';
+  autoPrice?: boolean;
   sku?: string;
   name: string;
   imageUrl?: string | null;
@@ -48,12 +50,14 @@ export type ProductPayload = {
   price: number;
   isActive?: boolean;
   branchConfigs?: { branchId: string; isActive: boolean; stock?: number }[];
+  comboItems?: { itemProductId: string; quantity: number }[];
 };
 
 export const productService = {
   list: (params: {
     page?: number;
     pageSize?: number;
+    type?: 'SINGLE' | 'COMBO';
     categoryId?: string;
     stockStatus?: 'all' | 'in_stock' | 'out_of_stock';
     branchId?: string;

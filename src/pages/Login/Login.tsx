@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { authService, branchService } from '../../services/api';
+import FormFieldError from '../../components/FormFieldError';
 import './Login.css';
 
 interface Branch {
@@ -20,6 +21,7 @@ export default function Login() {
   const [branchId, setBranchId] = useState('');
   const [branches, setBranches] = useState<Branch[]>([]);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{ username?: string; password?: string; branchId?: string }>({});
   const [loading, setLoading] = useState(false);
   const [branchLocked, setBranchLocked] = useState(false);
 
@@ -73,12 +75,18 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    const nextFieldErrors: { username?: string; password?: string; branchId?: string } = {};
+    if (!username.trim()) nextFieldErrors.username = 'Vui lòng nhập tên đăng nhập';
+    if (!password.trim()) nextFieldErrors.password = 'Vui lòng nhập mật khẩu';
+    if (!branchId) nextFieldErrors.branchId = 'Vui lòng chọn chi nhánh';
+    setFieldErrors(nextFieldErrors);
+    if (Object.keys(nextFieldErrors).length > 0) {
+      return;
+    }
+
     setLoading(true);
 
     try {
-      if (!branchId) {
-        throw new Error('Vui lòng chọn chi nhánh');
-      }
       const res = await authService.login(username, password, branchId);
       const { user, token } = res.data;
       
@@ -103,10 +111,17 @@ export default function Login() {
             <input
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => {
+                setUsername(e.target.value);
+                if (fieldErrors.username) {
+                  setFieldErrors((prev) => ({ ...prev, username: undefined }));
+                }
+              }}
               placeholder="Nhập tên đăng nhập"
+              className={fieldErrors.username ? 'field-invalid' : ''}
               required
             />
+            <FormFieldError message={fieldErrors.username} />
           </div>
 
           <div className="form-group">
@@ -114,17 +129,30 @@ export default function Login() {
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (fieldErrors.password) {
+                  setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                }
+              }}
               placeholder="Nhập mật khẩu"
+              className={fieldErrors.password ? 'field-invalid' : ''}
               required
             />
+            <FormFieldError message={fieldErrors.password} />
           </div>
 
           <div className="form-group">
             <label>Chi nhánh</label>
             <select
               value={branchId}
-              onChange={(e) => setBranchId(e.target.value)}
+              onChange={(e) => {
+                setBranchId(e.target.value);
+                if (fieldErrors.branchId) {
+                  setFieldErrors((prev) => ({ ...prev, branchId: undefined }));
+                }
+              }}
+              className={fieldErrors.branchId ? 'field-invalid' : ''}
               disabled={branchLocked}
             >
               <option value="">-- Chọn chi nhánh --</option>
@@ -134,6 +162,7 @@ export default function Login() {
                 </option>
               ))}
             </select>
+            <FormFieldError message={fieldErrors.branchId} />
           </div>
 
           <button type="submit" className="login-btn" disabled={loading}>
