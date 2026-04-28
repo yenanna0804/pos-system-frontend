@@ -148,7 +148,7 @@ export default function ProductsPage() {
   const [editingCategoryName, setEditingCategoryName] = useState('');
   const [filterCategoryId, setFilterCategoryId] = useState('');
   const [filterStock, setFilterStock] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
-  const [filterBranchId, setFilterBranchId] = useState('');
+  const [filterBranchId, setFilterBranchId] = useState(authBranchId || '');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -250,6 +250,11 @@ export default function ProductsPage() {
   useEffect(() => {
     loadData().catch(() => setError('Không tải được dữ liệu hàng hóa'));
   }, [page, filterCategoryId, filterStock, filterBranchId, debouncedSearch]);
+
+  useEffect(() => {
+    setFilterBranchId(authBranchId || '');
+    setPage(1);
+  }, [authBranchId]);
 
   useEffect(() => {
     return () => {

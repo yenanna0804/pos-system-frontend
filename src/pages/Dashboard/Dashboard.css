@@ -30,6 +30,30 @@
   font-size: 14px;
 }
 
+.branch-switcher {
+  align-items: center;
+  color: #666;
+  display: inline-flex;
+  font-size: 14px;
+  gap: 8px;
+}
+
+.branch-switcher select {
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  color: #344054;
+  font-size: 14px;
+  max-width: 220px;
+  min-width: 170px;
+  padding: 7px 10px;
+}
+
+.branch-switcher select:disabled {
+  background: #f2f4f7;
+  color: #98a2b3;
+}
+
 .logout-btn {
   padding: 8px 16px;
   background: #f5f6fa;

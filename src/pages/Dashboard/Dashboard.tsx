@@ -1,15 +1,19 @@
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { branchService } from '../../services/api';
 import ProductsPage from '../Products/ProductsPage';
 import TablesPage from '../Tables/TablesPage';
 import './Dashboard.css';
 
 type TabKey = 'overview' | 'products' | 'tables' | 'orders' | 'printers';
+type Branch = { id: string; name: string };
 
 export default function Dashboard() {
-  const { user, branchId, logout } = useAuth();
+  const { user, branchId, setBranchId, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [branches, setBranches] = useState<Branch[]>([]);
 
   const routeToTab: Record<string, TabKey> = {
     '/dashboard': 'overview',
@@ -21,6 +25,28 @@ export default function Dashboard() {
 
   const activeTab = routeToTab[location.pathname] || 'overview';
 
+  useEffect(() => {
+    branchService
+      .getAll()
+      .then((res) => {
+        const rows: Branch[] = Array.isArray(res.data) ? res.data : [];
+        setBranches(rows);
+
+        if (!branchId && rows.length > 0) {
+          const defaultBranchId = user?.branchId && rows.some((b) => b.id === user.branchId) ? user.branchId : rows[0].id;
+          setBranchId(defaultBranchId);
+        }
+      })
+      .catch(() => {
+        setBranches([]);
+      });
+  }, [branchId, setBranchId, user?.branchId]);
+
+  const selectedBranchName = useMemo(() => {
+    if (!branchId) return user?.branchName || 'Chưa chọn';
+    return branches.find((b) => b.id === branchId)?.name || user?.branchName || branchId;
+  }, [branchId, branches, user?.branchName]);
+
   const handleLogout = () => {
     logout();
     navigate('/');
@@ -31,7 +57,23 @@ export default function Dashboard() {
       <header className="dashboard-header">
         <h1>POS System</h1>
         <div className="header-right">
-          <span className="branch-name">Chi nhánh: {user?.branchName || branchId || 'Chưa chọn'}</span>
+          <label className="branch-switcher">
+            <span>Chi nhánh:</span>
+            <select
+              value={branchId}
+              onChange={(event) => setBranchId(event.target.value)}
+              disabled={branches.length === 0}
+              aria-label="Chọn chi nhánh"
+            >
+              {!branchId && <option value="">Chọn chi nhánh</option>}
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {branches.length === 0 && <span className="branch-name">Chi nhánh: {selectedBranchName}</span>}
           <span className="user-name">Xin chào, {user?.fullName || user?.username}</span>
           <button onClick={handleLogout} className="logout-btn">
             Đăng xuất

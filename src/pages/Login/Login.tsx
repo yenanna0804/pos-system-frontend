@@ -60,11 +60,6 @@ export default function Login() {
   return (
     <div className="login-container">
       <div className="login-box">
-        <div className="login-header">
-          <h1>POS System</h1>
-          <p>Đăng nhập để tiếp tục</p>
-        </div>
-
         <form onSubmit={handleSubmit}>
           {error && <div className="login-error">{error}</div>}
 
