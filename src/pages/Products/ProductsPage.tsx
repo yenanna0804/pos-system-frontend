@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, MouseEvent } from 'react';
 import { branchService, categoryService, productService } from '../../services/api';
 import './ProductsPage.css';
 
@@ -275,6 +275,12 @@ export default function ProductsPage() {
     setPendingImageFile(null);
     setPendingPreviewUrl('');
     setBranchConfigs(buildDefaultBranchConfigs(branches));
+  };
+
+  const handleOverlayClick = (event: MouseEvent<HTMLDivElement>, onClose: () => void) => {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
   };
 
   const validateProductForm = () => {
@@ -681,7 +687,7 @@ export default function ProductsPage() {
       </div>
 
       {isAddProductOpen && (
-        <div className="modal-overlay" onClick={closeProductModal}>
+        <div className="modal-overlay" onClick={(event) => handleOverlayClick(event, closeProductModal)}>
           <div className="modal-content modal-large" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <h3>{editingProductId ? 'Sửa hàng hóa' : 'Thêm hàng hóa'}</h3>
@@ -911,7 +917,7 @@ export default function ProductsPage() {
       )}
 
       {isCategoryOpen && (
-        <div className="modal-overlay" onClick={() => setIsCategoryOpen(false)}>
+        <div className="modal-overlay" onClick={(event) => handleOverlayClick(event, () => setIsCategoryOpen(false))}>
           <div className="modal-content" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <h3>Quản lý nhóm hàng hóa</h3>
