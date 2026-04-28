@@ -30,6 +30,7 @@ export type ProductPayload = {
   sku?: string;
   name: string;
   imageUrl?: string | null;
+  imageThumb?: string | null;
   categoryId?: string | null;
   unit?: string;
   weight?: number;
@@ -40,7 +41,14 @@ export type ProductPayload = {
 };
 
 export const productService = {
-  list: () => api.get('/products'),
+  list: (params: {
+    page?: number;
+    pageSize?: number;
+    categoryId?: string;
+    stockStatus?: 'all' | 'in_stock' | 'out_of_stock';
+    branchId?: string;
+  }) => api.get('/products', { params }),
+  getById: (id: string) => api.get(`/products/${id}`),
   create: (payload: ProductPayload) => api.post('/products', payload),
   update: (id: string, payload: ProductPayload) => api.patch(`/products/${id}`, payload),
   remove: (id: string) => api.delete(`/products/${id}`),

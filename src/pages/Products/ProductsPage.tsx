@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { branchService, categoryService, productService } from '../../services/api';
 import './ProductsPage.css';
@@ -30,6 +30,7 @@ type Product = {
   sku: string;
   name: string;
   imageUrl?: string;
+  imageThumb?: string;
   categoryId?: string;
   categoryName?: string;
   unit?: string;
@@ -57,6 +58,7 @@ type ProductForm = {
   sku: string;
   name: string;
   imageUrl: string;
+  imageThumb: string;
   categoryId: string;
   unit: string;
   weight: string;
@@ -69,6 +71,7 @@ const initialForm: ProductForm = {
   sku: '',
   name: '',
   imageUrl: '',
+  imageThumb: '',
   categoryId: '',
   unit: '',
   weight: '',
@@ -126,6 +129,10 @@ export default function ProductsPage() {
   const [filterCategoryId, setFilterCategoryId] = useState('');
   const [filterStock, setFilterStock] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
   const [filterBranchId, setFilterBranchId] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const [, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -138,42 +145,23 @@ export default function ProductsPage() {
     }, 3000);
   };
 
-  const reloadAfterSuccess = () => {
-    setTimeout(() => {
-      window.location.reload();
-    }, 600);
-  };
-
-  const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
-      const matchCategory = !filterCategoryId || product.categoryId === filterCategoryId;
-
-      const stockValue = Number(product.stock || 0);
-      const matchStock =
-        filterStock === 'all' ||
-        (filterStock === 'in_stock' && stockValue > 0) ||
-        (filterStock === 'out_of_stock' && stockValue <= 0);
-
-      const rawConfigs =
-        typeof product.branchConfigs === 'string'
-          ? (JSON.parse(product.branchConfigs) as BranchConfig[])
-          : (product.branchConfigs as BranchConfig[] | undefined) || [];
-      const activeBranchIds = rawConfigs.filter((item) => item.isActive).map((item) => item.branchId);
-      const matchBranch = !filterBranchId || activeBranchIds.includes(filterBranchId);
-
-      return matchCategory && matchStock && matchBranch;
-    });
-  }, [products, filterCategoryId, filterStock, filterBranchId]);
-
   const loadData = async () => {
     const [productRes, categoryRes, branchRes] = await Promise.all([
-      productService.list(),
+      productService.list({
+        page,
+        pageSize,
+        categoryId: filterCategoryId || undefined,
+        stockStatus: filterStock,
+        branchId: filterBranchId || undefined,
+      }),
       categoryService.list(),
       branchService.getAll(),
     ]);
 
-    const productRows: Product[] = productRes.data || [];
+    const productRows: Product[] = productRes.data?.items || [];
     setProducts(productRows);
+    setTotalPages(productRes.data?.pagination?.totalPages || 1);
+    setTotalItems(productRes.data?.pagination?.total || productRows.length);
     setCategories(categoryRes.data || []);
     const branchRows: Branch[] = branchRes.data || [];
     setBranches(branchRows);
@@ -182,7 +170,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     loadData().catch(() => setError('Không tải được dữ liệu hàng hóa'));
-  }, []);
+  }, [page, filterCategoryId, filterStock, filterBranchId]);
 
   useEffect(() => {
     return () => {
@@ -201,27 +189,39 @@ export default function ProductsPage() {
     setIsAddProductOpen(true);
   };
 
-  const openEditModal = (product: Product) => {
-    setEditingProductId(product.id);
+  const openEditModal = async (product: Product) => {
+    setLoading(true);
+    let details = product;
+    try {
+      const detailRes = await productService.getById(product.id);
+      details = detailRes.data;
+    } catch {
+      pushToast('error', 'Không tải được chi tiết hàng hóa');
+      setLoading(false);
+      return;
+    }
+
+    setEditingProductId(details.id);
     setProductForm({
-      sku: product.sku || '',
-      name: product.name || '',
-      imageUrl: product.imageUrl || '',
-      categoryId: product.categoryId || '',
-      unit: product.unit || '',
-      weight: product.weight || '',
-      costPrice: Number(product.costPrice || 0) > 0 ? formatMoneyInput(String(product.costPrice)) : '',
-      price: formatMoneyInput(String(product.price || 0)),
-      isActive: Boolean(product.isActive),
+      sku: details.sku || '',
+      name: details.name || '',
+      imageUrl: details.imageUrl || '',
+      imageThumb: details.imageThumb || '',
+      categoryId: details.categoryId || '',
+      unit: details.unit || '',
+      weight: details.weight || '',
+      costPrice: Number(details.costPrice || 0) > 0 ? formatMoneyInput(String(details.costPrice)) : '',
+      price: formatMoneyInput(String(details.price || 0)),
+      isActive: Boolean(details.isActive),
     });
     setPendingImageFile(null);
     if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
     setPendingPreviewUrl('');
 
     const rawConfigs =
-      typeof product.branchConfigs === 'string'
-        ? (JSON.parse(product.branchConfigs) as BranchConfig[])
-        : (product.branchConfigs as BranchConfig[] | undefined) || [];
+      typeof details.branchConfigs === 'string'
+        ? (JSON.parse(details.branchConfigs) as BranchConfig[])
+        : (details.branchConfigs as BranchConfig[] | undefined) || [];
 
     const configMap = new Map(rawConfigs.map((item) => [item.branchId, item]));
     setBranchConfigs(
@@ -235,6 +235,7 @@ export default function ProductsPage() {
 
     setError('');
     setIsAddProductOpen(true);
+    setLoading(false);
   };
 
   const closeProductModal = () => {
@@ -294,15 +295,18 @@ export default function ProductsPage() {
     setLoading(true);
     try {
       let imageUrl = productForm.imageUrl || null;
+      let imageThumb = productForm.imageThumb || null;
       if (pendingImageFile) {
         const uploadResponse = await productService.uploadImage(pendingImageFile);
         imageUrl = uploadResponse.data.imageUrl;
+        imageThumb = uploadResponse.data.imageThumb;
       }
 
       const payload = {
         sku: productForm.sku || undefined,
         name: productForm.name,
         imageUrl,
+        imageThumb,
         categoryId: productForm.categoryId || null,
         unit: productForm.unit || undefined,
         weight: Number(productForm.weight || 0),
@@ -332,7 +336,7 @@ export default function ProductsPage() {
       if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
       setPendingPreviewUrl('');
       setBranchConfigs(buildDefaultBranchConfigs(branches));
-      reloadAfterSuccess();
+      setPage(1);
     } catch (message: any) {
       setError(message || 'Không thể lưu hàng hóa');
       pushToast('error', message || 'Không thể lưu hàng hóa');
@@ -349,7 +353,6 @@ export default function ProductsPage() {
       await productService.remove(product.id);
       await loadData();
       pushToast('success', 'Đã xóa hàng hóa');
-      reloadAfterSuccess();
     } catch (message: any) {
       setError(message || 'Không thể xóa hàng hóa');
       pushToast('error', message || 'Không thể xóa hàng hóa');
@@ -379,7 +382,7 @@ export default function ProductsPage() {
     if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
     setPendingPreviewUrl('');
     setPendingImageFile(null);
-    setProductForm((prev) => ({ ...prev, imageUrl: '' }));
+    setProductForm((prev) => ({ ...prev, imageUrl: '', imageThumb: '' }));
   };
 
   const onCreateCategory = async () => {
@@ -397,7 +400,6 @@ export default function ProductsPage() {
       setNewCategoryName('');
       await loadData();
       pushToast('success', 'Đã thêm nhóm hàng hóa');
-      reloadAfterSuccess();
     } catch (message: any) {
       setError(message || 'Không thể thêm nhóm hàng');
       pushToast('error', message || 'Không thể thêm nhóm hàng');
@@ -432,7 +434,6 @@ export default function ProductsPage() {
       setEditingCategoryName('');
       await loadData();
       pushToast('success', 'Đã cập nhật nhóm hàng hóa');
-      reloadAfterSuccess();
     } catch (message: any) {
       setError(message || 'Không thể sửa nhóm hàng');
       pushToast('error', message || 'Không thể sửa nhóm hàng');
@@ -460,7 +461,6 @@ export default function ProductsPage() {
       } else {
         pushToast('success', 'Đã xóa nhóm hàng hóa');
       }
-      reloadAfterSuccess();
     } catch (message: any) {
       setError(message || 'Không thể xóa nhóm hàng');
       pushToast('error', message || 'Không thể xóa nhóm hàng');
@@ -492,7 +492,13 @@ export default function ProductsPage() {
       <div className="products-filters">
         <label>
           Nhóm hàng
-          <select value={filterCategoryId} onChange={(event) => setFilterCategoryId(event.target.value)}>
+          <select
+            value={filterCategoryId}
+            onChange={(event) => {
+              setFilterCategoryId(event.target.value);
+              setPage(1);
+            }}
+          >
             <option value="">Tất cả nhóm hàng</option>
             {categories.map((category) => (
               <option key={category.id} value={category.id}>
@@ -506,7 +512,10 @@ export default function ProductsPage() {
           Tồn kho
           <select
             value={filterStock}
-            onChange={(event) => setFilterStock(event.target.value as 'all' | 'in_stock' | 'out_of_stock')}
+            onChange={(event) => {
+              setFilterStock(event.target.value as 'all' | 'in_stock' | 'out_of_stock');
+              setPage(1);
+            }}
           >
             <option value="all">Tất cả</option>
             <option value="in_stock">Còn hàng</option>
@@ -516,7 +525,13 @@ export default function ProductsPage() {
 
         <label>
           Chi nhánh
-          <select value={filterBranchId} onChange={(event) => setFilterBranchId(event.target.value)}>
+          <select
+            value={filterBranchId}
+            onChange={(event) => {
+              setFilterBranchId(event.target.value);
+              setPage(1);
+            }}
+          >
             <option value="">Tất cả chi nhánh</option>
             {branches.map((branch) => (
               <option key={branch.id} value={branch.id}>
@@ -531,6 +546,7 @@ export default function ProductsPage() {
         <table className="products-table">
           <thead>
             <tr>
+              <th>STT</th>
               <th>Mã hàng</th>
               <th>Hình ảnh</th>
               <th>Tên hàng</th>
@@ -545,19 +561,24 @@ export default function ProductsPage() {
             </tr>
           </thead>
           <tbody>
-            {filteredProducts.length === 0 ? (
+            {products.length === 0 ? (
               <tr>
-                <td colSpan={11} className="empty-row">
+                <td colSpan={12} className="empty-row">
                   Không có hàng hóa phù hợp bộ lọc
                 </td>
               </tr>
             ) : (
-              filteredProducts.map((product) => (
+              products.map((product, index) => (
                 <tr key={product.id}>
+                  <td>{(page - 1) * pageSize + index + 1}</td>
                   <td>{product.sku}</td>
                   <td>
                     <div className="product-thumb">
-                      {product.imageUrl ? <img src={resolveImageUrl(product.imageUrl)} alt={product.name} /> : <span>--</span>}
+                      {product.imageThumb || product.imageUrl ? (
+                        <img src={resolveImageUrl(product.imageThumb || product.imageUrl)} alt={product.name} />
+                      ) : (
+                        <span>--</span>
+                      )}
                     </div>
                   </td>
                   <td>{product.name}</td>
@@ -587,6 +608,24 @@ export default function ProductsPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="pagination-bar">
+        <span>
+          Trang {page}/{totalPages} - {totalItems} sản phẩm
+        </span>
+        <div className="pagination-actions">
+          <button className="ghost-btn" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+            Trước
+          </button>
+          <button
+            className="ghost-btn"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          >
+            Sau
+          </button>
+        </div>
       </div>
 
       {isAddProductOpen && (
