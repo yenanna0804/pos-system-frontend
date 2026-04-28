@@ -55,7 +55,7 @@ export default function Dashboard() {
   return (
     <div className="dashboard">
       <header className="dashboard-header">
-        <h1>POS System</h1>
+        <h1></h1>
         <div className="header-right">
           <label className="branch-switcher">
             <span>Chi nhánh:</span>
