@@ -573,8 +573,17 @@ export default function ProductsPage() {
 
       {isListLoading && (
         <div className="list-loading">
-          <span className="spinner" />
-          <span>Đang tải danh sách...</span>
+          <span className="dot-spinner" aria-hidden>
+            <span className="dot-spinner__dot" />
+            <span className="dot-spinner__dot" />
+            <span className="dot-spinner__dot" />
+            <span className="dot-spinner__dot" />
+            <span className="dot-spinner__dot" />
+            <span className="dot-spinner__dot" />
+            <span className="dot-spinner__dot" />
+            <span className="dot-spinner__dot" />
+          </span>
+          <span>Đang tải dữ liệu</span>
         </div>
       )}
 
@@ -600,7 +609,7 @@ export default function ProductsPage() {
             {isListLoading ? (
               <tr>
                 <td colSpan={12} className="empty-row">
-                  Đang tải dữ liệu...
+                  Đang tải dữ liệu
                 </td>
               </tr>
             ) : products.length === 0 ? (
