@@ -80,14 +80,16 @@
 .list-loading {
   align-items: center;
   color: #344054;
-  display: inline-flex;
-  gap: 8px;
-  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  font-size: 16px;
+  font-weight: 600;
+  gap: 14px;
 }
 
 .dot-spinner {
-  --size: 24px;
-  --dot: 5px;
+  --size: 44px;
+  --dot: 8px;
   --base: #d8dbe2;
   --active: #4b4f57;
   display: inline-block;
@@ -196,6 +198,21 @@
   border: 1px solid #e6e9ef;
   border-radius: 10px;
   overflow: auto;
+  position: relative;
+}
+
+.products-table-wrap.is-loading {
+  min-height: 320px;
+}
+
+.list-loading-overlay {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.78);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+  z-index: 2;
 }
 
 .products-table {

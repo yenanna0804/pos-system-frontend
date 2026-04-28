@@ -571,23 +571,24 @@ export default function ProductsPage() {
         </label>
       </div>
 
-      {isListLoading && (
-        <div className="list-loading">
-          <span className="dot-spinner" aria-hidden>
-            <span className="dot-spinner__dot" />
-            <span className="dot-spinner__dot" />
-            <span className="dot-spinner__dot" />
-            <span className="dot-spinner__dot" />
-            <span className="dot-spinner__dot" />
-            <span className="dot-spinner__dot" />
-            <span className="dot-spinner__dot" />
-            <span className="dot-spinner__dot" />
-          </span>
-          <span>Đang tải dữ liệu</span>
-        </div>
-      )}
-
-      <div className="products-table-wrap">
+      <div className={`products-table-wrap ${isListLoading ? 'is-loading' : ''}`}>
+        {isListLoading && (
+          <div className="list-loading-overlay">
+            <div className="list-loading">
+              <span className="dot-spinner" aria-hidden>
+                <span className="dot-spinner__dot" />
+                <span className="dot-spinner__dot" />
+                <span className="dot-spinner__dot" />
+                <span className="dot-spinner__dot" />
+                <span className="dot-spinner__dot" />
+                <span className="dot-spinner__dot" />
+                <span className="dot-spinner__dot" />
+                <span className="dot-spinner__dot" />
+              </span>
+              <span>Đang tải dữ liệu</span>
+            </div>
+          </div>
+        )}
         <table className="products-table">
           <thead>
             <tr>
