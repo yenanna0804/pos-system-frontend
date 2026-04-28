@@ -93,6 +93,13 @@ const parseMoneyInput = (value: string) => {
   return digits ? Number(digits) : 0;
 };
 
+const formatMoneyValue = (value: string | number | null | undefined) => {
+  if (value == null || value === '') return '';
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return '';
+  return moneyFormatter.format(Math.round(numeric));
+};
+
 const normalizeDecimalInput = (value: string, maxScale = 3) => {
   const sanitized = value.replace(/[^0-9.]/g, '');
   const parts = sanitized.split('.');
@@ -133,6 +140,7 @@ export default function ProductsPage() {
   const pageSize = 20;
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
+  const [isListLoading, setIsListLoading] = useState(false);
   const [, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -146,26 +154,47 @@ export default function ProductsPage() {
   };
 
   const loadData = async () => {
-    const [productRes, categoryRes, branchRes] = await Promise.all([
-      productService.list({
-        page,
-        pageSize,
-        categoryId: filterCategoryId || undefined,
-        stockStatus: filterStock,
-        branchId: filterBranchId || undefined,
-      }),
-      categoryService.list(),
-      branchService.getAll(),
-    ]);
+    setIsListLoading(true);
+    try {
+      const [productResult, categoryResult, branchResult] = await Promise.allSettled([
+        productService.list({
+          page,
+          pageSize,
+          categoryId: filterCategoryId || undefined,
+          stockStatus: filterStock,
+          branchId: filterBranchId || undefined,
+        }),
+        categoryService.list(),
+        branchService.getAll(),
+      ]);
 
-    const productRows: Product[] = productRes.data?.items || [];
-    setProducts(productRows);
-    setTotalPages(productRes.data?.pagination?.totalPages || 1);
-    setTotalItems(productRes.data?.pagination?.total || productRows.length);
-    setCategories(categoryRes.data || []);
-    const branchRows: Branch[] = branchRes.data || [];
-    setBranches(branchRows);
-    setBranchConfigs(buildDefaultBranchConfigs(branchRows));
+      if (productResult.status !== 'fulfilled') {
+        throw new Error('Không tải được danh sách hàng hóa');
+      }
+
+      const productData = productResult.value.data;
+      const productRows: Product[] = Array.isArray(productData)
+        ? productData
+        : Array.isArray(productData?.items)
+          ? productData.items
+          : [];
+      setProducts(productRows);
+      setTotalPages(productData?.pagination?.totalPages || 1);
+      setTotalItems(productData?.pagination?.total || productRows.length);
+
+      const categoryRows = categoryResult.status === 'fulfilled' ? categoryResult.value.data || [] : [];
+      setCategories(categoryRows);
+
+      const branchRows: Branch[] = branchResult.status === 'fulfilled' ? branchResult.value.data || [] : [];
+      setBranches(branchRows);
+      setBranchConfigs(buildDefaultBranchConfigs(branchRows));
+
+      if (categoryResult.status !== 'fulfilled' || branchResult.status !== 'fulfilled') {
+        pushToast('info', 'Một phần dữ liệu bộ lọc chưa tải được, danh sách hàng hóa vẫn hiển thị');
+      }
+    } finally {
+      setIsListLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -191,12 +220,12 @@ export default function ProductsPage() {
 
   const openEditModal = async (product: Product) => {
     setLoading(true);
-    let details = product;
+    let details: Product;
     try {
       const detailRes = await productService.getById(product.id);
       details = detailRes.data;
-    } catch {
-      pushToast('error', 'Không tải được chi tiết hàng hóa');
+    } catch (message: any) {
+      pushToast('error', message || 'Không tải được chi tiết hàng hóa từ CSDL');
       setLoading(false);
       return;
     }
@@ -210,8 +239,8 @@ export default function ProductsPage() {
       categoryId: details.categoryId || '',
       unit: details.unit || '',
       weight: details.weight || '',
-      costPrice: Number(details.costPrice || 0) > 0 ? formatMoneyInput(String(details.costPrice)) : '',
-      price: formatMoneyInput(String(details.price || 0)),
+      costPrice: formatMoneyValue(details.costPrice),
+      price: formatMoneyValue(details.price) || '0',
       isActive: Boolean(details.isActive),
     });
     setPendingImageFile(null);
@@ -542,6 +571,13 @@ export default function ProductsPage() {
         </label>
       </div>
 
+      {isListLoading && (
+        <div className="list-loading">
+          <span className="spinner" />
+          <span>Đang tải danh sách...</span>
+        </div>
+      )}
+
       <div className="products-table-wrap">
         <table className="products-table">
           <thead>
@@ -561,7 +597,13 @@ export default function ProductsPage() {
             </tr>
           </thead>
           <tbody>
-            {products.length === 0 ? (
+            {isListLoading ? (
+              <tr>
+                <td colSpan={12} className="empty-row">
+                  Đang tải dữ liệu...
+                </td>
+              </tr>
+            ) : products.length === 0 ? (
               <tr>
                 <td colSpan={12} className="empty-row">
                   Không có hàng hóa phù hợp bộ lọc
@@ -936,7 +978,7 @@ export default function ProductsPage() {
             </div>
 
             <div className="modal-tip">
-              Lưu ý: sửa tên hoặc xóa nhóm hàng sẽ được validate chéo với các hàng hóa đang thuộc nhóm.
+              Lưu ý:
             </div>
           </div>
         </div>
