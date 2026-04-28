@@ -137,6 +137,7 @@ export default function ProductsPage() {
   const [filterStock, setFilterStock] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
   const [filterBranchId, setFilterBranchId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [page, setPage] = useState(1);
   const pageSize = 7;
@@ -165,7 +166,7 @@ export default function ProductsPage() {
           categoryId: filterCategoryId || undefined,
           stockStatus: filterStock,
           branchId: filterBranchId || undefined,
-          search: searchTerm || undefined,
+          search: debouncedSearch || undefined,
         }),
         categoryService.list(),
         branchService.getAll(),
@@ -202,7 +203,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     loadData().catch(() => setError('Không tải được dữ liệu hàng hóa'));
-  }, [page, filterCategoryId, filterStock, filterBranchId, searchTerm]);
+  }, [page, filterCategoryId, filterStock, filterBranchId, debouncedSearch]);
 
   useEffect(() => {
     return () => {
@@ -216,6 +217,7 @@ export default function ProductsPage() {
       clearTimeout(searchTimeoutRef.current);
     }
     searchTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
       setPage(1);
     }, 500); // Search after 500ms pause
 
@@ -555,7 +557,14 @@ export default function ProductsPage() {
                 setSearchTerm(e.target.value);
               }}
             />
-            <button className="search-icon-btn" onClick={() => setPage(1)}>
+            <button
+              type="button"
+              className="search-icon-btn"
+              onClick={() => {
+                setDebouncedSearch(searchTerm.trim());
+                setPage(1);
+              }}
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="11" cy="11" r="8" />
                 <path d="M21 21l-4.35-4.35" />
@@ -661,7 +670,7 @@ export default function ProductsPage() {
             ) : products.length === 0 ? (
               <tr>
                 <td colSpan={12} className="empty-row">
-                  {searchTerm ? 'Không tìm thấy dữ liệu' : 'Không có hàng hóa phù hợp bộ lọc'}
+                  {debouncedSearch ? 'Không tìm thấy dữ liệu' : 'Không có hàng hóa phù hợp bộ lọc'}
                 </td>
               </tr>
             ) : (
