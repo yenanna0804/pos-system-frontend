@@ -35,29 +35,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const storedToken = localStorage.getItem('token');
-    const storedBranchId = localStorage.getItem('branchId');
-    const tokenExpiryRaw = localStorage.getItem('tokenExpiry');
+    try {
+      const storedUser = localStorage.getItem('user');
+      const storedToken = localStorage.getItem('token');
+      const storedBranchId = localStorage.getItem('branchId');
+      const tokenExpiryRaw = localStorage.getItem('tokenExpiry');
 
-    if (tokenExpiryRaw) {
-      const tokenExpiry = Number(tokenExpiryRaw);
-      if (!Number.isFinite(tokenExpiry) || tokenExpiry <= Date.now()) {
-        localStorage.removeItem('user');
-        localStorage.removeItem('token');
-        localStorage.removeItem('branchId');
-        localStorage.removeItem('tokenExpiry');
-        setIsInitialized(true);
-        return;
+      if (tokenExpiryRaw) {
+        const tokenExpiry = Number(tokenExpiryRaw);
+        if (!Number.isFinite(tokenExpiry) || tokenExpiry <= Date.now()) {
+          localStorage.removeItem('user');
+          localStorage.removeItem('token');
+          localStorage.removeItem('branchId');
+          localStorage.removeItem('tokenExpiry');
+          setIsInitialized(true);
+          return;
+        }
       }
-    }
 
-    if (storedUser && storedToken) {
-      setUser(JSON.parse(storedUser));
-      setBranchId(storedBranchId || '');
+      if (storedUser && storedToken) {
+        setUser(JSON.parse(storedUser));
+        setBranchId(storedBranchId || '');
+      }
+    } catch {
+      // Corrupted localStorage should not block app bootstrap.
+      setUser(null);
+      setBranchId('');
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      localStorage.removeItem('branchId');
+      localStorage.removeItem('tokenExpiry');
+    } finally {
+      setIsInitialized(true);
     }
-
-    setIsInitialized(true);
   }, []);
 
   const login = (user: User, token: string) => {
