@@ -15,8 +15,14 @@ type OrderRow = {
   totalAmount: number;
   finalAmount?: number;
   paidAmount?: number;
-  status: 'DRAFT' | 'PAID' | 'DELETED' | 'PARTIAL';
+  orderState: 'DRAFT' | 'PAID' | 'DELETED' | 'PARTIAL';
   createdAt: string;
+};
+
+type OrderState = OrderRow['orderState'];
+
+type OrderRowApi = Omit<OrderRow, 'orderState'> & {
+  orderState?: OrderState;
 };
 
 type OrderLogRow = {
@@ -60,19 +66,19 @@ type OrderDetail = {
   totalAmount: number;
   finalAmount?: number;
   paidAmount: number;
-  status: OrderRow['status'];
+  orderState: OrderRow['orderState'];
   createdAt: string;
   items: OrderDetailItem[];
 };
 
-const statusLabel: Record<OrderRow['status'], string> = {
+const orderStateLabel: Record<OrderRow['orderState'], string> = {
   DRAFT: 'Nháp',
   PAID: 'Đã thanh toán',
   DELETED: 'Đã xóa',
-  PARTIAL: 'Chưa trả hết',
+  PARTIAL: 'Chưa thanh toán',
 };
 
-const statusClass: Record<OrderRow['status'], string> = {
+const orderStateClass: Record<OrderRow['orderState'], string> = {
   DRAFT: 'orders-status-tag is-draft',
   PAID: 'orders-status-tag is-paid',
   DELETED: 'orders-status-tag is-deleted',
@@ -165,7 +171,7 @@ export default function OrdersPage() {
         page,
         pageSize: 7,
         search: debouncedSearch || undefined,
-        statuses: statusFilters.join(','),
+        orderStates: statusFilters.join(','),
         areaId: areaFilter || undefined,
         roomId: roomFilter || undefined,
         tableId: tableFilter || undefined,
@@ -174,7 +180,7 @@ export default function OrdersPage() {
       });
       const responseData = response.data;
       const rows = Array.isArray(responseData) ? responseData : Array.isArray(responseData?.items) ? responseData.items : [];
-      setOrders(rows as OrderRow[]);
+      setOrders((rows as OrderRowApi[]).map(mapOrderRow));
       setTotalPages(responseData?.pagination?.totalPages || 1);
       setTotalItems(responseData?.pagination?.total || rows.length);
     } catch (error) {
@@ -289,7 +295,7 @@ export default function OrdersPage() {
   };
 
   const onEditOrder = async (order: OrderRow) => {
-    if (order.status === 'DELETED') {
+    if (order.orderState === 'DELETED') {
       showToast('error', 'Không thể sửa hóa đơn đã xóa');
       return;
     }
@@ -333,7 +339,7 @@ export default function OrdersPage() {
   };
 
   const onPrintOrder = async (order: OrderRow) => {
-    if (order.status === 'DELETED') {
+    if (order.orderState === 'DELETED') {
       showToast('error', 'Không thể in hóa đơn đã xóa');
       return;
     }
@@ -347,7 +353,7 @@ export default function OrdersPage() {
   };
 
   const onDeleteOrder = async (order: OrderRow) => {
-    if (order.status === 'DELETED') {
+    if (order.orderState === 'DELETED') {
       showToast('error', 'Hóa đơn đã ở trạng thái xóa');
       return;
     }
@@ -368,7 +374,7 @@ export default function OrdersPage() {
   };
 
   const onPayOrder = async (order: OrderRow) => {
-    if (order.status === 'DELETED') {
+    if (order.orderState === 'DELETED') {
       showToast('error', 'Không thể thao tác với hóa đơn đã xóa');
       return;
     }
@@ -412,7 +418,11 @@ export default function OrdersPage() {
     setDetailOrderCode(order.code);
     try {
       const response = await orderService.getById(order.id);
-      setDetailOrder(response.data as OrderDetail);
+      const detail = response.data as (OrderDetail & { orderState?: OrderState });
+      setDetailOrder({
+        ...detail,
+        orderState: normalizeOrderState(detail),
+      });
     } catch (error) {
       setOrderDetailError(typeof error === 'string' ? error : 'Không tải được chi tiết hóa đơn');
     } finally {
@@ -698,7 +708,7 @@ export default function OrdersPage() {
                   <td className="num-col orders-col-paid">{Number(order.paidAmount || 0).toLocaleString('vi-VN')}</td>
                   <td>{order.customerName || '-'}</td>
                   <td className="orders-col-status">
-                    <span className={statusClass[order.status]}>{statusLabel[order.status]}</span>
+                    <span className={orderStateClass[order.orderState]}>{orderStateLabel[order.orderState]}</span>
                   </td>
                   <td>{order.creatorName || '-'}</td>
                   <td className="orders-col-actions">
@@ -709,7 +719,7 @@ export default function OrdersPage() {
                         title="Sửa"
                         aria-label="Sửa"
                         onClick={() => onEditOrder(order)}
-                        disabled={order.status === 'DELETED'}
+                        disabled={order.orderState === 'DELETED'}
                       >
                         <EditActionIcon />
                       </button>
@@ -719,7 +729,7 @@ export default function OrdersPage() {
                         title="In"
                         aria-label="In"
                         onClick={() => onPrintOrder(order)}
-                        disabled={order.status === 'DELETED'}
+                        disabled={order.orderState === 'DELETED'}
                       >
                         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                           <path d="M6 2h12a1 1 0 0 1 1 1v4H5V3a1 1 0 0 1 1-1Z" />
@@ -733,7 +743,7 @@ export default function OrdersPage() {
                         title="Xóa"
                         aria-label="Xóa"
                         onClick={() => onDeleteOrder(order)}
-                        disabled={order.status === 'DELETED'}
+                        disabled={order.orderState === 'DELETED'}
                       >
                         <DeleteActionIcon />
                       </button>
@@ -755,7 +765,7 @@ export default function OrdersPage() {
                         className="orders-text-action"
                         onClick={() => onPayOrder(order)}
                         disabled={
-                          order.status === 'DELETED' ||
+                          order.orderState === 'DELETED' ||
                           Number(order.paidAmount || 0) >= Number(order.finalAmount ?? (order.totalAmount || 0))
                         }
                       >
@@ -809,7 +819,7 @@ export default function OrdersPage() {
             </div>
             <div className="orders-detail-code-row">
               <p className="orders-history-subtitle">Mã hóa đơn: {detailOrder?.code || detailOrderCode}</p>
-              {detailOrder && <span className={statusClass[detailOrder.status]}>{statusLabel[detailOrder.status]}</span>}
+              {detailOrder && <span className={orderStateClass[detailOrder.orderState]}>{orderStateLabel[detailOrder.orderState]}</span>}
             </div>
 
             <div className="orders-history-list orders-detail-content">
@@ -1090,3 +1100,17 @@ export default function OrdersPage() {
     </section>
   );
 }
+  const normalizeOrderState = (row: { orderState?: OrderState; paidAmount?: number; finalAmount?: number; totalAmount?: number }): OrderState => {
+    const apiState = row.orderState;
+    if (apiState) return apiState;
+    const paidAmount = Number(row.paidAmount || 0);
+    const payableAmount = Number(row.finalAmount ?? row.totalAmount ?? 0);
+    if (paidAmount >= payableAmount && payableAmount > 0) return 'PAID';
+    if (paidAmount < payableAmount) return 'PARTIAL';
+    return 'DRAFT';
+  };
+
+  const mapOrderRow = (row: OrderRowApi): OrderRow => ({
+    ...row,
+    orderState: normalizeOrderState(row),
+  });

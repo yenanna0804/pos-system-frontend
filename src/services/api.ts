@@ -150,7 +150,7 @@ export const orderService = {
     page?: number;
     pageSize?: number;
     search?: string;
-    statuses?: string;
+    orderStates?: string;
     areaId?: string;
     roomId?: string;
     tableId?: string;
