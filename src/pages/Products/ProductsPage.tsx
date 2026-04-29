@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { branchService, categoryService, productService } from '../../services/api';
 import { DeleteActionIcon, EditActionIcon } from '../../components/ActionIcons';
 import FormFieldError from '../../components/FormFieldError';
+import FilterResetButton from '../../components/FilterResetButton';
 import { useAuth } from '../../contexts/AuthContext';
 import './ProductsPage.css';
 
@@ -92,6 +93,7 @@ type ConfirmDialogState = {
 
 type ProductForm = {
   type: 'SINGLE' | 'COMBO';
+  autoCost: boolean;
   autoPrice: boolean;
   sku: string;
   name: string;
@@ -118,6 +120,7 @@ type ProductFieldErrors = {
 
 const initialForm: ProductForm = {
   type: 'SINGLE',
+  autoCost: true,
   autoPrice: true,
   sku: '',
   name: '',
@@ -142,6 +145,18 @@ const formatMoneyInput = (value: string) => {
 const parseMoneyInput = (value: string) => {
   const digits = value.replace(/\D/g, '');
   return digits ? Number(digits) : 0;
+};
+
+const parseCatalogMoney = (value: unknown) => {
+  if (value == null) return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const raw = String(value).trim();
+  if (!raw) return 0;
+  if (/^-?\d+(\.\d+)?$/.test(raw)) {
+    const numeric = Number(raw);
+    return Number.isFinite(numeric) ? numeric : 0;
+  }
+  return parseMoneyInput(raw);
 };
 
 const formatMoneyValue = (value: string | number | null | undefined) => {
@@ -352,10 +367,19 @@ export default function ProductsPage() {
   }, [searchTerm]);
 
   useEffect(() => {
+    if (productForm.type !== 'COMBO' || !productForm.autoCost) return;
+    const total = comboItems.reduce((sum, item) => {
+      const product = comboCatalog.find((entry) => entry.id === item.itemProductId);
+      return sum + parseCatalogMoney(product?.costPrice) * Number(item.quantity || 0);
+    }, 0);
+    setProductForm((prev) => ({ ...prev, costPrice: formatMoneyValue(total) || '' }));
+  }, [comboCatalog, comboItems, productForm.autoCost, productForm.type]);
+
+  useEffect(() => {
     if (productForm.type !== 'COMBO' || !productForm.autoPrice) return;
     const total = comboItems.reduce((sum, item) => {
       const product = comboCatalog.find((entry) => entry.id === item.itemProductId);
-      return sum + parseMoneyInput(String(product?.price || '0')) * Number(item.quantity || 0);
+      return sum + parseCatalogMoney(product?.price) * Number(item.quantity || 0);
     }, 0);
     setProductForm((prev) => ({ ...prev, price: formatMoneyValue(total) || '0' }));
   }, [comboCatalog, comboItems, productForm.autoPrice, productForm.type]);
@@ -409,6 +433,7 @@ export default function ProductsPage() {
     setEditingProductId(details.id);
     setProductForm({
       type: (details.type as 'SINGLE' | 'COMBO') || 'SINGLE',
+      autoCost: true,
       autoPrice: details.autoPrice ?? true,
       sku: details.sku || '',
       name: details.name || '',
@@ -965,18 +990,7 @@ export default function ProductsPage() {
           </select>
         </label>
 
-        <button
-          type="button"
-          className="ghost-btn icon-action-btn filter-reset-btn"
-          onClick={resetListFilters}
-          title="Đặt lại bộ lọc"
-          aria-label="Đặt lại bộ lọc"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-            <path d="M20 12a8 8 0 1 1-2.35-5.65" />
-            <path d="M20 4v6h-6" />
-          </svg>
-        </button>
+        <FilterResetButton onClick={resetListFilters} />
 
       </div>
 
@@ -1203,6 +1217,7 @@ export default function ProductsPage() {
                       setProductForm((prev) => ({
                         ...prev,
                         type: event.target.value as 'SINGLE' | 'COMBO',
+                        autoCost: event.target.value === 'COMBO' ? prev.autoCost : false,
                         autoPrice: event.target.value === 'COMBO' ? prev.autoPrice : false,
                       }))
                     }
@@ -1289,56 +1304,85 @@ export default function ProductsPage() {
 
                 <label>
                   Giá vốn
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={productForm.costPrice}
-                    onFocus={(event) => {
-                      if (parseMoneyInput(productForm.costPrice) === 0) {
-                        setProductForm((prev) => ({ ...prev, costPrice: '' }));
-                      } else {
-                        event.target.select();
-                      }
-                    }}
-                    onBlur={() => {
-                      setProductForm((prev) => ({
-                        ...prev,
-                        costPrice: prev.costPrice.trim() === '' ? '' : formatMoneyInput(prev.costPrice),
-                      }));
-                    }}
-                    onChange={(event) =>
-                      setProductForm({ ...productForm, costPrice: formatMoneyInput(event.target.value) })
-                    }
-                  />
+                  <div className="price-row">
+                    <div className="price-input-wrap">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={productForm.costPrice}
+                        onFocus={(event) => {
+                          if (parseMoneyInput(productForm.costPrice) === 0) {
+                            setProductForm((prev) => ({ ...prev, costPrice: '' }));
+                          } else {
+                            event.target.select();
+                          }
+                        }}
+                        onBlur={() => {
+                          setProductForm((prev) => ({
+                            ...prev,
+                            costPrice: prev.costPrice.trim() === '' ? '' : formatMoneyInput(prev.costPrice),
+                          }));
+                        }}
+                        onChange={(event) =>
+                          setProductForm({ ...productForm, costPrice: formatMoneyInput(event.target.value) })
+                        }
+                        disabled={productForm.type === 'COMBO' && productForm.autoCost}
+                      />
+                    </div>
+                    {productForm.type === 'COMBO' && (
+                      <div className="inline-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={productForm.autoCost}
+                          onChange={(event) => setProductForm((prev) => ({ ...prev, autoCost: event.target.checked }))}
+                        />
+                        <span>Tự động tính giá vốn</span>
+                      </div>
+                    )}
+                  </div>
                 </label>
 
                 <label>
                   Giá bán *
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={productForm.price}
-                    onFocus={(event) => {
-                      if (parseMoneyInput(productForm.price) === 0) {
-                        setProductForm((prev) => ({ ...prev, price: '' }));
-                      } else {
-                        event.target.select();
-                      }
-                    }}
-                    onBlur={() => {
-                      setProductForm((prev) => ({
-                        ...prev,
-                        price: prev.price.trim() === '' ? '0' : formatMoneyInput(prev.price),
-                      }));
-                    }}
-                    onChange={(event) => {
-                      setProductForm({ ...productForm, price: formatMoneyInput(event.target.value) });
-                      if (productFieldErrors.price) setProductFieldErrors((prev) => ({ ...prev, price: undefined }));
-                    }}
-                    required
-                    disabled={productForm.type === 'COMBO' && productForm.autoPrice}
-                    className={productFieldErrors.price ? 'field-invalid' : ''}
-                  />
+                  <div className="price-row">
+                    <div className="price-input-wrap">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={productForm.price}
+                        onFocus={(event) => {
+                          if (parseMoneyInput(productForm.price) === 0) {
+                            setProductForm((prev) => ({ ...prev, price: '' }));
+                          } else {
+                            event.target.select();
+                          }
+                        }}
+                        onBlur={() => {
+                          setProductForm((prev) => ({
+                            ...prev,
+                            price: prev.price.trim() === '' ? '0' : formatMoneyInput(prev.price),
+                          }));
+                        }}
+                        onChange={(event) => {
+                          setProductForm({ ...productForm, price: formatMoneyInput(event.target.value) });
+                          if (productFieldErrors.price) setProductFieldErrors((prev) => ({ ...prev, price: undefined }));
+                        }}
+                        required
+                        disabled={productForm.type === 'COMBO' && productForm.autoPrice}
+                        className={productFieldErrors.price ? 'field-invalid' : ''}
+                      />
+                    </div>
+                    {productForm.type === 'COMBO' && (
+                      <div className="inline-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={productForm.autoPrice}
+                          onChange={(event) => setProductForm((prev) => ({ ...prev, autoPrice: event.target.checked }))}
+                        />
+                        <span>Tự động tính giá bán</span>
+                      </div>
+                    )}
+                  </div>
                   <FormFieldError message={productFieldErrors.price} />
                 </label>
               </div>
@@ -1473,14 +1517,6 @@ export default function ProductsPage() {
                     >
                       + Thêm thành phần
                     </button>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <input
-                        type="checkbox"
-                        checked={productForm.autoPrice}
-                        onChange={(event) => setProductForm((prev) => ({ ...prev, autoPrice: event.target.checked }))}
-                      />
-                      Tự động tính giá combo
-                    </label>
                   </div>
                   </div>
                   <FormFieldError message={productFieldErrors.comboItems} />

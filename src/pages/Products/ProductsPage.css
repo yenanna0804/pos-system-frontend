@@ -423,6 +423,38 @@
   gap: 6px;
 }
 
+.price-row {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.price-input-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.price-input-wrap input {
+  width: 100%;
+}
+
+.inline-checkbox {
+  align-items: center;
+  color: #1d2939;
+  display: inline-flex;
+  flex-direction: row;
+  font-size: 14px;
+  font-weight: 400;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.inline-checkbox input {
+  height: 16px;
+  width: 16px;
+}
+
 .branch-section {
   --combo-col-1: minmax(320px, 1fr);
   --combo-col-2: 320px;
@@ -667,7 +699,7 @@
 }
 
 .combo-toolbar {
-  justify-content: space-between;
+  justify-content: flex-start;
   margin-top: 10px;
   padding: 0 14px 12px;
 }
@@ -788,6 +820,16 @@
 
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .price-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .inline-checkbox {
+    min-width: 0;
   }
 
   .branch-section-header,

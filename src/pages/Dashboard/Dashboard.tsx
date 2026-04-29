@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { branchService } from '../../services/api';
 import ProductsPage from '../Products/ProductsPage';
 import TablesPage from '../Tables/TablesPage';
+import OrdersPage from '../Orders/OrdersPage';
 import './Dashboard.css';
 
 type TabKey = 'overview' | 'products' | 'tables' | 'orders' | 'printers';
@@ -59,33 +60,6 @@ export default function Dashboard() {
   return (
     <div className="dashboard">
       <header className="dashboard-header">
-        <h1></h1>
-        <div className="header-right">
-          <label className="branch-switcher">
-            <span>Chi nhánh:</span>
-            <select
-              value={branchId}
-              onChange={(event) => setBranchId(event.target.value)}
-              disabled={branches.length === 0 || !isAdmin}
-              aria-label="Chọn chi nhánh"
-            >
-              {!branchId && <option value="">Chọn chi nhánh</option>}
-              {branches.map((branch) => (
-                <option key={branch.id} value={branch.id}>
-                  {branch.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {branches.length === 0 && <span className="branch-name">Chi nhánh: {selectedBranchName}</span>}
-          <span className="user-name">Xin chào, {user?.fullName || user?.username}</span>
-          <button onClick={handleLogout} className="logout-btn">
-            Đăng xuất
-          </button>
-        </div>
-      </header>
-
-      <main className="dashboard-content">
         <div className="tab-bar">
           <button
             className={`tab-btn ${activeTab === 'overview' ? 'tab-active' : ''}`}
@@ -112,7 +86,32 @@ export default function Dashboard() {
             Thiết lập máy in
           </button>
         </div>
+        <div className="header-right">
+          <label className="branch-switcher">
+            <span>Chi nhánh:</span>
+            <select
+              value={branchId}
+              onChange={(event) => setBranchId(event.target.value)}
+              disabled={branches.length === 0 || !isAdmin}
+              aria-label="Chọn chi nhánh"
+            >
+              {!branchId && <option value="">Chọn chi nhánh</option>}
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {branches.length === 0 && <span className="branch-name">Chi nhánh: {selectedBranchName}</span>}
+          <span className="user-name">Xin chào, {user?.fullName || user?.username}</span>
+          <button onClick={handleLogout} className="logout-btn">
+            Đăng xuất
+          </button>
+        </div>
+      </header>
 
+      <main className="dashboard-content">
         {activeTab === 'overview' && (
           <>
             <h2>Báo cáo tổng quan</h2>
@@ -157,7 +156,9 @@ export default function Dashboard() {
 
         {activeTab === 'tables' && <TablesPage />}
 
-        {activeTab !== 'overview' && activeTab !== 'products' && activeTab !== 'tables' && (
+        {activeTab === 'orders' && <OrdersPage />}
+
+        {activeTab !== 'overview' && activeTab !== 'products' && activeTab !== 'tables' && activeTab !== 'orders' && (
           <div className="placeholder-card">Chức năng đang được phát triển.</div>
         )}
       </main>

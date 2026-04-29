@@ -123,4 +123,47 @@ export const diningTableService = {
   remove: (id: string) => api.delete(`/dining-tables/${id}`),
 };
 
+export type OrderPayload = {
+  entityType: 'TABLE' | 'ROOM';
+  tableId?: string;
+  roomId?: string;
+  customerName?: string;
+  totalAmount: number;
+  discountAmount?: number;
+  surchargeAmount?: number;
+  billItems: {
+    lineId: string;
+    productId: string;
+    productName: string;
+    unit?: string;
+    baseUnitPrice?: number;
+    unitPrice: number;
+    quantity: number;
+    note: string;
+  }[];
+  branchId?: string;
+};
+
+export const orderService = {
+  list: (params?: {
+    branchId?: string;
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    statuses?: string;
+    areaId?: string;
+    roomId?: string;
+    tableId?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => api.get('/orders', { params }),
+  getById: (id: string) => api.get(`/orders/${id}`),
+  create: (payload: OrderPayload) => api.post('/orders', payload),
+  update: (id: string, payload: Partial<OrderPayload>) => api.patch(`/orders/${id}`, payload),
+  print: (id: string) => api.post(`/orders/${id}/print`),
+  pay: (id: string, paidAmount: number) => api.patch(`/orders/${id}/payment`, { paidAmount }),
+  remove: (id: string) => api.delete(`/orders/${id}`),
+  history: (id: string) => api.get(`/orders/${id}/logs`),
+};
+
 export default api;
