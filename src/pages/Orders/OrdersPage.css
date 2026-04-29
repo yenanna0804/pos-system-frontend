@@ -96,6 +96,11 @@
   overflow: hidden;
 }
 
+.orders-list-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 .orders-list-table,
 .orders-products-table {
   border-collapse: collapse;
@@ -214,7 +219,7 @@
 }
 
 .orders-col-amount {
-  width: 16%;
+  width: 13%;
 }
 
 .orders-col-paid {
@@ -222,8 +227,8 @@
 }
 
 .orders-col-actions {
-  white-space: normal;
-  width: 18%;
+  white-space: nowrap;
+  width: 240px;
 }
 
 .orders-list-table th:nth-child(1),
@@ -243,7 +248,7 @@
 
 .orders-list-table th:nth-child(4),
 .orders-list-table td:nth-child(4) {
-  width: 16%;
+  width: 13%;
 }
 
 .orders-list-table th:nth-child(5),
@@ -268,13 +273,13 @@
 
 .orders-list-table th:nth-child(9),
 .orders-list-table td:nth-child(9) {
-  width: 18%;
+  width: 20%;
 }
 
 .orders-row-actions {
   align-items: center;
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
 }
 
@@ -290,6 +295,7 @@
   justify-content: center;
   padding: 0;
   width: 28px;
+  flex-shrink: 0;
 }
 
 .orders-icon-btn svg {
@@ -314,9 +320,12 @@
   border: 0;
   color: #1677ff;
   cursor: pointer;
+  display: inline-flex;
   font-size: 12px;
   font-weight: 600;
   padding: 0 2px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .orders-text-action:hover {
