@@ -903,9 +903,10 @@ export default function OrdersPage() {
                         <th>Tên món</th>
                         <th>Đơn vị</th>
                         <th className="num-col">Số lượng</th>
+                        <th className="num-col">Đơn giá gốc</th>
+                        <th className="num-col">Đơn giá</th>
                         <th className="num-col">Giảm giá</th>
                         <th className="num-col">Phụ phí</th>
-                        <th className="num-col">Đơn giá</th>
                         <th className="num-col">Thành tiền</th>
                         <th>Ghi chú</th>
                       </tr>
@@ -913,7 +914,7 @@ export default function OrdersPage() {
                     <tbody>
                       {detailOrder.items.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="orders-empty-row">
+                          <td colSpan={10} className="orders-empty-row">
                             Chưa có món trong hóa đơn
                           </td>
                         </tr>
@@ -924,9 +925,10 @@ export default function OrdersPage() {
                             <td>{item.productName || '-'}</td>
                             <td>{item.unit || '-'}</td>
                             <td className="num-col">{Number(item.quantity || 0).toLocaleString('vi-VN')}</td>
+                            <td className="num-col">{Number(item.baseUnitPrice ?? item.unitPrice ?? 0).toLocaleString('vi-VN')}</td>
+                            <td className="num-col">{Number(item.unitPrice || 0).toLocaleString('vi-VN')}</td>
                             <td className="num-col">{Number(item.lineDiscountAmount || 0).toLocaleString('vi-VN')}</td>
                             <td className="num-col">{Number(item.lineSurchargeAmount || 0).toLocaleString('vi-VN')}</td>
-                            <td className="num-col">{Number(item.unitPrice || 0).toLocaleString('vi-VN')}</td>
                             <td className="num-col">{(Number(item.quantity || 0) * Number(item.unitPrice || 0)).toLocaleString('vi-VN')}</td>
                             <td>{item.note || '-'}</td>
                           </tr>
