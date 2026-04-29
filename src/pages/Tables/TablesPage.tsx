@@ -52,6 +52,7 @@ export default function TablesPage() {
   const [search, setSearch] = useState('');
   const [areaFilter, setAreaFilter] = useState('');
   const [roomFilter, setRoomFilter] = useState('');
+  const [tableFilter, setTableFilter] = useState('');
 
   const [page, setPage] = useState(1);
   const pageSize = 7;
@@ -107,6 +108,14 @@ export default function TablesPage() {
     const resolver = confirmResolverRef.current;
     confirmResolverRef.current = null;
     if (resolver) resolver(confirmed);
+  };
+
+  const resetListFilters = () => {
+    setSearch('');
+    setAreaFilter('');
+    setRoomFilter('');
+    setTableFilter('');
+    setPage(1);
   };
 
   const loadAll = async () => {
@@ -327,6 +336,7 @@ export default function TablesPage() {
       if (!confirmed) return;
       await diningTableService.remove(id);
       await loadAll();
+      if (tableFilter === id) setTableFilter('');
       pushToast('success', 'Xóa bàn thành công');
     } catch (err) {
       const message = getErrorMessage(err);
@@ -435,6 +445,10 @@ export default function TablesPage() {
       if (areaFilter === id) setAreaFilter('');
       if (areaId === id) setAreaId('');
       if (roomFilter && rooms.find((r) => r.id === roomFilter)?.areaId === id) setRoomFilter('');
+      if (tableFilter) {
+        const selectedTable = tables.find((t) => t.id === tableFilter);
+        if (selectedTable?.areaId === id) setTableFilter('');
+      }
       await loadAll();
       pushToast('success', 'Xóa khu vực thành công');
     } catch (err) {
@@ -460,6 +474,10 @@ export default function TablesPage() {
     () => rooms.filter((r) => !areaFilter || r.areaId === areaFilter),
     [rooms, areaFilter],
   );
+  const filteredTablesForFilter = useMemo(
+    () => tables.filter((t) => (!areaFilter || t.areaId === areaFilter) && (!roomFilter || t.roomId === roomFilter)),
+    [tables, areaFilter, roomFilter],
+  );
 
   const selectedRoom = rooms.find((r) => r.id === roomFilter);
   const effectiveAreaFilter = areaFilter || selectedRoom?.areaId || '';
@@ -472,15 +490,17 @@ export default function TablesPage() {
     return sourceAreas
       .map((area) => {
         const areaRooms = rooms.filter((r) => r.areaId === area.id && (!roomFilter || r.id === roomFilter));
-        const directTables = tables.filter((t) => t.areaId === area.id && !t.roomId);
+        const directTables = tables.filter(
+          (t) => t.areaId === area.id && !t.roomId && (!tableFilter || t.id === tableFilter),
+        );
         const roomGroups = areaRooms.map((room) => ({
           room,
-          tables: tables.filter((t) => t.roomId === room.id),
+          tables: tables.filter((t) => t.roomId === room.id && (!tableFilter || t.id === tableFilter)),
         }));
         const total = directTables.length + roomGroups.reduce((acc, item) => acc + item.tables.length, 0);
         return { area, directTables, roomGroups, total };
       });
-  }, [areas, rooms, tables, effectiveAreaFilter, roomFilter]);
+  }, [areas, rooms, tables, effectiveAreaFilter, roomFilter, tableFilter]);
 
   const currentPage = Math.min(page, totalPages);
 
@@ -596,6 +616,8 @@ export default function TablesPage() {
             value={areaFilter}
             onChange={(e) => {
               setAreaFilter(e.target.value);
+              setRoomFilter('');
+              setTableFilter('');
               setPage(1);
             }}
           >
@@ -614,6 +636,7 @@ export default function TablesPage() {
             value={roomFilter}
             onChange={(e) => {
               setRoomFilter(e.target.value);
+              setTableFilter('');
               setPage(1);
             }}
           >
@@ -625,6 +648,37 @@ export default function TablesPage() {
             ))}
           </select>
         </label>
+
+        <label>
+          Bàn
+          <select
+            value={tableFilter}
+            onChange={(e) => {
+              setTableFilter(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">Tất cả bàn</option>
+            {filteredTablesForFilter.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <button
+          type="button"
+          className="ghost-btn icon-action-btn filter-reset-btn"
+          onClick={resetListFilters}
+          title="Đặt lại bộ lọc"
+          aria-label="Đặt lại bộ lọc"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path d="M20 12a8 8 0 1 1-2.35-5.65" />
+            <path d="M20 4v6h-6" />
+          </svg>
+        </button>
       </div>
 
       {error && <p className="products-error">{error}</p>}

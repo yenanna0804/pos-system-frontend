@@ -27,12 +27,59 @@ input, button, select {
 
 .icon-action-btn {
   align-items: center;
+  border-radius: 8px;
   display: inline-flex;
+  height: 36px;
   justify-content: center;
-  min-width: 42px;
-  padding: 8px 10px;
+  min-width: 36px;
+  padding: 0 10px;
 }
 
 .icon-action-btn svg {
   display: block;
+}
+
+.icon-close {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  color: #667085;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 18px;
+  height: 36px;
+  justify-content: center;
+  padding: 0;
+  width: 36px;
+}
+
+.icon-close:hover {
+  background: #f9fafb;
+}
+
+.icon-close:active {
+  background: #f2f4f7;
+}
+
+.filter-reset-btn {
+  align-self: end;
+  background: #eceff5;
+  height: 40px;
+  min-width: 40px;
+  padding: 0;
+  transition: background-color 0.15s ease;
+}
+
+.filter-reset-btn svg {
+  height: 18px;
+  width: 18px;
+}
+
+.filter-reset-btn:hover {
+  background: #dde3ec;
+}
+
+.filter-reset-btn:active {
+  background: #cfd8e6;
 }

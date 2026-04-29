@@ -311,15 +311,6 @@
   gap: 6px;
 }
 
-.icon-action-btn {
-  align-items: center;
-  display: inline-flex;
-  height: 36px;
-  justify-content: center;
-  min-width: 36px;
-  padding: 0 10px;
-}
-
 .product-thumb {
   align-items: center;
   border: 1px solid #e4e7ec;
@@ -351,8 +342,32 @@
   font-weight: 600;
 }
 
+.combo-name-btn {
+  background: transparent;
+  border: 0;
+  color: #1677ff;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.combo-name-btn:hover {
+  text-decoration: underline;
+}
+
 .empty-row {
   color: #98a2b3;
+  text-align: center;
+}
+
+.products-table th.num-col,
+.products-table td.num-col {
+  text-align: right;
+}
+
+.products-table th.center-col,
+.products-table td.center-col {
   text-align: center;
 }
 
@@ -390,25 +405,6 @@
 
 .modal-header h3 {
   margin: 0;
-}
-
-.icon-close {
-  align-items: center;
-  background: #fff;
-  border: 1px solid #d0d5dd;
-  border-radius: 8px;
-  color: #667085;
-  cursor: pointer;
-  display: inline-flex;
-  font-size: 18px;
-  height: 36px;
-  justify-content: center;
-  padding: 0;
-  width: 36px;
-}
-
-.icon-close:hover {
-  background: #f9fafb;
 }
 
 .form-grid {
@@ -635,6 +631,22 @@
   gap: 8px;
 }
 
+.paste-image-hint {
+  background: #f8fafc;
+  border: 1px dashed #98a2b3;
+  border-radius: 8px;
+  color: #475467;
+  cursor: text;
+  font-size: 13px;
+  outline: none;
+  padding: 8px 10px;
+}
+
+.paste-image-hint:focus {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.18);
+}
+
 .image-upload-actions small {
   color: #667085;
   font-size: 12px;
@@ -716,6 +728,45 @@
   color: #475467;
   font-size: 13px;
   margin-top: 12px;
+}
+
+.combo-detail-list {
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  margin-top: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.combo-detail-item {
+  border-bottom: 1px solid #f2f4f7;
+  color: #1d2939;
+  font-size: 14px;
+  padding: 10px 12px;
+}
+
+.combo-detail-item:last-child {
+  border-bottom: 0;
+}
+
+.combo-detail-table-wrap {
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  margin-top: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.combo-detail-table {
+  min-width: 920px;
+}
+
+.combo-detail-modal {
+  max-width: 1180px;
+}
+
+.combo-detail-pagination {
+  margin-top: 14px;
 }
 
 @media (max-width: 900px) {

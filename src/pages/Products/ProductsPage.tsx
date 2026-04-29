@@ -54,6 +54,20 @@ type ComboItem = {
   quantity: number;
   itemName?: string;
   itemPrice?: number;
+  itemUnit?: string;
+};
+
+type ComboDetailRow = {
+  id: string;
+  name: string;
+  imageThumb?: string;
+  imageUrl?: string;
+  categoryName?: string;
+  quantity: number;
+  unit?: string;
+  costPrice?: string;
+  price?: string;
+  stock?: string;
 };
 
 type Branch = {
@@ -164,6 +178,12 @@ export default function ProductsPage() {
   const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+  const [isComboDetailOpen, setIsComboDetailOpen] = useState(false);
+  const [comboDetailTitle, setComboDetailTitle] = useState('');
+  const [comboDetailItems, setComboDetailItems] = useState<ComboItem[]>([]);
+  const [comboDetailRows, setComboDetailRows] = useState<ComboDetailRow[]>([]);
+  const [comboDetailPage, setComboDetailPage] = useState(1);
+  const [isComboDetailLoading, setIsComboDetailLoading] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [productForm, setProductForm] = useState<ProductForm>(initialForm);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
@@ -194,6 +214,12 @@ export default function ProductsPage() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({ open: false, title: '', message: '' });
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
+  const comboDetailPageSize = 5;
+  const comboDetailTotalPages = Math.max(1, Math.ceil(comboDetailRows.length / comboDetailPageSize));
+  const comboDetailPagedRows = comboDetailRows.slice(
+    (comboDetailPage - 1) * comboDetailPageSize,
+    comboDetailPage * comboDetailPageSize,
+  );
 
   const pushToast = (type: Toast['type'], message: string) => {
     const id = Date.now() + Math.floor(Math.random() * 1000);
@@ -449,6 +475,69 @@ export default function ProductsPage() {
     setProductFieldErrors({});
   };
 
+  const resetListFilters = () => {
+    setSearchTerm('');
+    setDebouncedSearch('');
+    setFilterCategoryId('');
+    setFilterType('all');
+    setFilterStock('all');
+    setFilterBranchId(authBranchId || '');
+    setPage(1);
+  };
+
+  const openComboDetailModal = async (product: Product) => {
+    if ((product.type || 'SINGLE') !== 'COMBO') return;
+    setComboDetailTitle(product.name);
+    setComboDetailItems([]);
+    setComboDetailRows([]);
+    setComboDetailPage(1);
+    setIsComboDetailOpen(true);
+    setIsComboDetailLoading(true);
+    try {
+      const detailRes = await productService.getById(product.id);
+      const details: Product = detailRes.data;
+      const rawComboItems =
+        typeof details.comboItems === 'string'
+          ? (JSON.parse(details.comboItems) as ComboItem[])
+          : (details.comboItems as ComboItem[] | undefined) || [];
+      setComboDetailItems(rawComboItems);
+
+      if (rawComboItems.length > 0) {
+        const catalogRes = await productService.list({ page: 1, pageSize: 500, branchId: filterBranchId || undefined });
+        const catalogData = catalogRes.data;
+        const catalogRows: Product[] = Array.isArray(catalogData)
+          ? catalogData
+          : Array.isArray(catalogData?.items)
+            ? catalogData.items
+            : [];
+        const catalogMap = new Map(catalogRows.map((entry) => [entry.id, entry]));
+        setComboDetailRows(
+          rawComboItems.map((item) => {
+            const found = catalogMap.get(item.itemProductId);
+            return {
+              id: item.itemProductId,
+              name: item.itemName || found?.name || 'Không rõ',
+              imageThumb: found?.imageThumb,
+              imageUrl: found?.imageUrl,
+              categoryName: found?.categoryName,
+              quantity: Number(item.quantity || 0),
+              unit: item.itemUnit || found?.unit,
+              costPrice: String(found?.costPrice || '0'),
+              price: String(found?.price || '0'),
+              stock: String(found?.stock || '0'),
+            };
+          }),
+        );
+      } else {
+        setComboDetailRows([]);
+      }
+    } catch {
+      pushToast('error', 'Không tải được danh sách hàng hóa thành phần');
+    } finally {
+      setIsComboDetailLoading(false);
+    }
+  };
+
   const validateProductForm = () => {
     const fieldErrors: ProductFieldErrors = {};
     if (!productForm.name.trim()) fieldErrors.name = 'Tên hàng là bắt buộc';
@@ -601,6 +690,13 @@ export default function ProductsPage() {
     const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
 
+    await applySelectedImageFile(selectedFile);
+    event.target.value = '';
+  };
+
+  const applySelectedImageFile = async (selectedFile: File) => {
+    if (!selectedFile) return;
+
     if (!selectedFile.type.startsWith('image/')) {
       setError('Vui lòng chọn file hình ảnh hợp lệ');
       return;
@@ -611,7 +707,24 @@ export default function ProductsPage() {
     const objectUrl = URL.createObjectURL(selectedFile);
     setPendingPreviewUrl(objectUrl);
     setPendingImageFile(selectedFile);
-    event.target.value = '';
+  };
+
+  const onPasteImage = async (event: React.ClipboardEvent<HTMLElement>) => {
+    const items = event.clipboardData?.items;
+    if (!items || items.length === 0) return;
+
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        event.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          await applySelectedImageFile(file);
+        }
+        return;
+      }
+    }
+
+    setError('Không tìm thấy ảnh trong dữ liệu dán. Vui lòng copy hình ảnh rồi dán lại.');
   };
 
   const onRemoveImage = async () => {
@@ -852,23 +965,19 @@ export default function ProductsPage() {
           </select>
         </label>
 
-        <label>
-          Chi nhánh
-          <select
-            value={filterBranchId}
-            onChange={(event) => {
-              setFilterBranchId(event.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">Tất cả chi nhánh</option>
-            {branches.map((branch) => (
-              <option key={branch.id} value={branch.id}>
-                {branch.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <button
+          type="button"
+          className="ghost-btn icon-action-btn filter-reset-btn"
+          onClick={resetListFilters}
+          title="Đặt lại bộ lọc"
+          aria-label="Đặt lại bộ lọc"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path d="M20 12a8 8 0 1 1-2.35-5.65" />
+            <path d="M20 4v6h-6" />
+          </svg>
+        </button>
+
       </div>
 
       <div className={`products-table-wrap ${isListLoading ? 'is-loading' : ''}`}>
@@ -892,37 +1001,35 @@ export default function ProductsPage() {
         <table className="products-table">
           <thead>
             <tr>
-              <th>STT</th>
+              <th className="center-col">STT</th>
               <th>Mã hàng</th>
               <th>Hình ảnh</th>
               <th>Tên hàng</th>
-              <th>Nhóm hàng</th>
               <th>Đơn vị tính</th>
-              <th>Giá vốn</th>
-              <th>Giá bán</th>
-              <th>Tồn kho</th>
-              <th>Chi nhánh</th>
-              <th>Trạng thái</th>
+              <th>Nhóm hàng</th>
+              <th className="num-col">Giá vốn</th>
+              <th className="num-col">Giá bán</th>
+              <th className="num-col">Tồn kho</th>
               <th>Thao tác</th>
             </tr>
           </thead>
           <tbody>
             {isListLoading ? (
               <tr>
-                <td colSpan={12} className="empty-row">
+                <td colSpan={10} className="empty-row">
                   Đang tải dữ liệu
                 </td>
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={12} className="empty-row">
+                <td colSpan={10} className="empty-row">
                   {debouncedSearch ? 'Không tìm thấy dữ liệu' : 'Không có hàng hóa phù hợp bộ lọc'}
                 </td>
               </tr>
             ) : (
               products.map((product, index) => (
                 <tr key={product.id}>
-                  <td>{(page - 1) * pageSize + index + 1}</td>
+                  <td className="center-col">{(page - 1) * pageSize + index + 1}</td>
                   <td>{product.sku}</td>
                   <td>
                     <div className="product-thumb">
@@ -934,20 +1041,27 @@ export default function ProductsPage() {
                     </div>
                   </td>
                   <td>
-                    {product.name}
-                    {(product.type || 'SINGLE') === 'COMBO' ? ' (Combo)' : ''}
+                    {(product.type || 'SINGLE') === 'COMBO' ? (
+                      <button
+                        type="button"
+                        className="combo-name-btn"
+                        onClick={() => {
+                          openComboDetailModal(product).catch(() => {
+                            pushToast('error', 'Không tải được danh sách hàng hóa thành phần');
+                          });
+                        }}
+                      >
+                        {product.name} (Combo)
+                      </button>
+                    ) : (
+                      product.name
+                    )}
                   </td>
-                  <td>{product.categoryName || '-'}</td>
                   <td>{product.unit || '-'}</td>
-                  <td>{Number(product.costPrice || 0).toLocaleString('vi-VN')}</td>
-                  <td>{Number(product.price || 0).toLocaleString('vi-VN')}</td>
-                  <td>{Number(product.stock || 0).toLocaleString('vi-VN')}</td>
-                  <td>{product.branchNames || '-'}</td>
-                  <td>
-                    <span className={product.isActive ? 'status-active' : 'status-inactive'}>
-                      {product.isActive ? 'Đang kinh doanh' : 'Ngừng kinh doanh'}
-                    </span>
-                  </td>
+                  <td>{product.categoryName || '-'}</td>
+                  <td className="num-col">{Number(product.costPrice || 0).toLocaleString('vi-VN')}</td>
+                  <td className="num-col">{Number(product.price || 0).toLocaleString('vi-VN')}</td>
+                  <td className="num-col">{Number(product.stock || 0).toLocaleString('vi-VN')}</td>
                   <td>
                     <div className="row-actions">
                       <button className="ghost-btn icon-action-btn" title="Sửa" aria-label="Sửa" onClick={() => openEditModal(product)}>
@@ -1033,7 +1147,7 @@ export default function ProductsPage() {
               </button>
             </div>
 
-            <form className="product-form" onSubmit={onSaveProduct}>
+            <form className="product-form" onSubmit={onSaveProduct} onPaste={onPasteImage}>
               <div className="form-grid">
                 <div className="form-field">
                   <span>Hình ảnh</span>
@@ -1061,6 +1175,17 @@ export default function ProductsPage() {
                     </div>
                     <div className="image-upload-actions">
                       <input type="file" accept="image/*" onChange={onUploadImage} />
+                      <div
+                        className="paste-image-hint"
+                        role="button"
+                        tabIndex={0}
+                        onPaste={onPasteImage}
+                        onClick={(event) => {
+                          event.currentTarget.focus();
+                        }}
+                      >
+                        Nhấn vào đây rồi dán ảnh (Cmd/Ctrl + V)
+                      </div>
                       <small>
                         {pendingImageFile
                           ? 'Ảnh đã chọn, sẽ upload/nén khi nhấn Lưu'
@@ -1469,6 +1594,131 @@ export default function ProductsPage() {
             <div className="modal-tip">
               Lưu ý:
             </div>
+          </div>
+        </div>
+      )}
+
+      {isComboDetailOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content modal-large combo-detail-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Thành phần combo: {comboDetailTitle}</h3>
+              <button className="icon-close" onClick={() => setIsComboDetailOpen(false)}>
+                x
+              </button>
+            </div>
+            {isComboDetailLoading ? (
+              <div className="modal-tip">Đang tải thành phần combo...</div>
+            ) : comboDetailItems.length === 0 ? (
+              <div className="modal-tip">Combo chưa có hàng hóa thành phần</div>
+            ) : (
+              <div className="combo-detail-table-wrap">
+                <table className="products-table combo-detail-table">
+                  <thead>
+                    <tr>
+                      <th className="center-col">STT</th>
+                      <th>Tên hàng</th>
+                      <th>Hình ảnh</th>
+                      <th className="num-col">Số lượng</th>
+                      <th>Đơn vị tính</th>
+                      <th>Nhóm hàng</th>
+                      <th className="num-col">Giá vốn</th>
+                      <th className="num-col">Giá bán</th>
+                      <th className="num-col">Tồn kho</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {comboDetailPagedRows.map((item, idx) => (
+                      <tr key={`${item.id}-${idx}`}>
+                        <td className="center-col">{(comboDetailPage - 1) * comboDetailPageSize + idx + 1}</td>
+                        <td>{item.name || '-'}</td>
+                        <td>
+                          <div className="product-thumb">
+                            {item.imageThumb || item.imageUrl ? (
+                              <img src={resolveImageUrl(item.imageThumb || item.imageUrl)} alt={item.name || 'item'} />
+                            ) : (
+                              <span>--</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="num-col">{item.quantity}</td>
+                        <td>{item.unit || '-'}</td>
+                        <td>{item.categoryName || '-'}</td>
+                        <td className="num-col">{Number(item.costPrice || 0).toLocaleString('vi-VN')}</td>
+                        <td className="num-col">{Number(item.price || 0).toLocaleString('vi-VN')}</td>
+                        <td className="num-col">{Number(item.stock || 0).toLocaleString('vi-VN')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {!isComboDetailLoading && comboDetailRows.length > 0 && (
+              <div className="pagination-bar combo-detail-pagination">
+                <span>
+                  Trang {comboDetailPage}/{comboDetailTotalPages} - {comboDetailRows.length} sản phẩm
+                </span>
+                <div className="pagination-actions">
+                  <button
+                    className="ghost-btn"
+                    disabled={comboDetailPage <= 1}
+                    onClick={() => setComboDetailPage((p) => Math.max(1, p - 1))}
+                  >
+                    Trước
+                  </button>
+                  {comboDetailTotalPages <= 7 ? (
+                    Array.from({ length: comboDetailTotalPages }, (_, i) => i + 1).map((pageNum) => (
+                      <button
+                        key={pageNum}
+                        className={`ghost-btn ${pageNum === comboDetailPage ? 'active' : ''}`}
+                        disabled={pageNum === comboDetailPage}
+                        onClick={() => setComboDetailPage(pageNum)}
+                      >
+                        {pageNum}
+                      </button>
+                    ))
+                  ) : (
+                    <>
+                      {comboDetailPage > 3 && (
+                        <>
+                          <button className="ghost-btn" onClick={() => setComboDetailPage(1)}>1</button>
+                          {comboDetailPage > 4 && <span>...</span>}
+                        </>
+                      )}
+                      {Array.from({ length: Math.min(5, comboDetailTotalPages) }, (_, i) => {
+                        const start = Math.max(1, Math.min(comboDetailPage - 2, comboDetailTotalPages - 4));
+                        return start + i;
+                      }).filter((p) => p >= 1 && p <= comboDetailTotalPages).map((pageNum) => (
+                        <button
+                          key={pageNum}
+                          className={`ghost-btn ${pageNum === comboDetailPage ? 'active' : ''}`}
+                          disabled={pageNum === comboDetailPage}
+                          onClick={() => setComboDetailPage(pageNum)}
+                        >
+                          {pageNum}
+                        </button>
+                      ))}
+                      {comboDetailPage < comboDetailTotalPages - 2 && (
+                        <>
+                          {comboDetailPage < comboDetailTotalPages - 3 && <span>...</span>}
+                          <button className="ghost-btn" onClick={() => setComboDetailPage(comboDetailTotalPages)}>
+                            {comboDetailTotalPages}
+                          </button>
+                        </>
+                      )}
+                    </>
+                  )}
+                  <button
+                    className="ghost-btn"
+                    disabled={comboDetailPage >= comboDetailTotalPages}
+                    onClick={() => setComboDetailPage((p) => Math.min(comboDetailTotalPages, p + 1))}
+                  >
+                    Sau
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
