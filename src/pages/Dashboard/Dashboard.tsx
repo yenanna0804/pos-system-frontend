@@ -5,6 +5,7 @@ import { branchService } from '../../services/api';
 import ProductsPage from '../Products/ProductsPage';
 import TablesPage from '../Tables/TablesPage';
 import OrdersPage from '../Orders/OrdersPage';
+import PrintersPage from '../Printers/PrintersPage';
 import './Dashboard.css';
 
 type TabKey = 'overview' | 'products' | 'tables' | 'orders' | 'printers';
@@ -158,9 +159,15 @@ export default function Dashboard() {
 
         {activeTab === 'orders' && <OrdersPage />}
 
-        {activeTab !== 'overview' && activeTab !== 'products' && activeTab !== 'tables' && activeTab !== 'orders' && (
+        {activeTab === 'printers' && <PrintersPage />}
+
+        {activeTab !== 'overview' &&
+          activeTab !== 'products' &&
+          activeTab !== 'tables' &&
+          activeTab !== 'orders' &&
+          activeTab !== 'printers' && (
           <div className="placeholder-card">Chức năng đang được phát triển.</div>
-        )}
+          )}
       </main>
     </div>
   );
