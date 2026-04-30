@@ -64,6 +64,7 @@ export const productService = {
     search?: string;
   }) => api.get('/products', { params }),
   getById: (id: string) => api.get(`/products/${id}`),
+  getDeleteImpact: (id: string) => api.get(`/products/${id}/delete-impact`),
   create: (payload: ProductPayload) => api.post('/products', payload),
   update: (id: string, payload: ProductPayload) => api.patch(`/products/${id}`, payload),
   remove: (id: string) => api.delete(`/products/${id}`),

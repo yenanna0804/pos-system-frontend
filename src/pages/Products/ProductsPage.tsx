@@ -692,9 +692,37 @@ export default function ProductsPage() {
   };
 
   const onDeleteProduct = async (product: Product) => {
+    let impactMessage = `Xóa hàng hóa "${product.name}"?`;
+    try {
+      const impactRes = await productService.getDeleteImpact(product.id);
+      const impactData = impactRes.data || {};
+      const impactOrders: { orderCode?: string; itemCount?: number }[] = Array.isArray(impactData.orders)
+        ? impactData.orders
+        : [];
+      const totalOrders = Number(impactData.totalOrders || impactOrders.length || 0);
+
+      if (totalOrders > 0) {
+        const preview = impactOrders
+          .slice(0, 8)
+          .map((order) => `- ${order.orderCode || 'Không rõ mã'} (${Number(order.itemCount || 0)} dòng)`)
+          .join('\n');
+        const remain = totalOrders - Math.min(8, impactOrders.length);
+        impactMessage =
+          `Mặt hàng "${product.name}" đang nằm trong ${totalOrders} hóa đơn:\n` +
+          `${preview}${remain > 0 ? `\n- ... và ${remain} hóa đơn khác` : ''}\n\n` +
+          'Nếu tiếp tục, hệ thống sẽ xóa mặt hàng này khỏi toàn bộ hóa đơn liên quan và cập nhật lại dữ liệu hóa đơn.\n' +
+          'Dữ liệu báo cáo có thể thay đổi.\n\n' +
+          'Bạn có chắc muốn xóa?';
+      }
+    } catch {
+      impactMessage =
+        `Xóa hàng hóa "${product.name}"?\n\n` +
+        'Nếu mặt hàng đang nằm trong hóa đơn, hệ thống sẽ tự động xóa khỏi các hóa đơn liên quan và cập nhật lại dữ liệu hóa đơn.';
+    }
+
     const confirmed = await confirmAction({
       title: 'Xác nhận xóa hàng hóa',
-      message: `Xóa hàng hóa "${product.name}"?`,
+      message: impactMessage,
       confirmText: 'Xóa',
       cancelText: 'Hủy',
       danger: true,
@@ -702,9 +730,15 @@ export default function ProductsPage() {
     if (!confirmed) return;
     setError('');
     try {
-      await productService.remove(product.id);
+      const response = await productService.remove(product.id);
       await loadData();
-      pushToast('success', 'Đã xóa hàng hóa');
+      const affectedOrders = Number(response.data?.affectedOrders || 0);
+      const removedItems = Number(response.data?.removedItems || 0);
+      if (affectedOrders > 0 || removedItems > 0) {
+        pushToast('info', `Đã xóa hàng hóa, cập nhật ${affectedOrders} hóa đơn (${removedItems} dòng món)`);
+      } else {
+        pushToast('success', 'Đã xóa hàng hóa');
+      }
     } catch (message: any) {
       setError(message || 'Không thể xóa hàng hóa');
       pushToast('error', message || 'Không thể xóa hàng hóa');
