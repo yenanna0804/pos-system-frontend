@@ -254,7 +254,7 @@ export default function OrdersProductPicker({ branchId, onAddProduct }: Props) {
                       unit: product.unit,
                       categoryName: product.categoryName,
                       type: product.type || 'SINGLE',
-                      price: Number(product.price || 0),
+                      price: Math.trunc(Number(product.price || 0)),
                       stock: Number(product.stock || 0),
                     })
                   }
@@ -273,7 +273,7 @@ export default function OrdersProductPicker({ branchId, onAddProduct }: Props) {
                   <td>{product.name}</td>
                   <td className="orders-col-unit">{product.unit || '-'}</td>
                   <td className="orders-col-category">{product.categoryName || '-'}</td>
-                  <td className="num-col">{Number(product.price || 0).toLocaleString('vi-VN')}</td>
+                  <td className="num-col">{Math.trunc(Number(product.price || 0)).toLocaleString('vi-VN')}</td>
                   <td className="num-col">{Number(product.stock || 0).toLocaleString('vi-VN')}</td>
                 </tr>
               ))

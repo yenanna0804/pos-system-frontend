@@ -26,7 +26,7 @@ type Props = {
   onSurchargeValueChange: (value: string) => void;
   totalAmount: number;
   initialPaidAmount?: number;
-  onSaveDraft: (paidAmount: number) => void;
+  onSaveOrder: (paidAmount: number) => void;
   onPrintInvoice: () => void;
   disableSave: boolean;
 };
@@ -70,21 +70,24 @@ export default function OrderBillsPanel({
   onSurchargeValueChange,
   totalAmount,
   initialPaidAmount,
-  onSaveDraft,
+  onSaveOrder,
   onPrintInvoice,
   disableSave,
 }: Props) {
   const [editingNoteLineId, setEditingNoteLineId] = useState<string | null>(null);
   const [editingPriceLineId, setEditingPriceLineId] = useState<string | null>(null);
   const [editingQtyLineId, setEditingQtyLineId] = useState<string | null>(null);
-  const [customerPaidInput, setCustomerPaidInput] = useState(String(Math.max(0, Math.round(initialPaidAmount ?? totalAmount))));
-  const totalLimit = Math.max(0, Math.round(totalAmount));
+  const [customerPaidInput, setCustomerPaidInput] = useState(String(Math.max(0, Math.trunc(initialPaidAmount ?? totalAmount))));
+  const totalLimit = Math.max(0, Math.trunc(totalAmount));
 
   const subtotal = billItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const discountRaw = discountMode === 'amount' ? toAmountNumber(discountValue) : toPercentNumber(discountValue);
   const surchargeRaw = surchargeMode === 'amount' ? toAmountNumber(surchargeValue) : toPercentNumber(surchargeValue);
   const discountAmount = discountMode === 'percent' ? Math.min(subtotal, (subtotal * Math.max(0, discountRaw)) / 100) : Math.max(0, discountRaw);
-  const surchargeAmount = surchargeMode === 'percent' ? (subtotal * Math.max(0, surchargeRaw)) / 100 : Math.max(0, surchargeRaw);
+  const subtotalAfterDiscount = Math.max(0, subtotal - discountAmount);
+  const surchargeAmount = surchargeMode === 'percent'
+    ? (subtotalAfterDiscount * Math.max(0, surchargeRaw)) / 100
+    : Math.max(0, surchargeRaw);
 
   return (
     <aside className="orders-bills-panel">
@@ -174,11 +177,11 @@ export default function OrderBillsPanel({
 
       <div className="orders-summary-box">
         <div className="orders-summary-meta">
-          <span>Tạm tính: {subtotal.toLocaleString('vi-VN')}</span>
-          <span>Giảm giá: {Math.round(discountAmount).toLocaleString('vi-VN')}</span>
-          <span>Phụ phí: {Math.round(surchargeAmount).toLocaleString('vi-VN')}</span>
+          <span>Tạm tính: {Math.trunc(subtotal).toLocaleString('vi-VN')}</span>
+          <span>Giảm giá: {Math.trunc(discountAmount).toLocaleString('vi-VN')}</span>
+          <span>Phụ phí: {Math.trunc(surchargeAmount).toLocaleString('vi-VN')}</span>
         </div>
-        <strong>PHẢI THANH TOÁN: {Math.round(totalAmount).toLocaleString('vi-VN')}</strong>
+        <strong>PHẢI THANH TOÁN: {Math.trunc(totalAmount).toLocaleString('vi-VN')}</strong>
       </div>
 
       <div className="orders-customer-paid-row">
@@ -217,7 +220,7 @@ export default function OrderBillsPanel({
           </svg>
           In hóa đơn
         </button>
-        <button type="button" className="orders-primary-btn" onClick={() => onSaveDraft(Number(customerPaidInput) || 0)} disabled={disableSave}>
+        <button type="button" className="orders-primary-btn" onClick={() => onSaveOrder(Number(customerPaidInput) || 0)} disabled={disableSave}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
             <rect x="3" y="4" width="18" height="16" rx="4" strokeLinecap="round" strokeLinejoin="round" />
             <path d="M3 10h18" strokeLinecap="round" />
@@ -311,7 +314,7 @@ export default function OrderBillsPanel({
                   <input
                     autoFocus
                     className="orders-price-inline-input"
-                    value={item.unitPrice.toLocaleString('vi-VN')}
+                    value={Math.trunc(item.unitPrice).toLocaleString('vi-VN')}
                     inputMode="numeric"
                     onFocus={(event) => event.target.select()}
                     onChange={(event) => {
@@ -327,10 +330,10 @@ export default function OrderBillsPanel({
                   />
                 ) : (
                   <button type="button" className="orders-bill-price orders-price-trigger" onClick={() => setEditingPriceLineId(item.lineId)}>
-                    {item.unitPrice.toLocaleString('vi-VN')}
+                    {Math.trunc(item.unitPrice).toLocaleString('vi-VN')}
                   </button>
                 )}
-                <div className="orders-bill-amount">{(item.unitPrice * item.quantity).toLocaleString('vi-VN')}</div>
+                <div className="orders-bill-amount">{Math.trunc(item.unitPrice * item.quantity).toLocaleString('vi-VN')}</div>
                 <button type="button" className="orders-remove-line-btn" onClick={() => onRemoveLine(item.lineId)}>
                   x
                 </button>

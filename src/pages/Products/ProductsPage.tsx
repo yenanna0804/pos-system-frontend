@@ -149,12 +149,12 @@ const parseMoneyInput = (value: string) => {
 
 const parseCatalogMoney = (value: unknown) => {
   if (value == null) return 0;
-  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? Math.trunc(value) : 0;
   const raw = String(value).trim();
   if (!raw) return 0;
   if (/^-?\d+(\.\d+)?$/.test(raw)) {
     const numeric = Number(raw);
-    return Number.isFinite(numeric) ? numeric : 0;
+    return Number.isFinite(numeric) ? Math.trunc(numeric) : 0;
   }
   return parseMoneyInput(raw);
 };
@@ -163,7 +163,7 @@ const formatMoneyValue = (value: string | number | null | undefined) => {
   if (value == null || value === '') return '';
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return '';
-  return moneyFormatter.format(Math.round(numeric));
+  return moneyFormatter.format(Math.trunc(numeric));
 };
 
 const normalizeDecimalInput = (value: string, maxScale = 3) => {
@@ -1073,8 +1073,8 @@ export default function ProductsPage() {
                   </td>
                   <td>{product.unit || '-'}</td>
                   <td>{product.categoryName || '-'}</td>
-                  <td className="num-col">{Number(product.costPrice || 0).toLocaleString('vi-VN')}</td>
-                  <td className="num-col">{Number(product.price || 0).toLocaleString('vi-VN')}</td>
+                  <td className="num-col">{Math.trunc(Number(product.costPrice || 0)).toLocaleString('vi-VN')}</td>
+                  <td className="num-col">{Math.trunc(Number(product.price || 0)).toLocaleString('vi-VN')}</td>
                   <td className="num-col">{Number(product.stock || 0).toLocaleString('vi-VN')}</td>
                   <td>
                     <div className="row-actions">
@@ -1680,8 +1680,8 @@ export default function ProductsPage() {
                         <td className="num-col">{item.quantity}</td>
                         <td>{item.unit || '-'}</td>
                         <td>{item.categoryName || '-'}</td>
-                        <td className="num-col">{Number(item.costPrice || 0).toLocaleString('vi-VN')}</td>
-                        <td className="num-col">{Number(item.price || 0).toLocaleString('vi-VN')}</td>
+                        <td className="num-col">{Math.trunc(Number(item.costPrice || 0)).toLocaleString('vi-VN')}</td>
+                        <td className="num-col">{Math.trunc(Number(item.price || 0)).toLocaleString('vi-VN')}</td>
                         <td className="num-col">{Number(item.stock || 0).toLocaleString('vi-VN')}</td>
                       </tr>
                     ))}

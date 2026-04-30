@@ -99,6 +99,13 @@
 .orders-list-wrap {
   overflow-x: auto;
   overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.orders-table-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .orders-list-table,
@@ -109,8 +116,8 @@
 }
 
 .orders-list-table {
-  min-width: 0;
-  table-layout: fixed;
+  min-width: 1200px;
+  table-layout: auto;
 }
 
 .orders-col-sku {
@@ -268,12 +275,13 @@
 
 .orders-list-table th:nth-child(8),
 .orders-list-table td:nth-child(8) {
-  width: 10%;
+  min-width: 140px;
+  white-space: nowrap;
 }
 
 .orders-list-table th:nth-child(9),
 .orders-list-table td:nth-child(9) {
-  width: 20%;
+  min-width: 240px;
 }
 
 .orders-row-actions {
@@ -433,6 +441,7 @@
 
 .orders-history-table {
   border-collapse: collapse;
+  min-width: 920px;
   width: 100%;
 }
 
@@ -442,14 +451,22 @@
   font-size: 13px;
   padding: 10px 8px;
   text-align: left;
+  vertical-align: top;
+}
+
+.orders-history-table th {
   white-space: nowrap;
+}
+
+.orders-history-table td {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .orders-history-table th:last-child,
 .orders-history-table td:last-child {
   max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .orders-detail-modal {
@@ -548,12 +565,6 @@
   text-align: right;
 }
 
-
-.orders-status-tag.is-draft {
-  background: #f2f4f7;
-  border-color: #d0d5dd;
-  color: #475467;
-}
 
 .orders-status-tag.is-paid {
   background: #dcfae6;
@@ -910,6 +921,12 @@
 
 .orders-room-row:hover {
   background: #f8fafc;
+}
+
+.orders-room-row.is-selected {
+  background: #eff8ff;
+  border-color: #84caff;
+  box-shadow: inset 0 0 0 1px rgba(23, 92, 211, 0.08);
 }
 
 .orders-room-children {

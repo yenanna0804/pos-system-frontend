@@ -14,17 +14,25 @@ type Props = {
     customerName: string;
     billItems: BillItem[];
     discountAmount?: number;
+    discountMode?: 'percent' | 'amount';
+    discountValue?: number;
     surchargeAmount?: number;
+    surchargeMode?: 'percent' | 'amount';
+    surchargeValue?: number;
     paidAmount?: number;
   };
   defaultTab?: 'table' | 'product';
-  onSaveDraft: (payload: {
+  onSaveOrder: (payload: {
     table: SelectableTable;
     customerName: string;
     billItems: BillItem[];
     totalAmount: number;
     discountAmount: number;
+    discountMode: 'percent' | 'amount';
+    discountValue: number;
     surchargeAmount: number;
+    surchargeMode: 'percent' | 'amount';
+    surchargeValue: number;
     paidAmount: number;
   }) => Promise<void>;
 };
@@ -44,18 +52,18 @@ const toPercentNumber = (value: string) => {
   return Number.isFinite(numeric) ? numeric : 0;
 };
 
-export default function NewOrderPage({ onBack, onSaveDraft, mode = 'create', orderCode, initialData, defaultTab = 'table' }: Props) {
+export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', orderCode, initialData, defaultTab = 'table' }: Props) {
   const { branchId } = useAuth();
   const [activeTab, setActiveTab] = useState<'table' | 'product'>(defaultTab);
   const [selectedTable, setSelectedTable] = useState<SelectableTable | null>(initialData?.selectedTable || null);
   const [customerName, setCustomerName] = useState(initialData?.customerName || '');
   const [duplicateHandling, setDuplicateHandling] = useState<DuplicateHandling>('merge');
   const [billItems, setBillItems] = useState<BillItem[]>(initialData?.billItems || []);
-  const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>(initialData ? 'amount' : 'percent');
-  const [discountValue, setDiscountValue] = useState(String(initialData?.discountAmount ?? 0));
-  const [surchargeMode, setSurchargeMode] = useState<'percent' | 'amount'>(initialData ? 'amount' : 'percent');
-  const [surchargeValue, setSurchargeValue] = useState(String(initialData?.surchargeAmount ?? 0));
-  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>(initialData?.discountMode || 'percent');
+  const [discountValue, setDiscountValue] = useState(String(initialData?.discountValue ?? initialData?.discountAmount ?? 0));
+  const [surchargeMode, setSurchargeMode] = useState<'percent' | 'amount'>(initialData?.surchargeMode || 'percent');
+  const [surchargeValue, setSurchargeValue] = useState(String(initialData?.surchargeValue ?? initialData?.surchargeAmount ?? 0));
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [showEditConfirm, setShowEditConfirm] = useState(false);
 
   const canOpenProductTab = Boolean(selectedTable);
@@ -100,8 +108,11 @@ export default function NewOrderPage({ onBack, onSaveDraft, mode = 'create', ord
       discountMode === 'percent'
         ? Math.min(subtotal, (subtotal * Math.max(0, discountRaw)) / 100)
         : Math.max(0, discountRaw);
+    const subtotalAfterDiscount = Math.max(0, subtotal - discountAmount);
     const surchargeAmount =
-      surchargeMode === 'percent' ? (subtotal * Math.max(0, surchargeRaw)) / 100 : Math.max(0, surchargeRaw);
+      surchargeMode === 'percent'
+        ? (subtotalAfterDiscount * Math.max(0, surchargeRaw)) / 100
+        : Math.max(0, surchargeRaw);
 
     return Math.max(0, subtotal - discountAmount + surchargeAmount);
   }, [discountMode, discountValue, subtotal, surchargeMode, surchargeValue]);
@@ -115,40 +126,47 @@ export default function NewOrderPage({ onBack, onSaveDraft, mode = 'create', ord
 
   const surchargeAmount = useMemo(() => {
     const surchargeRaw = surchargeMode === 'amount' ? toAmountNumber(surchargeValue) : toPercentNumber(surchargeValue);
-    return surchargeMode === 'percent' ? (subtotal * Math.max(0, surchargeRaw)) / 100 : Math.max(0, surchargeRaw);
-  }, [surchargeMode, surchargeValue, subtotal]);
+    const subtotalAfterDiscount = Math.max(0, subtotal - discountAmount);
+    return surchargeMode === 'percent'
+      ? (subtotalAfterDiscount * Math.max(0, surchargeRaw)) / 100
+      : Math.max(0, surchargeRaw);
+  }, [surchargeMode, surchargeValue, subtotal, discountAmount]);
 
-  const executeSaveDraft = async (paidAmount: number) => {
+  const executeSaveOrder = async (paidAmount: number) => {
     if (!selectedTable) return;
     if (billItems.length === 0) return;
 
-    setIsSavingDraft(true);
+    setIsSavingOrder(true);
     try {
-      await onSaveDraft({
+      await onSaveOrder({
         table: selectedTable,
         customerName,
         billItems,
         totalAmount,
         discountAmount,
+        discountMode,
+        discountValue: discountMode === 'amount' ? toAmountNumber(discountValue) : toPercentNumber(discountValue),
         surchargeAmount,
+        surchargeMode,
+        surchargeValue: surchargeMode === 'amount' ? toAmountNumber(surchargeValue) : toPercentNumber(surchargeValue),
         paidAmount,
       });
     } finally {
-      setIsSavingDraft(false);
+      setIsSavingOrder(false);
     }
   };
 
-  const handleSaveDraft = async (paidAmount: number) => {
+  const handleSaveOrder = async (paidAmount: number) => {
     if (!selectedTable || billItems.length === 0) return;
     if (mode === 'edit') {
       pendingPaidAmountRef.current = paidAmount;
       setShowEditConfirm(true);
       return;
     }
-    await executeSaveDraft(paidAmount);
+    await executeSaveOrder(paidAmount);
   };
 
-  const pendingPaidAmountRef = useRef<number>(Math.max(0, Math.round(initialData?.paidAmount ?? totalAmount)));
+  const pendingPaidAmountRef = useRef<number>(Math.max(0, Math.trunc(initialData?.paidAmount ?? totalAmount)));
 
   return (
     <section className="orders-create-page">
@@ -169,7 +187,7 @@ export default function NewOrderPage({ onBack, onSaveDraft, mode = 'create', ord
                 className="orders-primary-btn"
                 onClick={async () => {
                   setShowEditConfirm(false);
-                  await executeSaveDraft(pendingPaidAmountRef.current);
+                  await executeSaveOrder(pendingPaidAmountRef.current);
                 }}
               >
                 Xác nhận sửa
@@ -270,7 +288,7 @@ export default function NewOrderPage({ onBack, onSaveDraft, mode = 'create', ord
             }
             onUpdateUnitPrice={(lineId, unitPrice) =>
               setBillItems((prev) =>
-                prev.map((item) => (item.lineId === lineId ? { ...item, unitPrice: Math.max(0, Math.round(unitPrice)) } : item)),
+                prev.map((item) => (item.lineId === lineId ? { ...item, unitPrice: Math.max(0, Math.trunc(unitPrice)) } : item)),
               )
             }
             discountMode={discountMode}
@@ -283,9 +301,9 @@ export default function NewOrderPage({ onBack, onSaveDraft, mode = 'create', ord
             onSurchargeValueChange={setSurchargeValue}
             totalAmount={totalAmount}
             initialPaidAmount={initialData?.paidAmount}
-            onSaveDraft={handleSaveDraft}
+            onSaveOrder={handleSaveOrder}
             onPrintInvoice={() => window.print()}
-            disableSave={!selectedTable || billItems.length === 0 || isSavingDraft}
+            disableSave={!selectedTable || billItems.length === 0 || isSavingOrder}
           />
         </div>
       )}

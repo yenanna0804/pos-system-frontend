@@ -15,7 +15,7 @@ type OrderRow = {
   totalAmount: number;
   finalAmount?: number;
   paidAmount?: number;
-  orderState: 'DRAFT' | 'PAID' | 'DELETED' | 'PARTIAL';
+  orderState: 'PAID' | 'DELETED' | 'PARTIAL';
   createdAt: string;
 };
 
@@ -27,7 +27,7 @@ type OrderRowApi = Omit<OrderRow, 'orderState'> & {
 
 type OrderLogRow = {
   id: string;
-  action: 'CREATE_DRAFT' | 'UPDATE_ORDER' | 'DELETE_ORDER' | 'PAY_PARTIAL' | 'PAY_FULL' | 'PRINT_ORDER' | string;
+  action: 'CREATE_ORDER' | 'UPDATE_ORDER' | 'DELETE_ORDER' | 'PAY_PARTIAL' | 'PAY_FULL' | 'PRINT_ORDER' | string;
   detail?: string | null;
   createdByName?: string | null;
   createdAt: string;
@@ -62,7 +62,11 @@ type OrderDetail = {
   locationLabel?: string;
   customerName?: string | null;
   discountAmount?: number;
+  discountMode?: 'percent' | 'amount';
+  discountValue?: number;
   surchargeAmount?: number;
+  surchargeMode?: 'percent' | 'amount';
+  surchargeValue?: number;
   totalAmount: number;
   finalAmount?: number;
   paidAmount: number;
@@ -72,14 +76,12 @@ type OrderDetail = {
 };
 
 const orderStateLabel: Record<OrderRow['orderState'], string> = {
-  DRAFT: 'Nháp',
   PAID: 'Đã thanh toán',
   DELETED: 'Đã xóa',
   PARTIAL: 'Chưa thanh toán',
 };
 
 const orderStateClass: Record<OrderRow['orderState'], string> = {
-  DRAFT: 'orders-status-tag is-draft',
   PAID: 'orders-status-tag is-paid',
   DELETED: 'orders-status-tag is-deleted',
   PARTIAL: 'orders-status-tag is-partial',
@@ -132,7 +134,11 @@ export default function OrdersPage() {
     } | null;
     customerName: string;
     discountAmount?: number;
+    discountMode?: 'percent' | 'amount';
+    discountValue?: number;
     surchargeAmount?: number;
+    surchargeMode?: 'percent' | 'amount';
+    surchargeValue?: number;
     paidAmount?: number;
     billItems: {
       lineId: string;
@@ -164,7 +170,7 @@ export default function OrdersPage() {
     setPage(1);
   };
 
-  const loadDrafts = async () => {
+  const loadOrders = async () => {
     try {
       const response = await orderService.list({
         branchId: branchId || undefined,
@@ -207,7 +213,7 @@ export default function OrdersPage() {
   }, [branchId]);
 
   useEffect(() => {
-    loadDrafts().catch((error) => showToast('error', typeof error === 'string' ? error : 'Không tải được danh sách hóa đơn'));
+    loadOrders().catch((error) => showToast('error', typeof error === 'string' ? error : 'Không tải được danh sách hóa đơn'));
   }, [branchId, page, debouncedSearch, areaFilter, roomFilter, tableFilter, startDate, endDate, statusFilters.join(',')]);
 
   useEffect(() => {
@@ -237,7 +243,7 @@ export default function OrdersPage() {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  const saveDraftOrder = async (payload: {
+  const saveOrder = async (payload: {
     table: { entityType: 'TABLE' | 'ROOM'; id: string; name: string; areaName: string; roomName?: string | null; roomId?: string | null };
     customerName: string;
     billItems: {
@@ -252,26 +258,31 @@ export default function OrdersPage() {
     }[];
     totalAmount: number;
     discountAmount: number;
+    discountMode: 'percent' | 'amount';
+    discountValue: number;
     surchargeAmount: number;
+    surchargeMode: 'percent' | 'amount';
+    surchargeValue: number;
     paidAmount: number;
   }) => {
     try {
-      const createRes = await orderService.create({
+      await orderService.create({
         entityType: payload.table.entityType,
         tableId: payload.table.entityType === 'TABLE' ? payload.table.id : undefined,
         roomId: payload.table.entityType === 'ROOM' ? payload.table.id : payload.table.roomId || undefined,
         customerName: payload.customerName,
         totalAmount: payload.totalAmount,
         discountAmount: payload.discountAmount,
+        discountMode: payload.discountMode,
+        discountValue: payload.discountValue,
         surchargeAmount: payload.surchargeAmount,
+        surchargeMode: payload.surchargeMode,
+        surchargeValue: payload.surchargeValue,
+        paidAmount: Math.max(0, Math.trunc(payload.paidAmount || 0)),
         billItems: payload.billItems,
         branchId: branchId || undefined,
       });
-      const createdOrderId = (createRes.data as { id?: string })?.id;
-      if (createdOrderId) {
-        await orderService.pay(createdOrderId, Math.min(payload.paidAmount, Math.round(payload.totalAmount)));
-      }
-      await loadDrafts();
+      await loadOrders();
       setView('list');
       showToast('success', 'Lưu hóa đơn thành công');
     } catch (error) {
@@ -328,8 +339,12 @@ export default function OrdersPage() {
         selectedTable,
         customerName: data.customerName || '',
         discountAmount: Number(data.discountAmount || 0),
+        discountMode: data.discountMode || 'amount',
+        discountValue: Number(data.discountValue ?? data.discountAmount ?? 0),
         surchargeAmount: Number(data.surchargeAmount || 0),
-        paidAmount: Number(data.paidAmount || 0),
+        surchargeMode: data.surchargeMode || 'amount',
+        surchargeValue: Number(data.surchargeValue ?? data.surchargeAmount ?? 0),
+        paidAmount: Math.trunc(Number(data.paidAmount || 0)),
         billItems: Array.isArray(data.items) ? data.items : [],
       });
       setView('edit');
@@ -364,7 +379,7 @@ export default function OrdersPage() {
     if (!deleteConfirmOrder) return;
     try {
       await orderService.remove(deleteConfirmOrder.id);
-      await loadDrafts();
+      await loadOrders();
       showToast('success', 'Đã xóa hóa đơn');
     } catch (error) {
       showToast('error', typeof error === 'string' ? error : 'Không thể xóa hóa đơn');
@@ -393,8 +408,8 @@ export default function OrdersPage() {
 
   const actionLabel = (action: string) => {
     switch (action) {
-      case 'CREATE_DRAFT':
-        return 'Lưu nháp';
+      case 'CREATE_ORDER':
+        return 'Tạo hóa đơn';
       case 'UPDATE_ORDER':
         return 'Cập nhật';
       case 'DELETE_ORDER':
@@ -439,8 +454,8 @@ export default function OrdersPage() {
     setDetailBreakdownType(null);
   };
 
-  const detailHeaderDiscount = Number(detailOrder?.discountAmount || 0);
-  const detailHeaderSurcharge = Number(detailOrder?.surchargeAmount || 0);
+  const detailHeaderDiscount = Math.trunc(Number(detailOrder?.discountAmount || 0));
+  const detailHeaderSurcharge = Math.trunc(Number(detailOrder?.surchargeAmount || 0));
   const detailLineDiscountTotal = detailOrder
     ? detailOrder.items.reduce((sum, item) => sum + Number(item.lineDiscountAmount || 0), 0)
     : 0;
@@ -451,7 +466,7 @@ export default function OrdersPage() {
   const detailBillSurchargeTotal = detailHeaderSurcharge + detailLineSurchargeTotal;
 
   if (view === 'create') {
-    return <NewOrderPage onBack={() => setView('list')} onSaveDraft={saveDraftOrder} />;
+    return <NewOrderPage onBack={() => setView('list')} onSaveOrder={saveOrder} />;
   }
 
   if (view === 'edit' && editingOrder) {
@@ -464,7 +479,11 @@ export default function OrdersPage() {
           selectedTable: editingOrder.selectedTable,
           customerName: editingOrder.customerName,
           discountAmount: editingOrder.discountAmount,
+          discountMode: editingOrder.discountMode,
+          discountValue: editingOrder.discountValue,
           surchargeAmount: editingOrder.surchargeAmount,
+          surchargeMode: editingOrder.surchargeMode,
+          surchargeValue: editingOrder.surchargeValue,
           paidAmount: editingOrder.paidAmount,
           billItems: editingOrder.billItems,
         }}
@@ -472,7 +491,7 @@ export default function OrdersPage() {
           setView('list');
           setEditingOrder(null);
         }}
-        onSaveDraft={async (payload) => {
+        onSaveOrder={async (payload) => {
           try {
             await orderService.update(editingOrder.id, {
               entityType: payload.table.entityType,
@@ -481,11 +500,15 @@ export default function OrdersPage() {
               customerName: payload.customerName,
               totalAmount: payload.totalAmount,
               discountAmount: payload.discountAmount,
+              discountMode: payload.discountMode,
+              discountValue: payload.discountValue,
               surchargeAmount: payload.surchargeAmount,
+              surchargeMode: payload.surchargeMode,
+              surchargeValue: payload.surchargeValue,
+              paidAmount: Math.min(Math.trunc(payload.paidAmount), Math.max(0, Math.trunc(payload.totalAmount))),
               billItems: payload.billItems,
             });
-            await orderService.pay(editingOrder.id, Math.min(payload.paidAmount, Math.round(payload.totalAmount)));
-            await loadDrafts();
+            await loadOrders();
             setView('list');
             setEditingOrder(null);
             showToast('success', 'Cập nhật hóa đơn thành công');
@@ -704,8 +727,8 @@ export default function OrdersPage() {
                   </td>
                   <td>{new Date(order.createdAt).toLocaleString('vi-VN')}</td>
                   <td className="orders-col-room-table">{order.tableName}</td>
-                  <td className="num-col orders-col-amount">{Number(order.finalAmount ?? order.totalAmount).toLocaleString('vi-VN')}</td>
-                  <td className="num-col orders-col-paid">{Number(order.paidAmount || 0).toLocaleString('vi-VN')}</td>
+                  <td className="num-col orders-col-amount">{Math.trunc(Number(order.finalAmount ?? order.totalAmount)).toLocaleString('vi-VN')}</td>
+                  <td className="num-col orders-col-paid">{Math.trunc(Number(order.paidAmount || 0)).toLocaleString('vi-VN')}</td>
                   <td>{order.customerName || '-'}</td>
                   <td className="orders-col-status">
                     <span className={orderStateClass[order.orderState]}>{orderStateLabel[order.orderState]}</span>
@@ -875,7 +898,7 @@ export default function OrdersPage() {
                     <div>
                       <span className="orders-detail-label">Tạm tính</span>
                       <div className="orders-detail-amount-with-help">
-                        <span>{Number(detailOrder.totalAmount || 0).toLocaleString('vi-VN')}</span>
+                         <span>{Math.trunc(Number(detailOrder.totalAmount || 0)).toLocaleString('vi-VN')}</span>
                         <button
                           type="button"
                           className="orders-detail-help-btn"
@@ -888,11 +911,11 @@ export default function OrdersPage() {
                     </div>
                     <div>
                       <span className="orders-detail-label">Phải thanh toán</span>
-                      <div>{Number(detailOrder.finalAmount ?? (detailOrder.totalAmount || 0)).toLocaleString('vi-VN')}</div>
+                      <div>{Math.trunc(Number(detailOrder.finalAmount ?? (detailOrder.totalAmount || 0))).toLocaleString('vi-VN')}</div>
                     </div>
                     <div>
                       <span className="orders-detail-label">Khách thanh toán</span>
-                      <div>{Number(detailOrder.paidAmount || 0).toLocaleString('vi-VN')}</div>
+                      <div>{Math.trunc(Number(detailOrder.paidAmount || 0)).toLocaleString('vi-VN')}</div>
                     </div>
                   </div>
 
@@ -904,7 +927,7 @@ export default function OrdersPage() {
                         <th>Đơn vị</th>
                         <th className="num-col">Số lượng</th>
                         <th className="num-col">Đơn giá gốc</th>
-                        <th className="num-col">Đơn giá</th>
+                        <th className="num-col">Đơn giá bán</th>
                         <th className="num-col">Giảm giá</th>
                         <th className="num-col">Phụ phí</th>
                         <th className="num-col">Thành tiền</th>
@@ -925,11 +948,11 @@ export default function OrdersPage() {
                             <td>{item.productName || '-'}</td>
                             <td>{item.unit || '-'}</td>
                             <td className="num-col">{Number(item.quantity || 0).toLocaleString('vi-VN')}</td>
-                            <td className="num-col">{Number(item.baseUnitPrice ?? item.unitPrice ?? 0).toLocaleString('vi-VN')}</td>
-                            <td className="num-col">{Number(item.unitPrice || 0).toLocaleString('vi-VN')}</td>
-                            <td className="num-col">{Number(item.lineDiscountAmount || 0).toLocaleString('vi-VN')}</td>
-                            <td className="num-col">{Number(item.lineSurchargeAmount || 0).toLocaleString('vi-VN')}</td>
-                            <td className="num-col">{(Number(item.quantity || 0) * Number(item.unitPrice || 0)).toLocaleString('vi-VN')}</td>
+                            <td className="num-col">{Math.trunc(Number(item.baseUnitPrice ?? item.unitPrice ?? 0)).toLocaleString('vi-VN')}</td>
+                            <td className="num-col">{Math.trunc(Number(item.unitPrice || 0)).toLocaleString('vi-VN')}</td>
+                            <td className="num-col">{Math.trunc(Number(item.lineDiscountAmount || 0)).toLocaleString('vi-VN')}</td>
+                            <td className="num-col">{Math.trunc(Number(item.lineSurchargeAmount || 0)).toLocaleString('vi-VN')}</td>
+                            <td className="num-col">{Math.trunc(Number(item.quantity || 0) * Number(item.unitPrice || 0)).toLocaleString('vi-VN')}</td>
                             <td>{item.note || '-'}</td>
                           </tr>
                         ))
@@ -1105,11 +1128,11 @@ export default function OrdersPage() {
   const normalizeOrderState = (row: { orderState?: OrderState; paidAmount?: number; finalAmount?: number; totalAmount?: number }): OrderState => {
     const apiState = row.orderState;
     if (apiState) return apiState;
-    const paidAmount = Number(row.paidAmount || 0);
-    const payableAmount = Number(row.finalAmount ?? row.totalAmount ?? 0);
+    const paidAmount = Math.trunc(Number(row.paidAmount || 0));
+    const payableAmount = Math.trunc(Number(row.finalAmount ?? row.totalAmount ?? 0));
     if (paidAmount >= payableAmount && payableAmount > 0) return 'PAID';
     if (paidAmount < payableAmount) return 'PARTIAL';
-    return 'DRAFT';
+    return 'PARTIAL';
   };
 
   const mapOrderRow = (row: OrderRowApi): OrderRow => ({

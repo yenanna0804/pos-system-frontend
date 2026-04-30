@@ -130,7 +130,12 @@ export type OrderPayload = {
   customerName?: string;
   totalAmount: number;
   discountAmount?: number;
+  discountMode?: 'percent' | 'amount';
+  discountValue?: number;
   surchargeAmount?: number;
+  surchargeMode?: 'percent' | 'amount';
+  surchargeValue?: number;
+  paidAmount?: number;
   billItems: {
     lineId: string;
     productId: string;
@@ -161,7 +166,6 @@ export const orderService = {
   create: (payload: OrderPayload) => api.post('/orders', payload),
   update: (id: string, payload: Partial<OrderPayload>) => api.patch(`/orders/${id}`, payload),
   print: (id: string) => api.post(`/orders/${id}/print`),
-  pay: (id: string, paidAmount: number) => api.patch(`/orders/${id}/payment`, { paidAmount }),
   remove: (id: string) => api.delete(`/orders/${id}`),
   history: (id: string) => api.get(`/orders/${id}/logs`),
 };
