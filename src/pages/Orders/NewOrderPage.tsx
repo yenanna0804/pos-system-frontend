@@ -20,6 +20,7 @@ type Props = {
     surchargeMode?: 'percent' | 'amount';
     surchargeValue?: number;
     paidAmount?: number;
+    paymentMethod?: 'CASH' | 'BANKING';
   };
   defaultTab?: 'table' | 'product';
   onSaveOrder: (payload: {
@@ -34,6 +35,7 @@ type Props = {
     surchargeMode: 'percent' | 'amount';
     surchargeValue: number;
     paidAmount: number;
+    paymentMethod: 'CASH' | 'BANKING';
   }) => Promise<void>;
 };
 
@@ -132,7 +134,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
       : Math.max(0, surchargeRaw);
   }, [surchargeMode, surchargeValue, subtotal, discountAmount]);
 
-  const executeSaveOrder = async (paidAmount: number) => {
+  const executeSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING') => {
     if (!selectedTable) return;
     if (billItems.length === 0) return;
 
@@ -150,23 +152,26 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
         surchargeMode,
         surchargeValue: surchargeMode === 'amount' ? toAmountNumber(surchargeValue) : toPercentNumber(surchargeValue),
         paidAmount,
+        paymentMethod,
       });
     } finally {
       setIsSavingOrder(false);
     }
   };
 
-  const handleSaveOrder = async (paidAmount: number) => {
+  const handleSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING') => {
     if (!selectedTable || billItems.length === 0) return;
     if (mode === 'edit') {
       pendingPaidAmountRef.current = paidAmount;
+      pendingPaymentMethodRef.current = paymentMethod;
       setShowEditConfirm(true);
       return;
     }
-    await executeSaveOrder(paidAmount);
+    await executeSaveOrder(paidAmount, paymentMethod);
   };
 
   const pendingPaidAmountRef = useRef<number>(Math.max(0, Math.trunc(initialData?.paidAmount ?? totalAmount)));
+  const pendingPaymentMethodRef = useRef<'CASH' | 'BANKING'>(initialData?.paymentMethod ?? 'CASH');
 
   return (
     <section className="orders-create-page">
@@ -187,7 +192,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
                 className="orders-primary-btn"
                 onClick={async () => {
                   setShowEditConfirm(false);
-                  await executeSaveOrder(pendingPaidAmountRef.current);
+                  await executeSaveOrder(pendingPaidAmountRef.current, pendingPaymentMethodRef.current);
                 }}
               >
                 Xác nhận sửa
@@ -301,6 +306,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
             onSurchargeValueChange={setSurchargeValue}
             totalAmount={totalAmount}
             initialPaidAmount={initialData?.paidAmount}
+            initialPaymentMethod={initialData?.paymentMethod}
             onSaveOrder={handleSaveOrder}
             onPrintInvoice={() => window.print()}
             disableSave={!selectedTable || billItems.length === 0 || isSavingOrder}

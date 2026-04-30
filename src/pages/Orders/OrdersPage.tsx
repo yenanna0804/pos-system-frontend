@@ -15,6 +15,7 @@ type OrderRow = {
   totalAmount: number;
   finalAmount?: number;
   paidAmount?: number;
+  paymentMethod?: 'CASH' | 'BANKING' | null;
   orderState: 'PAID' | 'DELETED' | 'PARTIAL';
   createdAt: string;
 };
@@ -70,6 +71,7 @@ type OrderDetail = {
   totalAmount: number;
   finalAmount?: number;
   paidAmount: number;
+  paymentMethod?: 'CASH' | 'BANKING' | null;
   orderState: OrderRow['orderState'];
   createdAt: string;
   items: OrderDetailItem[];
@@ -78,13 +80,19 @@ type OrderDetail = {
 const orderStateLabel: Record<OrderRow['orderState'], string> = {
   PAID: 'Đã thanh toán',
   DELETED: 'Đã xóa',
-  PARTIAL: 'Chưa thanh toán',
+  PARTIAL: 'Còn nợ',
 };
 
 const orderStateClass: Record<OrderRow['orderState'], string> = {
   PAID: 'orders-status-tag is-paid',
   DELETED: 'orders-status-tag is-deleted',
   PARTIAL: 'orders-status-tag is-partial',
+};
+
+const paymentMethodLabel = (method?: 'CASH' | 'BANKING' | null) => {
+  if (method === 'BANKING') return 'Chuyển khoản';
+  if (method === 'CASH') return 'Tiền mặt';
+  return '-';
 };
 
 export default function OrdersPage() {
@@ -97,6 +105,7 @@ export default function OrdersPage() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>(['PAID', 'PARTIAL']);
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<'' | 'CASH' | 'BANKING'>('');
   const [areaFilter, setAreaFilter] = useState('');
   const [roomFilter, setRoomFilter] = useState('');
   const [tableFilter, setTableFilter] = useState('');
@@ -120,6 +129,9 @@ export default function OrdersPage() {
   const statusDropdownRef = useRef<HTMLDivElement | null>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<OrderRow | null>(null);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [isSelectingAllOrders, setIsSelectingAllOrders] = useState(false);
   const [editingOrder, setEditingOrder] = useState<null | {
     id: string;
     code: string;
@@ -140,6 +152,7 @@ export default function OrdersPage() {
     surchargeMode?: 'percent' | 'amount';
     surchargeValue?: number;
     paidAmount?: number;
+    paymentMethod?: 'CASH' | 'BANKING';
     billItems: {
       lineId: string;
       productId: string;
@@ -162,6 +175,7 @@ export default function OrdersPage() {
     setSearch('');
     setDebouncedSearch('');
     setStatusFilters(['PAID', 'PARTIAL']);
+    setPaymentMethodFilter('');
     setAreaFilter('');
     setRoomFilter('');
     setTableFilter('');
@@ -170,20 +184,26 @@ export default function OrdersPage() {
     setPage(1);
   };
 
+  const selectableOrderIds = orders.map((order) => order.id);
+  const allSelectableChecked = selectableOrderIds.length > 0 && selectableOrderIds.every((id) => selectedOrderIds.includes(id));
+
+  const buildListParams = (nextPage: number, nextPageSize: number) => ({
+    branchId: branchId || undefined,
+    page: nextPage,
+    pageSize: nextPageSize,
+    search: debouncedSearch || undefined,
+    orderStates: statusFilters.join(','),
+    paymentMethod: paymentMethodFilter || undefined,
+    areaId: areaFilter || undefined,
+    roomId: roomFilter || undefined,
+    tableId: tableFilter || undefined,
+    startDate: startDate || undefined,
+    endDate: endDate ? `${endDate}T23:59:59.999Z` : undefined,
+  });
+
   const loadOrders = async () => {
     try {
-      const response = await orderService.list({
-        branchId: branchId || undefined,
-        page,
-        pageSize: 7,
-        search: debouncedSearch || undefined,
-        orderStates: statusFilters.join(','),
-        areaId: areaFilter || undefined,
-        roomId: roomFilter || undefined,
-        tableId: tableFilter || undefined,
-        startDate: startDate || undefined,
-        endDate: endDate ? `${endDate}T23:59:59.999Z` : undefined,
-      });
+      const response = await orderService.list(buildListParams(page, 7));
       const responseData = response.data;
       const rows = Array.isArray(responseData) ? responseData : Array.isArray(responseData?.items) ? responseData.items : [];
       setOrders((rows as OrderRowApi[]).map(mapOrderRow));
@@ -214,7 +234,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     loadOrders().catch((error) => showToast('error', typeof error === 'string' ? error : 'Không tải được danh sách hóa đơn'));
-  }, [branchId, page, debouncedSearch, areaFilter, roomFilter, tableFilter, startDate, endDate, statusFilters.join(',')]);
+  }, [branchId, page, debouncedSearch, areaFilter, roomFilter, tableFilter, startDate, endDate, statusFilters.join(','), paymentMethodFilter]);
 
   useEffect(() => {
     if (searchTimeoutRef.current) {
@@ -264,6 +284,7 @@ export default function OrdersPage() {
     surchargeMode: 'percent' | 'amount';
     surchargeValue: number;
     paidAmount: number;
+    paymentMethod: 'CASH' | 'BANKING';
   }) => {
     try {
       await orderService.create({
@@ -279,6 +300,7 @@ export default function OrdersPage() {
         surchargeMode: payload.surchargeMode,
         surchargeValue: payload.surchargeValue,
         paidAmount: Math.max(0, Math.trunc(payload.paidAmount || 0)),
+        paymentMethod: payload.paymentMethod,
         billItems: payload.billItems,
         branchId: branchId || undefined,
       });
@@ -345,6 +367,7 @@ export default function OrdersPage() {
         surchargeMode: data.surchargeMode || 'amount',
         surchargeValue: Number(data.surchargeValue ?? data.surchargeAmount ?? 0),
         paidAmount: Math.trunc(Number(data.paidAmount || 0)),
+        paymentMethod: data.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
         billItems: Array.isArray(data.items) ? data.items : [],
       });
       setView('edit');
@@ -385,6 +408,54 @@ export default function OrdersPage() {
       showToast('error', typeof error === 'string' ? error : 'Không thể xóa hóa đơn');
     } finally {
       setDeleteConfirmOrder(null);
+    }
+  };
+
+  const confirmBulkHardDeleteOrders = async () => {
+    if (selectedOrderIds.length === 0) return;
+    try {
+      await Promise.all(selectedOrderIds.map((id) => orderService.hardRemove(id)));
+      await loadOrders();
+      setSelectedOrderIds([]);
+      showToast('success', `Đã xóa vĩnh viễn ${selectedOrderIds.length} hóa đơn`);
+    } catch (error) {
+      showToast('error', typeof error === 'string' ? error : 'Không thể xóa vĩnh viễn hóa đơn đã chọn');
+    } finally {
+      setShowBulkDeleteConfirm(false);
+    }
+  };
+
+  const toggleSelectAllOrders = async (checked: boolean) => {
+    if (!checked) {
+      setSelectedOrderIds([]);
+      return;
+    }
+    setIsSelectingAllOrders(true);
+    try {
+      const pageSize = 50;
+      let nextPage = 1;
+      let nextTotalPages = 1;
+      const collected = new Set<string>();
+      do {
+        const response = await orderService.list(buildListParams(nextPage, pageSize));
+        const responseData = response.data;
+        const rows = Array.isArray(responseData)
+          ? responseData
+          : Array.isArray(responseData?.items)
+            ? responseData.items
+            : [];
+        rows.forEach((row: OrderRowApi) => {
+          collected.add(row.id);
+        });
+        nextTotalPages = Number(responseData?.pagination?.totalPages || 1);
+        nextPage += 1;
+      } while (nextPage <= nextTotalPages);
+      setSelectedOrderIds(Array.from(collected));
+      showToast('success', `Đã chọn tất cả ${collected.size} hóa đơn theo bộ lọc`);
+    } catch (error) {
+      showToast('error', typeof error === 'string' ? error : 'Không thể chọn tất cả hóa đơn');
+    } finally {
+      setIsSelectingAllOrders(false);
     }
   };
 
@@ -454,6 +525,21 @@ export default function OrdersPage() {
     setDetailBreakdownType(null);
   };
 
+  const onPrintOrderDetail = async () => {
+    if (!detailOrder) return;
+    if (detailOrder.orderState === 'DELETED') {
+      showToast('error', 'Không thể in hóa đơn đã xóa');
+      return;
+    }
+    try {
+      await orderService.print(detailOrder.id);
+      window.print();
+      showToast('success', 'Đã ghi nhận thao tác in hóa đơn');
+    } catch (error) {
+      showToast('error', typeof error === 'string' ? error : 'Không thể in hóa đơn');
+    }
+  };
+
   const detailHeaderDiscount = Math.trunc(Number(detailOrder?.discountAmount || 0));
   const detailHeaderSurcharge = Math.trunc(Number(detailOrder?.surchargeAmount || 0));
   const detailLineDiscountTotal = detailOrder
@@ -485,6 +571,7 @@ export default function OrdersPage() {
           surchargeMode: editingOrder.surchargeMode,
           surchargeValue: editingOrder.surchargeValue,
           paidAmount: editingOrder.paidAmount,
+          paymentMethod: editingOrder.paymentMethod,
           billItems: editingOrder.billItems,
         }}
         onBack={() => {
@@ -506,6 +593,7 @@ export default function OrdersPage() {
               surchargeMode: payload.surchargeMode,
               surchargeValue: payload.surchargeValue,
               paidAmount: Math.min(Math.trunc(payload.paidAmount), Math.max(0, Math.trunc(payload.totalAmount))),
+              paymentMethod: payload.paymentMethod,
               billItems: payload.billItems,
             });
             await loadOrders();
@@ -529,9 +617,19 @@ export default function OrdersPage() {
       )}
       <div className="orders-toolbar">
         <h2>Danh sách hóa đơn</h2>
-        <button className="orders-primary-btn" onClick={() => setView('create')}>
-          Thêm mới hóa đơn
-        </button>
+        <div className="orders-toolbar-actions">
+          <button className="orders-primary-btn" onClick={() => setView('create')}>
+            Thêm mới hóa đơn
+          </button>
+          <div className="orders-toolbar-secondary-actions">
+            {selectedOrderIds.length > 0 && (
+              <button type="button" className="danger-btn orders-toolbar-bulk-delete-btn" onClick={() => setShowBulkDeleteConfirm(true)}>
+                Xóa ({selectedOrderIds.length})
+              </button>
+            )}
+            <FilterResetButton className="orders-toolbar-reset-btn" onClick={resetListFilters} />
+          </div>
+        </div>
       </div>
 
       <div className="orders-filter-block">
@@ -690,7 +788,20 @@ export default function OrdersPage() {
             </select>
           </label>
 
-          <FilterResetButton className="orders-filter-reset-btn" onClick={resetListFilters} />
+          <label className="orders-filter-col-payment-method">
+            Thanh toán
+            <select
+              value={paymentMethodFilter}
+              onChange={(event) => {
+                setPaymentMethodFilter(event.target.value as '' | 'CASH' | 'BANKING');
+                setPage(1);
+              }}
+            >
+              <option value="">Tất cả phương thức</option>
+              <option value="CASH">Tiền mặt</option>
+              <option value="BANKING">Chuyển khoản</option>
+            </select>
+          </label>
 
         </div>
       </div>
@@ -699,6 +810,15 @@ export default function OrdersPage() {
         <table className="orders-list-table">
           <thead>
             <tr>
+              <th className="orders-col-checkbox">
+                <input
+                  type="checkbox"
+                  checked={allSelectableChecked}
+                  disabled={isSelectingAllOrders}
+                  onChange={(event) => toggleSelectAllOrders(event.target.checked)}
+                  aria-label="Chọn tất cả hóa đơn"
+                />
+              </th>
               <th className="orders-col-code">Mã hóa đơn</th>
               <th>Thời gian tạo</th>
               <th className="orders-col-room-table">Phòng/Bàn</th>
@@ -713,13 +833,29 @@ export default function OrdersPage() {
           <tbody>
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={9} className="orders-empty-row">
+                <td colSpan={10} className="orders-empty-row">
                   Chưa có hóa đơn
                 </td>
               </tr>
             ) : (
               orders.map((order) => (
                 <tr key={order.id}>
+                  <td className="orders-col-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={selectedOrderIds.includes(order.id)}
+                      onChange={(event) => {
+                        setSelectedOrderIds((prev) => {
+                          if (event.target.checked) {
+                            if (prev.includes(order.id)) return prev;
+                            return [...prev, order.id];
+                          }
+                          return prev.filter((id) => id !== order.id);
+                        });
+                      }}
+                      aria-label={`Chọn hóa đơn ${order.code}`}
+                    />
+                  </td>
                   <td className="orders-col-code">
                     <button type="button" className="orders-code-link" onClick={() => openOrderDetail(order)}>
                       {order.code}
@@ -836,9 +972,25 @@ export default function OrdersPage() {
           <div className="orders-history-modal orders-detail-modal" onClick={(event) => event.stopPropagation()}>
             <div className="orders-history-header">
               <h3>Chi tiết hóa đơn</h3>
-              <button type="button" className="orders-icon-btn" onClick={closeOrderDetail} aria-label="Đóng">
-                x
-              </button>
+              <div className="orders-detail-header-actions">
+                <button
+                  type="button"
+                  className="orders-icon-btn"
+                  onClick={onPrintOrderDetail}
+                  aria-label="In hóa đơn"
+                  title="In hóa đơn"
+                  disabled={!detailOrder || detailOrder.orderState === 'DELETED'}
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M6 2h12a1 1 0 0 1 1 1v4H5V3a1 1 0 0 1 1-1Z" />
+                    <path d="M5 14h14v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7Zm3 1v5h8v-5H8Z" />
+                    <path d="M3 8h18a2 2 0 0 1 2 2v5h-4v-2H5v2H1v-5a2 2 0 0 1 2-2Zm16 2a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z" />
+                  </svg>
+                </button>
+                <button type="button" className="orders-icon-btn" onClick={closeOrderDetail} aria-label="Đóng">
+                  x
+                </button>
+              </div>
             </div>
             <div className="orders-detail-code-row">
               <p className="orders-history-subtitle">Mã hóa đơn: {detailOrder?.code || detailOrderCode}</p>
@@ -916,6 +1068,10 @@ export default function OrdersPage() {
                     <div>
                       <span className="orders-detail-label">Khách thanh toán</span>
                       <div>{Math.trunc(Number(detailOrder.paidAmount || 0)).toLocaleString('vi-VN')}</div>
+                    </div>
+                    <div>
+                      <span className="orders-detail-label">Phương thức thanh toán</span>
+                      <div>{paymentMethodLabel(detailOrder.paymentMethod)}</div>
                     </div>
                   </div>
 
@@ -1116,6 +1272,26 @@ export default function OrdersPage() {
                 Hủy
               </button>
               <button type="button" className="danger-btn" onClick={confirmSoftDeleteOrder}>
+                Xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBulkDeleteConfirm && (
+        <div className="orders-confirm-overlay" onClick={() => setShowBulkDeleteConfirm(false)}>
+          <div className="orders-confirm-modal" onClick={(event) => event.stopPropagation()}>
+            <h3>Xác nhận xóa vĩnh viễn nhiều hóa đơn</h3>
+            <p>
+              Bạn có chắc chắn muốn xóa vĩnh viễn <strong>{selectedOrderIds.length}</strong> hóa đơn đã chọn không?
+            </p>
+            <p>Thao tác này có thể ảnh hưởng dữ liệu báo cáo và không thể hoàn tác.</p>
+            <div className="orders-confirm-actions">
+              <button type="button" className="orders-ghost-btn" onClick={() => setShowBulkDeleteConfirm(false)}>
+                Hủy
+              </button>
+              <button type="button" className="danger-btn" onClick={confirmBulkHardDeleteOrders}>
                 Xóa
               </button>
             </div>

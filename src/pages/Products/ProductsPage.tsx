@@ -229,6 +229,8 @@ export default function ProductsPage() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({ open: false, title: '', message: '' });
   const confirmResolverRef = useRef<((value: boolean) => void) | null>(null);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [isSelectingAllProducts, setIsSelectingAllProducts] = useState(false);
   const comboDetailPageSize = 5;
   const comboDetailTotalPages = Math.max(1, Math.ceil(comboDetailRows.length / comboDetailPageSize));
   const comboDetailPagedRows = comboDetailRows.slice(
@@ -317,6 +319,18 @@ export default function ProductsPage() {
     }
   };
 
+  const buildListParams = (nextPage: number, nextPageSize: number) => ({
+    page: nextPage,
+    pageSize: nextPageSize,
+    type: filterType === 'all' ? undefined : filterType,
+    categoryId: filterCategoryId || undefined,
+    stockStatus: filterStock,
+    branchId: filterBranchId || undefined,
+    search: debouncedSearch || undefined,
+  });
+
+  const allCurrentPageChecked = products.length > 0 && products.every((item) => selectedProductIds.includes(item.id));
+
   const loadComboCatalog = async () => {
     const res = await productService.list({ page: 1, pageSize: 100, branchId: filterBranchId || undefined });
     const data = res.data;
@@ -337,6 +351,10 @@ export default function ProductsPage() {
   useEffect(() => {
     loadData().catch(() => setError('Không tải được dữ liệu hàng hóa'));
   }, [page, filterCategoryId, filterType, filterStock, filterBranchId, debouncedSearch]);
+
+  useEffect(() => {
+    setSelectedProductIds([]);
+  }, [filterCategoryId, filterType, filterStock, filterBranchId, debouncedSearch]);
 
   useEffect(() => {
     setFilterBranchId(authBranchId || '');
@@ -691,10 +709,10 @@ export default function ProductsPage() {
     }
   };
 
-  const onDeleteProduct = async (product: Product) => {
-    let impactMessage = `Xóa hàng hóa "${product.name}"?`;
+  const getDeleteImpactMessage = async (productId: string, productName: string) => {
+    let impactMessage = `Xóa hàng hóa "${productName}"?`;
     try {
-      const impactRes = await productService.getDeleteImpact(product.id);
+      const impactRes = await productService.getDeleteImpact(productId);
       const impactData = impactRes.data || {};
       const impactOrders: { orderCode?: string; itemCount?: number }[] = Array.isArray(impactData.orders)
         ? impactData.orders
@@ -708,7 +726,7 @@ export default function ProductsPage() {
           .join('\n');
         const remain = totalOrders - Math.min(8, impactOrders.length);
         impactMessage =
-          `Mặt hàng "${product.name}" đang nằm trong ${totalOrders} hóa đơn:\n` +
+          `Mặt hàng "${productName}" đang nằm trong ${totalOrders} hóa đơn:\n` +
           `${preview}${remain > 0 ? `\n- ... và ${remain} hóa đơn khác` : ''}\n\n` +
           'Nếu tiếp tục, hệ thống sẽ xóa mặt hàng này khỏi toàn bộ hóa đơn liên quan và cập nhật lại dữ liệu hóa đơn.\n' +
           'Dữ liệu báo cáo có thể thay đổi.\n\n' +
@@ -716,9 +734,15 @@ export default function ProductsPage() {
       }
     } catch {
       impactMessage =
-        `Xóa hàng hóa "${product.name}"?\n\n` +
+        `Xóa hàng hóa "${productName}"?\n\n` +
         'Nếu mặt hàng đang nằm trong hóa đơn, hệ thống sẽ tự động xóa khỏi các hóa đơn liên quan và cập nhật lại dữ liệu hóa đơn.';
     }
+
+    return impactMessage;
+  };
+
+  const onDeleteProduct = async (product: Product) => {
+    const impactMessage = await getDeleteImpactMessage(product.id, product.name);
 
     const confirmed = await confirmAction({
       title: 'Xác nhận xóa hàng hóa',
@@ -742,6 +766,90 @@ export default function ProductsPage() {
     } catch (message: any) {
       setError(message || 'Không thể xóa hàng hóa');
       pushToast('error', message || 'Không thể xóa hàng hóa');
+    }
+  };
+
+  const onBulkDeleteProducts = async () => {
+    if (selectedProductIds.length === 0) return;
+    const selectedProducts = selectedProductIds.map((id) => products.find((item) => item.id === id)).filter(Boolean) as Product[];
+
+    const impactSummaries: string[] = [];
+    for (const productId of selectedProductIds) {
+      const matched = selectedProducts.find((item) => item.id === productId);
+      const productName = matched?.name || matched?.sku || productId;
+      try {
+        const impactRes = await productService.getDeleteImpact(productId);
+        const impactData = impactRes.data || {};
+        const totalOrders = Number(impactData.totalOrders || 0);
+        if (totalOrders > 0) {
+          impactSummaries.push(`- ${productName}: ${totalOrders} hóa đơn`);
+        }
+      } catch {
+        impactSummaries.push(`- ${productName}: không xác định phạm vi ảnh hưởng`);
+      }
+    }
+
+    const baseMessage =
+      `Bạn có chắc chắn muốn xóa ${selectedProductIds.length} hàng hóa đã chọn không?\n\n` +
+      'Nếu mặt hàng đang nằm trong hóa đơn, hệ thống sẽ tự động xóa khỏi các hóa đơn liên quan và cập nhật lại dữ liệu hóa đơn.';
+    const impactBlock = impactSummaries.length > 0
+      ? `\n\nDanh sách ảnh hưởng:\n${impactSummaries.slice(0, 12).join('\n')}${impactSummaries.length > 12 ? '\n- ...' : ''}\n\nDữ liệu báo cáo có thể thay đổi.`
+      : '\n\nDữ liệu báo cáo có thể thay đổi.';
+
+    const confirmed = await confirmAction({
+      title: 'Xác nhận xóa nhiều hàng hóa',
+      message: baseMessage + impactBlock,
+      confirmText: 'Xóa',
+      cancelText: 'Hủy',
+      danger: true,
+    });
+    if (!confirmed) return;
+
+    try {
+      let affectedOrders = 0;
+      let removedItems = 0;
+      for (const productId of selectedProductIds) {
+        const response = await productService.remove(productId);
+        affectedOrders += Number(response.data?.affectedOrders || 0);
+        removedItems += Number(response.data?.removedItems || 0);
+      }
+      await loadData();
+      if (affectedOrders > 0 || removedItems > 0) {
+        pushToast('info', `Đã xóa hàng hóa, cập nhật ${affectedOrders} hóa đơn (${removedItems} dòng món)`);
+      } else {
+        pushToast('success', `Đã xóa ${selectedProductIds.length} hàng hóa`);
+      }
+      setSelectedProductIds([]);
+    } catch (message: any) {
+      pushToast('error', message || 'Không thể xóa các hàng hóa đã chọn');
+    }
+  };
+
+  const onToggleSelectAllProducts = async (checked: boolean) => {
+    if (!checked) {
+      setSelectedProductIds([]);
+      return;
+    }
+    setIsSelectingAllProducts(true);
+    try {
+      const collected = new Set<string>();
+      const fetchPageSize = 100;
+      let nextPage = 1;
+      let nextTotalPages = 1;
+      do {
+        const res = await productService.list(buildListParams(nextPage, fetchPageSize));
+        const data = res.data;
+        const rows: Product[] = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+        rows.forEach((item) => collected.add(item.id));
+        nextTotalPages = Number(data?.pagination?.totalPages || 1);
+        nextPage += 1;
+      } while (nextPage <= nextTotalPages);
+      setSelectedProductIds(Array.from(collected));
+      pushToast('success', `Đã chọn tất cả ${collected.size} hàng hóa theo bộ lọc`);
+    } catch (message: any) {
+      pushToast('error', message || 'Không thể chọn tất cả hàng hóa');
+    } finally {
+      setIsSelectingAllProducts(false);
     }
   };
 
@@ -1024,6 +1132,12 @@ export default function ProductsPage() {
           </select>
         </label>
 
+        {selectedProductIds.length > 0 && (
+          <button type="button" className="danger-btn products-bulk-delete-btn" onClick={onBulkDeleteProducts}>
+            Xóa ({selectedProductIds.length})
+          </button>
+        )}
+
         <FilterResetButton onClick={resetListFilters} />
 
       </div>
@@ -1049,6 +1163,15 @@ export default function ProductsPage() {
         <table className="products-table">
           <thead>
             <tr>
+              <th className="center-col products-col-checkbox">
+                <input
+                  type="checkbox"
+                  checked={allCurrentPageChecked}
+                  disabled={isSelectingAllProducts}
+                  onChange={(event) => onToggleSelectAllProducts(event.target.checked)}
+                  aria-label="Chọn tất cả hàng hóa"
+                />
+              </th>
               <th className="center-col">STT</th>
               <th>Mã hàng</th>
               <th>Hình ảnh</th>
@@ -1064,19 +1187,35 @@ export default function ProductsPage() {
           <tbody>
             {isListLoading ? (
               <tr>
-                <td colSpan={10} className="empty-row">
+                <td colSpan={11} className="empty-row">
                   Đang tải dữ liệu
                 </td>
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={10} className="empty-row">
+                <td colSpan={11} className="empty-row">
                   {debouncedSearch ? 'Không tìm thấy dữ liệu' : 'Không có hàng hóa phù hợp bộ lọc'}
                 </td>
               </tr>
             ) : (
               products.map((product, index) => (
                 <tr key={product.id}>
+                  <td className="center-col products-col-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={selectedProductIds.includes(product.id)}
+                      onChange={(event) => {
+                        setSelectedProductIds((prev) => {
+                          if (event.target.checked) {
+                            if (prev.includes(product.id)) return prev;
+                            return [...prev, product.id];
+                          }
+                          return prev.filter((id) => id !== product.id);
+                        });
+                      }}
+                      aria-label={`Chọn hàng hóa ${product.sku}`}
+                    />
+                  </td>
                   <td className="center-col">{(page - 1) * pageSize + index + 1}</td>
                   <td>{product.sku}</td>
                   <td>
