@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { authService, branchService } from '../../services/api';
+import { isDevMode } from '../../config/devMode';
 import FormFieldError from '../../components/FormFieldError';
 import './Login.css';
 
@@ -25,8 +26,14 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [branchLocked, setBranchLocked] = useState(false);
 
-  const { login, setBranchId: setContextBranchId } = useAuth();
+  const { login, setBranchId: setContextBranchId, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isDevMode && isAuthenticated) {
+      navigate('/dashboard');
+    }
+  }, [isAuthenticated, navigate]);
 
   useEffect(() => {
     branchService

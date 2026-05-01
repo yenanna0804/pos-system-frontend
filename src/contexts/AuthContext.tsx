@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { DEV_USER, isDevMode } from '../config/devMode';
 
 interface User {
   id: string;
@@ -36,6 +37,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
+      if (isDevMode) {
+        setUser(DEV_USER);
+        setBranchId(DEV_USER.branchId);
+        localStorage.setItem('user', JSON.stringify(DEV_USER));
+        localStorage.setItem('token', 'dev-token');
+        localStorage.setItem('branchId', DEV_USER.branchId);
+        localStorage.setItem('tokenExpiry', String(Date.now() + TOKEN_TTL_MS));
+        setIsInitialized(true);
+        return;
+      }
+
       const storedUser = localStorage.getItem('user');
       const storedToken = localStorage.getItem('token');
       const storedBranchId = localStorage.getItem('branchId');

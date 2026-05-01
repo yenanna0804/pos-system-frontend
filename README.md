@@ -1,5 +1,19 @@
 # React + TypeScript + Vite
 
+## Dev mode mock backend
+
+Set `VITE_DEV_MODE=true` to enable local mock mode.
+
+- Login is bypassed automatically.
+- All CRUD flows in Products, Tables, and Orders use in-memory mock data.
+- Data resets when the page refreshes.
+
+Example:
+
+```bash
+VITE_DEV_MODE=true npm run dev
+```
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
