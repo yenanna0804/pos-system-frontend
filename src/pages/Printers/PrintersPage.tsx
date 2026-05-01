@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { PrintActionIcon } from '../../components/ActionIcons';
+import { printA4PlainText } from '../../utils/print';
 import './PrintersPage.css';
 
 type PrinterRole = 'default' | 'backup' | null;
@@ -454,7 +455,8 @@ export default function PrintersPage() {
   const onPrintFromPreview = async () => {
     const selectedTemplate = templates.find((item) => item.key === previewTemplateKey) || templates[0];
     if (!selectedTemplate) return;
-    if (!previewPrinterId) {
+    const isA4Template = selectedTemplate.key === 'invoice_a4';
+    if (!isA4Template && !previewPrinterId) {
       setError('Vui lòng chọn máy in để in thử');
       return;
     }
@@ -467,7 +469,11 @@ export default function PrintersPage() {
           : '';
 
     try {
-      await printWithFallback(previewPrinterId, fallbackPrinterId, selectedTemplate.key, selectedTemplate.content);
+      if (isA4Template) {
+        await printA4PlainText(selectedTemplate.name, selectedTemplate.content);
+      } else {
+        await printWithFallback(previewPrinterId, fallbackPrinterId, selectedTemplate.key, selectedTemplate.content);
+      }
       setIsPreviewOpen(false);
     } catch (printError: any) {
       setError(`In thử thất bại: ${printError?.message || 'Lỗi không xác định'}`);
@@ -528,7 +534,11 @@ export default function PrintersPage() {
 
               <label>
                 Máy in
-                <select value={previewPrinterId} onChange={(event) => setPreviewPrinterId(event.target.value)}>
+                <select
+                  value={previewPrinterId}
+                  onChange={(event) => setPreviewPrinterId(event.target.value)}
+                  disabled={previewTemplateKey === 'invoice_a4'}
+                >
                   <option value="">-- Chọn máy in --</option>
                   {printers.map((printer) => (
                     <option key={printer.id} value={printer.id}>
@@ -537,6 +547,9 @@ export default function PrintersPage() {
                   ))}
                 </select>
               </label>
+              {previewTemplateKey === 'invoice_a4' && (
+                <p className="printer-warning">Mẫu A4 sẽ in qua hộp thoại in của trình duyệt (chọn máy in inkjet/laser tại đó).</p>
+              )}
             </div>
 
             <div className={`printers-preview-paper ${previewTemplate?.key === 'receipt_80mm' ? 'is-80mm' : 'is-a4'}`}>

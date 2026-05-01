@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { BillItem, DuplicateHandling, SelectableTable } from '../types';
+import { getLineAmount, toAmountNumber, toPercentNumber } from '../hooks/useOrderPricing';
+import TimeLineControls from './TimeLineControls';
 
 type AdjustmentMode = 'percent' | 'amount';
 type PaymentMethod = 'CASH' | 'BANKING';
@@ -17,6 +19,8 @@ type Props = {
   onRemoveLine: (lineId: string) => void;
   onUpdateNote: (lineId: string, note: string) => void;
   onUpdateUnitPrice: (lineId: string, unitPrice: number) => void;
+  onToggleTimeLineTimer?: (lineId: string, action: 'start' | 'stop') => Promise<void>;
+  timerLoadingLineIds?: string[];
   discountMode: AdjustmentMode;
   discountValue: string;
   onDiscountModeChange: (value: AdjustmentMode) => void;
@@ -30,17 +34,8 @@ type Props = {
   initialPaymentMethod?: PaymentMethod;
   onSaveOrder: (paidAmount: number, paymentMethod: PaymentMethod) => void;
   onPrintInvoice: () => void;
+  onPrintOrder: (selectedLineIds: string[]) => void;
   disableSave: boolean;
-};
-
-const toAmountNumber = (value: string) => {
-  const numeric = Number(value.replace(/\D/g, ''));
-  return Number.isFinite(numeric) ? numeric : 0;
-};
-
-const toPercentNumber = (value: string) => {
-  const numeric = Number(value.trim().replace(',', '.'));
-  return Number.isFinite(numeric) ? numeric : 0;
 };
 
 const formatThousands = (value: string) => {
@@ -62,6 +57,8 @@ export default function OrderBillsPanel({
   onRemoveLine,
   onUpdateNote,
   onUpdateUnitPrice,
+  onToggleTimeLineTimer,
+  timerLoadingLineIds = [],
   discountMode,
   discountValue,
   onDiscountModeChange,
@@ -75,6 +72,7 @@ export default function OrderBillsPanel({
   initialPaymentMethod,
   onSaveOrder,
   onPrintInvoice,
+  onPrintOrder,
   disableSave,
 }: Props) {
   const [editingNoteLineId, setEditingNoteLineId] = useState<string | null>(null);
@@ -90,7 +88,7 @@ export default function OrderBillsPanel({
     setSelectedLineIds((prev) => prev.filter((lineId) => billItems.some((item) => item.lineId === lineId)));
   }, [billItems]);
 
-  const subtotal = billItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  const subtotal = billItems.reduce((sum, item) => sum + getLineAmount(item), 0);
   const discountRaw = discountMode === 'amount' ? toAmountNumber(discountValue) : toPercentNumber(discountValue);
   const surchargeRaw = surchargeMode === 'amount' ? toAmountNumber(surchargeValue) : toPercentNumber(surchargeValue);
   const discountAmount = discountMode === 'percent' ? Math.min(subtotal, (subtotal * Math.max(0, discountRaw)) / 100) : Math.max(0, discountRaw);
@@ -120,7 +118,12 @@ export default function OrderBillsPanel({
               </svg>
               In HĐ
             </button>
-            <button type="button" className="orders-ghost-btn" disabled={billItems.length === 0} onClick={onPrintInvoice}>
+            <button
+              type="button"
+              className="orders-ghost-btn"
+              disabled={billItems.length === 0}
+              onClick={() => onPrintOrder(selectedLineIds)}
+            >
               <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                 <path d="M6 2h12a1 1 0 0 1 1 1v4H5V3a1 1 0 0 1 1-1Z" />
                 <path d="M5 14h14v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7Zm3 1v5h8v-5H8Z" />
@@ -314,6 +317,10 @@ export default function OrderBillsPanel({
           <div className="orders-empty-row">Chưa có món trong hóa đơn</div>
         ) : (
           billItems.map((item, index) => (
+            (() => {
+              const isTimerRunning = item.timerStatus === 'RUNNING' || item.timerStatus === 'ON';
+              const usedMinutes = Math.max(0, Math.trunc(Number(item.usedMinutes || 0)));
+              return (
             <div className="orders-bill-line" key={item.lineId}>
               <div className="orders-bill-line-main">
                 <label className="orders-line-check">
@@ -336,7 +343,7 @@ export default function OrderBillsPanel({
                   <h4>
                     {index + 1}. {item.productName}
                   </h4>
-                  <small>{item.unit ? `Đơn vị: ${item.unit}` : 'Đơn vị: -'}</small>
+                  {item.pricingTypeSnapshot !== 'TIME' && <small>{item.unit ? `Đơn vị: ${item.unit}` : 'Đơn vị: -'}</small>}
                   <button type="button" className="orders-note-trigger" onClick={() => setEditingNoteLineId(item.lineId)}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                       <rect x="5" y="3" width="14" height="18" rx="2" />
@@ -361,41 +368,53 @@ export default function OrderBillsPanel({
                   )}
                 </div>
 
-                <div className="orders-bill-qty-wrap">
-                  <button type="button" onClick={() => onDecreaseQty(item.lineId)}>
-                    -
-                  </button>
-                  {editingQtyLineId === item.lineId ? (
-                    <input
-                      autoFocus
-                      className="orders-qty-inline-input"
-                      value={String(item.quantity)}
-                      inputMode="numeric"
-                      onFocus={(event) => event.target.select()}
-                      onChange={(event) => {
-                        const digits = event.target.value.replace(/\D/g, '');
-                        onSetQty(item.lineId, digits ? Number(digits) : 0);
-                      }}
-                      onBlur={() => setEditingQtyLineId(null)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === 'Escape') {
-                          setEditingQtyLineId(null);
-                        }
-                      }}
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      className="orders-qty-trigger"
-                      onClick={() => setEditingQtyLineId(item.lineId)}
-                    >
-                      {item.quantity}
+                {item.pricingTypeSnapshot !== 'TIME' && (
+                  <div className="orders-bill-qty-wrap">
+                    <button type="button" onClick={() => onDecreaseQty(item.lineId)}>
+                      -
                     </button>
-                  )}
-                  <button type="button" onClick={() => onIncreaseQty(item.lineId)}>
-                    +
-                  </button>
-                </div>
+                    {editingQtyLineId === item.lineId ? (
+                      <input
+                        autoFocus
+                        className="orders-qty-inline-input"
+                        value={String(item.quantity)}
+                        inputMode="numeric"
+                        onFocus={(event) => event.target.select()}
+                        onChange={(event) => {
+                          const digits = event.target.value.replace(/\D/g, '');
+                          onSetQty(item.lineId, digits ? Number(digits) : 0);
+                        }}
+                        onBlur={() => setEditingQtyLineId(null)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === 'Escape') {
+                            setEditingQtyLineId(null);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className="orders-qty-trigger"
+                        onClick={() => setEditingQtyLineId(item.lineId)}
+                      >
+                        {item.quantity}
+                      </button>
+                    )}
+                    <button type="button" onClick={() => onIncreaseQty(item.lineId)}>
+                      +
+                    </button>
+                  </div>
+                )}
+
+                {item.pricingTypeSnapshot === 'TIME' && (
+                  <TimeLineControls
+                    lineId={item.lineId}
+                    isRunning={isTimerRunning}
+                    usedMinutes={usedMinutes}
+                    isLoading={timerLoadingLineIds.includes(item.lineId)}
+                    onToggleTimeLineTimer={onToggleTimeLineTimer}
+                  />
+                )}
 
                 {editingPriceLineId === item.lineId ? (
                   <input
@@ -416,17 +435,23 @@ export default function OrderBillsPanel({
                     }}
                   />
                 ) : (
-                  <button type="button" className="orders-bill-price orders-price-trigger" onClick={() => setEditingPriceLineId(item.lineId)}>
+                  <button
+                    type="button"
+                    className="orders-bill-price orders-price-trigger"
+                    onClick={() => setEditingPriceLineId(item.lineId)}
+                  >
                     {Math.trunc(item.unitPrice).toLocaleString('vi-VN')}
                   </button>
                 )}
-                <div className="orders-bill-amount">{Math.trunc(item.unitPrice * item.quantity).toLocaleString('vi-VN')}</div>
+                <div className="orders-bill-amount">{Math.trunc(getLineAmount(item)).toLocaleString('vi-VN')}</div>
                 <button type="button" className="orders-remove-line-btn" onClick={() => onRemoveLine(item.lineId)}>
                   x
                 </button>
               </div>
 
             </div>
+              );
+            })()
           ))
         )}
         </div>

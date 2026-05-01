@@ -14,8 +14,10 @@ export type ProductOption = {
   name: string;
   unit?: string;
   categoryName?: string;
-  type?: 'SINGLE' | 'COMBO';
+  type?: 'SINGLE' | 'COMBO' | 'TIME';
   price: number;
+  timeRateAmount?: number;
+  timeRateMinutes?: number;
   stock?: number;
 };
 
@@ -27,6 +29,13 @@ export type BillItem = {
   baseUnitPrice?: number;
   unitPrice: number;
   quantity: number;
+  pricingTypeSnapshot?: 'FIXED' | 'TIME';
+  timeRateAmountSnapshot?: number;
+  timeRateMinutesSnapshot?: number;
+  usedMinutes?: number;
+  lineTotal?: number;
+  timerStatus?: 'RUNNING' | 'STOPPED' | 'ON' | 'OFF';
+  activeSessionStartedAt?: string | null;
   note: string;
 };
 

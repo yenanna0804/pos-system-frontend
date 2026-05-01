@@ -18,7 +18,7 @@ type Category = {
 
 type ProductRow = {
   id: string;
-  type?: 'SINGLE' | 'COMBO';
+  type?: 'SINGLE' | 'COMBO' | 'TIME';
   sku?: string;
   name: string;
   imageUrl?: string;
@@ -26,6 +26,8 @@ type ProductRow = {
   unit?: string;
   categoryName?: string;
   price?: string | number;
+  timeRateAmount?: string | number;
+  timeRateMinutes?: string | number;
   stock?: string | number;
 };
 
@@ -39,7 +41,7 @@ export default function OrdersProductPicker({ branchId, onAddProduct }: Props) {
   const [products, setProducts] = useState<ProductRow[]>([]);
 
   const [filterCategoryId, setFilterCategoryId] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'SINGLE' | 'COMBO'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'SINGLE' | 'COMBO' | 'TIME'>('all');
   const [filterStock, setFilterStock] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -173,13 +175,14 @@ export default function OrdersProductPicker({ branchId, onAddProduct }: Props) {
           <select
             value={filterType}
             onChange={(event) => {
-              setFilterType(event.target.value as 'all' | 'SINGLE' | 'COMBO');
+               setFilterType(event.target.value as 'all' | 'SINGLE' | 'COMBO' | 'TIME');
               setPage(1);
             }}
           >
             <option value="all">Tất cả loại</option>
             <option value="SINGLE">Hàng riêng lẻ</option>
             <option value="COMBO">Combo</option>
+            <option value="TIME">Dịch vụ tính giờ</option>
           </select>
         </label>
 
@@ -253,9 +256,11 @@ export default function OrdersProductPicker({ branchId, onAddProduct }: Props) {
                       name: product.name,
                       unit: product.unit,
                       categoryName: product.categoryName,
-                      type: product.type || 'SINGLE',
-                      price: Math.trunc(Number(product.price || 0)),
-                      stock: Number(product.stock || 0),
+                       type: product.type || 'SINGLE',
+                       price: Math.trunc(Number(product.price || 0)),
+                       timeRateAmount: Math.trunc(Number(product.timeRateAmount || 0)),
+                       timeRateMinutes: Math.max(1, Math.trunc(Number(product.timeRateMinutes || 0))),
+                       stock: Number(product.stock || 0),
                     })
                   }
                 >

@@ -37,7 +37,7 @@ export const branchService = {
 };
 
 export type ProductPayload = {
-  type?: 'SINGLE' | 'COMBO';
+  type?: 'SINGLE' | 'COMBO' | 'TIME';
   autoPrice?: boolean;
   sku?: string;
   name: string;
@@ -48,6 +48,8 @@ export type ProductPayload = {
   weight?: number;
   costPrice?: number;
   price: number;
+  timeRateAmount?: number;
+  timeRateMinutes?: number;
   isActive?: boolean;
   branchConfigs?: { branchId: string; isActive: boolean; stock?: number }[];
   comboItems?: { itemProductId: string; quantity: number }[];
@@ -57,7 +59,7 @@ export const productService = {
   list: (params: {
     page?: number;
     pageSize?: number;
-    type?: 'SINGLE' | 'COMBO';
+    type?: 'SINGLE' | 'COMBO' | 'TIME';
     categoryId?: string;
     stockStatus?: 'all' | 'in_stock' | 'out_of_stock';
     branchId?: string;
@@ -96,6 +98,7 @@ export type DiningTablePayload = {
 
 export const areaService = {
   list: (branchId?: string) => api.get('/areas', { params: { branchId } }),
+  getDeleteImpact: (id: string) => api.get(`/areas/${id}/delete-impact`),
   create: (payload: AreaPayload) => api.post('/areas', payload),
   update: (id: string, payload: AreaPayload) => api.patch(`/areas/${id}`, payload),
   remove: (id: string) => api.delete(`/areas/${id}`),
@@ -103,6 +106,7 @@ export const areaService = {
 
 export const roomService = {
   list: (params?: { areaId?: string; branchId?: string }) => api.get('/rooms', { params }),
+  getDeleteImpact: (id: string) => api.get(`/rooms/${id}/delete-impact`),
   create: (payload: RoomPayload) => api.post('/rooms', payload),
   update: (id: string, payload: RoomPayload) => api.patch(`/rooms/${id}`, payload),
   remove: (id: string) => api.delete(`/rooms/${id}`),
@@ -119,6 +123,7 @@ export const diningTableService = {
   }) =>
     api.get('/dining-tables', { params }),
   options: (params?: { branchId?: string }) => api.get('/dining-tables/options', { params }),
+  getDeleteImpact: (id: string) => api.get(`/dining-tables/${id}/delete-impact`),
   create: (payload: DiningTablePayload) => api.post('/dining-tables', payload),
   update: (id: string, payload: DiningTablePayload) => api.patch(`/dining-tables/${id}`, payload),
   remove: (id: string) => api.delete(`/dining-tables/${id}`),
@@ -147,8 +152,43 @@ export type OrderPayload = {
     unitPrice: number;
     quantity: number;
     note: string;
+    pricingTypeSnapshot?: 'FIXED' | 'TIME';
+    timeRateAmountSnapshot?: number;
+    timeRateMinutesSnapshot?: number;
+    usedMinutes?: number;
   }[];
   branchId?: string;
+  billItemsPatch?: {
+    addedItems?: {
+      lineId?: string;
+      productId: string;
+      productName: string;
+      unit?: string;
+      baseUnitPrice?: number;
+      unitPrice: number;
+      quantity: number;
+      note: string;
+      pricingTypeSnapshot?: 'FIXED' | 'TIME';
+      timeRateAmountSnapshot?: number;
+      timeRateMinutesSnapshot?: number;
+      usedMinutes?: number;
+    }[];
+    updatedItems?: {
+      lineId: string;
+      productId?: string;
+      productName?: string;
+      unit?: string;
+      baseUnitPrice?: number;
+      unitPrice?: number;
+      quantity?: number;
+      note?: string;
+      pricingTypeSnapshot?: 'FIXED' | 'TIME';
+      timeRateAmountSnapshot?: number;
+      timeRateMinutesSnapshot?: number;
+      usedMinutes?: number;
+    }[];
+    removedItemIds?: string[];
+  };
 };
 
 export const orderService = {
@@ -172,6 +212,9 @@ export const orderService = {
   remove: (id: string) => api.delete(`/orders/${id}`),
   hardRemove: (id: string) => api.delete(`/orders/${id}/hard`),
   history: (id: string) => api.get(`/orders/${id}/logs`),
+  startItemTimer: (orderId: string, itemId: string) => api.post(`/orders/${orderId}/items/${itemId}/timer/start`),
+  stopItemTimer: (orderId: string, itemId: string) => api.post(`/orders/${orderId}/items/${itemId}/timer/stop`),
+  getItemTimerStatus: (orderId: string, itemId: string) => api.get(`/orders/${orderId}/items/${itemId}/timer/status`),
 };
 
 export default api;

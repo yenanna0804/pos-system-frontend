@@ -3,16 +3,27 @@ import { useAuth } from '../../contexts/AuthContext';
 import OrderBillsPanel from './components/OrderBillsPanel';
 import OrdersProductPicker from './components/OrdersProductPicker';
 import OrdersTablePicker from './components/OrdersTablePicker';
-import type { BillItem, DuplicateHandling, ProductOption, SelectableTable } from './types';
+import type { BillItem, DuplicateHandling, SelectableTable } from './types';
+import { printUsingConfiguredRoute } from '../../utils/printerRouting';
+import { useOrderEditor } from './hooks/useOrderEditor';
+import { toAmountNumber, toPercentNumber, useOrderPricing } from './hooks/useOrderPricing';
+import { useOrderTimer } from './hooks/useOrderTimer';
 
 type Props = {
   onBack: () => void;
   mode?: 'create' | 'edit';
   orderCode?: string;
+  orderId?: string;
   initialData?: {
     selectedTable: SelectableTable | null;
     customerName: string;
     billItems: BillItem[];
+    billItemsPatch?: {
+      addedItems: BillItem[];
+      updatedItems: (Partial<BillItem> & { lineId: string })[];
+      removedItemIds: string[];
+      hasChanges: boolean;
+    };
     discountAmount?: number;
     discountMode?: 'percent' | 'amount';
     discountValue?: number;
@@ -36,103 +47,93 @@ type Props = {
     surchargeValue: number;
     paidAmount: number;
     paymentMethod: 'CASH' | 'BANKING';
+    billItemsPatch?: {
+      addedItems: BillItem[];
+      updatedItems: (Partial<BillItem> & { lineId: string })[];
+      removedItemIds: string[];
+      hasChanges: boolean;
+    };
+  }) => Promise<void>;
+  onToggleTimeLineTimer?: (lineId: string, action: 'start' | 'stop') => Promise<{ usedMinutes: number; lineTotal: number; timerStatus: 'RUNNING' | 'STOPPED' }>;
+  onStartTimeLineTimerForNewOrder?: (payload: {
+    table: SelectableTable;
+    customerName: string;
+    billItems: BillItem[];
+    totalAmount: number;
+    discountAmount: number;
+    discountMode: 'percent' | 'amount';
+    discountValue: number;
+    surchargeAmount: number;
+    surchargeMode: 'percent' | 'amount';
+    surchargeValue: number;
+    paidAmount: number;
+    paymentMethod: 'CASH' | 'BANKING';
+    lineId: string;
   }) => Promise<void>;
 };
 
-const generateLineId = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
-
-const toAmountNumber = (value: string) => {
-  const numeric = Number(value.replace(/\D/g, ''));
-  return Number.isFinite(numeric) ? numeric : 0;
-};
-
-const toPercentNumber = (value: string) => {
-  const numeric = Number(value.trim().replace(',', '.'));
-  return Number.isFinite(numeric) ? numeric : 0;
-};
-
-export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', orderCode, initialData, defaultTab = 'table' }: Props) {
+export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', orderCode, orderId, initialData, defaultTab = 'table', onToggleTimeLineTimer, onStartTimeLineTimerForNewOrder }: Props) {
   const { branchId } = useAuth();
   const [activeTab, setActiveTab] = useState<'table' | 'product'>(defaultTab);
   const [selectedTable, setSelectedTable] = useState<SelectableTable | null>(initialData?.selectedTable || null);
   const [customerName, setCustomerName] = useState(initialData?.customerName || '');
   const [duplicateHandling, setDuplicateHandling] = useState<DuplicateHandling>('merge');
-  const [billItems, setBillItems] = useState<BillItem[]>(initialData?.billItems || []);
+  const { billItems, setBillItems, addProductToBill, billItemsPatch } = useOrderEditor(initialData?.billItems || []);
   const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>(initialData?.discountMode || 'percent');
   const [discountValue, setDiscountValue] = useState(String(initialData?.discountValue ?? initialData?.discountAmount ?? 0));
   const [surchargeMode, setSurchargeMode] = useState<'percent' | 'amount'>(initialData?.surchargeMode || 'percent');
   const [surchargeValue, setSurchargeValue] = useState(String(initialData?.surchargeValue ?? initialData?.surchargeAmount ?? 0));
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [showEditConfirm, setShowEditConfirm] = useState(false);
+  const { timerLoadingLineIds, createToggleHandler } = useOrderTimer();
 
   const canOpenProductTab = Boolean(selectedTable);
 
-  const addProductToBill = (product: ProductOption) => {
-    setBillItems((prev) => {
-      if (duplicateHandling === 'merge') {
-        const mergeIndex = prev.findIndex(
-          (line) => line.productId === product.id && line.unitPrice === product.price && line.note.trim() === '',
-        );
+  const { totalAmount, discountAmount, surchargeAmount } = useOrderPricing({
+    billItems,
+    discountMode,
+    discountValue,
+    surchargeMode,
+    surchargeValue,
+  });
 
-        if (mergeIndex >= 0) {
-          const next = [...prev];
-          next[mergeIndex] = {
-            ...next[mergeIndex],
-            quantity: next[mergeIndex].quantity + 1,
-          };
-          return next;
-        }
-      }
-
-      const newLine: BillItem = {
-        lineId: generateLineId(),
-        productId: product.id,
-        productName: product.name,
-        unit: product.unit,
-        baseUnitPrice: product.price,
-        unitPrice: product.price,
-        quantity: 1,
-        note: '',
-      };
-      return [...prev, newLine];
-    });
-  };
-
-  const subtotal = billItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-
-  const totalAmount = useMemo(() => {
-    const discountRaw = discountMode === 'amount' ? toAmountNumber(discountValue) : toPercentNumber(discountValue);
-    const surchargeRaw = surchargeMode === 'amount' ? toAmountNumber(surchargeValue) : toPercentNumber(surchargeValue);
-    const discountAmount =
-      discountMode === 'percent'
-        ? Math.min(subtotal, (subtotal * Math.max(0, discountRaw)) / 100)
-        : Math.max(0, discountRaw);
-    const subtotalAfterDiscount = Math.max(0, subtotal - discountAmount);
-    const surchargeAmount =
-      surchargeMode === 'percent'
-        ? (subtotalAfterDiscount * Math.max(0, surchargeRaw)) / 100
-        : Math.max(0, surchargeRaw);
-
-    return Math.max(0, subtotal - discountAmount + surchargeAmount);
-  }, [discountMode, discountValue, subtotal, surchargeMode, surchargeValue]);
-
-  const discountAmount = useMemo(() => {
-    const discountRaw = discountMode === 'amount' ? toAmountNumber(discountValue) : toPercentNumber(discountValue);
-    return discountMode === 'percent'
-      ? Math.min(subtotal, (subtotal * Math.max(0, discountRaw)) / 100)
-      : Math.max(0, discountRaw);
-  }, [discountMode, discountValue, subtotal]);
-
-  const surchargeAmount = useMemo(() => {
-    const surchargeRaw = surchargeMode === 'amount' ? toAmountNumber(surchargeValue) : toPercentNumber(surchargeValue);
-    const subtotalAfterDiscount = Math.max(0, subtotal - discountAmount);
-    return surchargeMode === 'percent'
-      ? (subtotalAfterDiscount * Math.max(0, surchargeRaw)) / 100
-      : Math.max(0, surchargeRaw);
-  }, [surchargeMode, surchargeValue, subtotal, discountAmount]);
+  const onToggleTimer = useMemo(
+    () =>
+      createToggleHandler({
+        orderId,
+        selectedTable,
+        customerName,
+        billItems,
+        totalAmount,
+        discountAmount,
+        discountMode,
+        discountValue,
+        surchargeAmount,
+        surchargeMode,
+        surchargeValue,
+        onToggleTimeLineTimer,
+        onStartTimeLineTimerForNewOrder,
+        setBillItems,
+      }),
+    [
+      createToggleHandler,
+      orderId,
+      selectedTable,
+      customerName,
+      billItems,
+      billItemsPatch,
+      totalAmount,
+      discountAmount,
+      discountMode,
+      discountValue,
+      surchargeAmount,
+      surchargeMode,
+      surchargeValue,
+      onToggleTimeLineTimer,
+      onStartTimeLineTimerForNewOrder,
+      setBillItems,
+    ],
+  );
 
   const executeSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING') => {
     if (!selectedTable) return;
@@ -172,6 +173,56 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
 
   const pendingPaidAmountRef = useRef<number>(Math.max(0, Math.trunc(initialData?.paidAmount ?? totalAmount)));
   const pendingPaymentMethodRef = useRef<'CASH' | 'BANKING'>(initialData?.paymentMethod ?? 'CASH');
+
+  const buildPrintableContent = (items: BillItem[], label: string) => {
+    const formatNumberVi = (value: number) => Math.trunc(Number(value || 0)).toLocaleString('vi-VN');
+    const location = selectedTable
+      ? selectedTable.entityType === 'ROOM'
+        ? `${selectedTable.areaName} / ${selectedTable.roomName || selectedTable.name}`
+        : `${selectedTable.areaName}${selectedTable.roomName ? ` / ${selectedTable.roomName}` : ''} / ${selectedTable.name}`
+      : '-';
+
+    const lines: string[] = [];
+    lines.push(`Mã hóa đơn: ${orderCode || 'Tạm thời (chưa lưu)'}`);
+    lines.push(`Thời gian: ${new Date().toLocaleString('vi-VN')}`);
+    lines.push(`Loại phiếu in: ${label}`);
+    lines.push(`Khách hàng: ${customerName || '-'}`);
+    lines.push(`Khu vực/Vị trí: ${location}`);
+    lines.push('');
+    lines.push('Danh sách món:');
+
+    items.forEach((item, index) => {
+      const lineTotal = item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0);
+      lines.push(`${index + 1}. ${item.productName}`);
+      lines.push(`   SL: ${formatNumberVi(Number(item.quantity || 0))} | Đơn giá: ${formatNumberVi(Number(item.unitPrice || 0))} | Thành tiền: ${formatNumberVi(lineTotal)}`);
+      if (item.note?.trim()) {
+        lines.push(`   Ghi chú: ${item.note.trim()}`);
+      }
+    });
+
+    lines.push('');
+    const subtotalSelected = items.reduce((sum, item) => sum + (item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)), 0);
+    lines.push(`Tạm tính: ${formatNumberVi(subtotalSelected)}`);
+    if (items.length === billItems.length) {
+      lines.push(`Giảm giá: ${formatNumberVi(discountAmount)}`);
+      lines.push(`Phụ phí: ${formatNumberVi(surchargeAmount)}`);
+      lines.push(`Phải thanh toán: ${formatNumberVi(totalAmount)}`);
+    }
+
+    return lines.join('\n');
+  };
+
+  const onPrintInvoice = async () => {
+    if (billItems.length === 0) return;
+    await printUsingConfiguredRoute('Hóa đơn tạm', buildPrintableContent(billItems, 'Hóa đơn'));
+  };
+
+  const onPrintOrder = async (selectedLineIds: string[]) => {
+    const selectedItems = billItems.filter((item) => selectedLineIds.includes(item.lineId));
+    const itemsToPrint = selectedItems.length > 0 ? selectedItems : billItems;
+    if (itemsToPrint.length === 0) return;
+    await printUsingConfiguredRoute('Order tạm', buildPrintableContent(itemsToPrint, 'Order'));
+  };
 
   return (
     <section className="orders-create-page">
@@ -259,7 +310,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
       {activeTab === 'product' && (
         <div className="orders-product-layout">
           <div className="orders-product-left">
-            <OrdersProductPicker branchId={branchId} onAddProduct={addProductToBill} />
+            <OrdersProductPicker branchId={branchId} onAddProduct={(product) => addProductToBill(product, duplicateHandling)} />
           </div>
           <OrderBillsPanel
             selectedTable={selectedTable}
@@ -269,21 +320,33 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
             onDuplicateHandlingChange={setDuplicateHandling}
             billItems={billItems}
             onIncreaseQty={(lineId) =>
-              setBillItems((prev) => prev.map((item) => (item.lineId === lineId ? { ...item, quantity: item.quantity + 1 } : item)))
+              setBillItems((prev) =>
+                prev.map((item) => {
+                  if (item.lineId !== lineId) return item;
+                  if (item.pricingTypeSnapshot === 'TIME') return item;
+                  return { ...item, quantity: item.quantity + 1 };
+                }),
+              )
             }
             onDecreaseQty={(lineId) =>
               setBillItems((prev) =>
                 prev
-                  .map((item) => (item.lineId === lineId ? { ...item, quantity: Math.max(0, item.quantity - 1) } : item))
+                  .map((item) => {
+                    if (item.lineId !== lineId) return item;
+                    if (item.pricingTypeSnapshot === 'TIME') return item;
+                    return { ...item, quantity: Math.max(0, item.quantity - 1) };
+                  })
                   .filter((item) => item.quantity > 0),
               )
             }
             onSetQty={(lineId, quantity) =>
               setBillItems((prev) =>
                 prev
-                  .map((item) =>
-                    item.lineId === lineId ? { ...item, quantity: Math.max(0, Math.round(quantity)) } : item,
-                  )
+                  .map((item) => {
+                    if (item.lineId !== lineId) return item;
+                    if (item.pricingTypeSnapshot === 'TIME') return item;
+                    return { ...item, quantity: Math.max(0, Math.round(quantity)) };
+                  })
                   .filter((item) => item.quantity > 0),
               )
             }
@@ -296,6 +359,8 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
                 prev.map((item) => (item.lineId === lineId ? { ...item, unitPrice: Math.max(0, Math.trunc(unitPrice)) } : item)),
               )
             }
+            onToggleTimeLineTimer={onToggleTimer}
+            timerLoadingLineIds={timerLoadingLineIds}
             discountMode={discountMode}
             discountValue={discountValue}
             onDiscountModeChange={setDiscountMode}
@@ -308,7 +373,8 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
             initialPaidAmount={initialData?.paidAmount}
             initialPaymentMethod={initialData?.paymentMethod}
             onSaveOrder={handleSaveOrder}
-            onPrintInvoice={() => window.print()}
+            onPrintInvoice={() => onPrintInvoice().catch(() => undefined)}
+            onPrintOrder={(selectedLineIds) => onPrintOrder(selectedLineIds).catch(() => undefined)}
             disableSave={!selectedTable || billItems.length === 0 || isSavingOrder}
           />
         </div>

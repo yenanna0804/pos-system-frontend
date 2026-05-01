@@ -326,9 +326,16 @@ export default function TablesPage() {
     try {
       setError('');
       const target = tables.find((t) => t.id === id);
+      const impactRes = await diningTableService.getDeleteImpact(id);
+      const impact = impactRes?.data as { activeOrderCount?: number } | undefined;
+      const activeOrderCount = Number(impact?.activeOrderCount || 0);
       const confirmed = await confirmAction({
         title: 'Xác nhận xóa bàn',
-        message: target ? `Bạn có chắc muốn xóa bàn "${target.name}"?` : 'Bạn có chắc muốn xóa bàn này?',
+        message:
+          (target ? `Bạn có chắc muốn xóa bàn "${target.name}"?\n` : 'Bạn có chắc muốn xóa bàn này?\n') +
+          (activeOrderCount > 0
+            ? `Bàn này đang có ${activeOrderCount} hóa đơn phụ thuộc.\nNếu xóa, các hóa đơn này sẽ bị gỡ thông tin phòng/bàn.`
+            : 'Bàn này hiện không có hóa đơn phụ thuộc.'),
         confirmText: 'Xóa',
         cancelText: 'Hủy',
         danger: true,
@@ -350,12 +357,18 @@ export default function TablesPage() {
       setError('');
       const targetRoom = rooms.find((r) => r.id === id);
       const tableDependentCount = Number(targetRoom?.tableCount || tables.filter((t) => t.roomId === id).length || 0);
+      const impactRes = await roomService.getDeleteImpact(id);
+      const impact = impactRes?.data as { activeOrderCount?: number } | undefined;
+      const activeOrderCount = Number(impact?.activeOrderCount || 0);
       const confirmed = await confirmAction({
         title: 'Xác nhận xóa phòng',
         message:
           `Bạn có chắc muốn xóa phòng "${targetRoom?.name || id}"?\n` +
           `Phòng này đang có ${tableDependentCount} bàn phụ thuộc.\n` +
-          `Nếu xóa, toàn bộ ${tableDependentCount} bàn thuộc phòng này sẽ bị xóa theo.`,
+          `Nếu xóa, toàn bộ ${tableDependentCount} bàn thuộc phòng này sẽ bị xóa theo.\n` +
+          (activeOrderCount > 0
+            ? `Đồng thời có ${activeOrderCount} hóa đơn phụ thuộc; các hóa đơn này sẽ bị gỡ thông tin phòng/bàn.`
+            : 'Không có hóa đơn phụ thuộc.'),
         confirmText: 'Xóa',
         cancelText: 'Hủy',
         danger: true,
@@ -429,12 +442,18 @@ export default function TablesPage() {
       const targetArea = areas.find((a) => a.id === id);
       const dependentRooms = Number(targetArea?.roomCount || 0);
       const dependentTables = Number(targetArea?.tableCount || 0);
+      const impactRes = await areaService.getDeleteImpact(id);
+      const impact = impactRes?.data as { activeOrderCount?: number } | undefined;
+      const activeOrderCount = Number(impact?.activeOrderCount || 0);
       const confirmed = await confirmAction({
         title: 'Xác nhận xóa khu vực',
         message:
           `Bạn có chắc muốn xóa khu vực "${targetArea?.name || id}"?\n` +
           `Khu vực này đang có ${dependentRooms} phòng và ${dependentTables} bàn phụ thuộc.\n` +
-          `Nếu xóa, toàn bộ phòng và bàn thuộc khu vực này sẽ bị xóa theo.`,
+          `Nếu xóa, toàn bộ phòng và bàn thuộc khu vực này sẽ bị xóa theo.\n` +
+          (activeOrderCount > 0
+            ? `Đồng thời có ${activeOrderCount} hóa đơn phụ thuộc; các hóa đơn này sẽ bị gỡ thông tin phòng/bàn.`
+            : 'Không có hóa đơn phụ thuộc.'),
         confirmText: 'Xóa',
         cancelText: 'Hủy',
         danger: true,

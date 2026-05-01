@@ -31,7 +31,7 @@ type BranchConfig = {
 
 type Product = {
   id: string;
-  type?: 'SINGLE' | 'COMBO';
+  type?: 'SINGLE' | 'COMBO' | 'TIME';
   autoPrice?: boolean;
   sku: string;
   name: string;
@@ -43,6 +43,8 @@ type Product = {
   weight?: string;
   costPrice?: string;
   price: string;
+  timeRateAmount?: string;
+  timeRateMinutes?: string;
   stock?: string;
   isActive: boolean;
   branchNames?: string;
@@ -92,7 +94,7 @@ type ConfirmDialogState = {
 };
 
 type ProductForm = {
-  type: 'SINGLE' | 'COMBO';
+  type: 'SINGLE' | 'COMBO' | 'TIME';
   autoCost: boolean;
   autoPrice: boolean;
   sku: string;
@@ -104,6 +106,8 @@ type ProductForm = {
   weight: string;
   costPrice: string;
   price: string;
+  timeRateAmount: string;
+  timeRateMinutes: string;
   isActive: boolean;
 };
 
@@ -115,6 +119,8 @@ type ProductFieldErrors = {
   costPrice?: string;
   price?: string;
   comboItems?: string;
+  timeRateAmount?: string;
+  timeRateMinutes?: string;
   branchConfigs?: string;
 };
 
@@ -131,6 +137,8 @@ const initialForm: ProductForm = {
   weight: '',
   costPrice: '',
   price: '0',
+  timeRateAmount: '',
+  timeRateMinutes: '60',
   isActive: true,
 };
 
@@ -206,13 +214,14 @@ export default function ProductsPage() {
   const [branchConfigs, setBranchConfigs] = useState<BranchConfig[]>([]);
   const [comboItems, setComboItems] = useState<ComboItem[]>([]);
   const [comboCatalog, setComboCatalog] = useState<Product[]>([]);
+  const [comboCatalogLoadedBranchKey, setComboCatalogLoadedBranchKey] = useState<string | null>(null);
   const [comboSearchTerms, setComboSearchTerms] = useState<string[]>([]);
   const [activeComboDropdown, setActiveComboDropdown] = useState<number | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingCategoryName, setEditingCategoryName] = useState('');
   const [filterCategoryId, setFilterCategoryId] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'SINGLE' | 'COMBO'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'SINGLE' | 'COMBO' | 'TIME'>('all');
   const [filterStock, setFilterStock] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
   const [filterBranchId, setFilterBranchId] = useState(authBranchId || '');
   const [searchTerm, setSearchTerm] = useState('');
@@ -332,10 +341,22 @@ export default function ProductsPage() {
   const allCurrentPageChecked = products.length > 0 && products.every((item) => selectedProductIds.includes(item.id));
 
   const loadComboCatalog = async () => {
+    const branchKey = filterBranchId || '';
     const res = await productService.list({ page: 1, pageSize: 100, branchId: filterBranchId || undefined });
     const data = res.data;
     const rows: Product[] = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
-    setComboCatalog(rows.filter((item) => (item.type || 'SINGLE') === 'SINGLE'));
+    const singleRows = rows.filter((item) => (item.type || 'SINGLE') === 'SINGLE');
+    setComboCatalog(singleRows);
+    setComboCatalogLoadedBranchKey(branchKey);
+    return singleRows;
+  };
+
+  const ensureComboCatalogLoaded = async () => {
+    const branchKey = filterBranchId || '';
+    if (comboCatalogLoadedBranchKey === branchKey) {
+      return comboCatalog;
+    }
+    return loadComboCatalog();
   };
 
   const formatComboProductLabel = (product: Product | undefined) => {
@@ -418,7 +439,6 @@ export default function ProductsPage() {
 
   const openCreateModal = () => {
     loadCategories().catch(() => pushToast('error', 'Không tải được nhóm hàng hóa'));
-    loadComboCatalog().catch(() => pushToast('error', 'Không tải được danh sách hàng hóa thành phần'));
     setEditingProductId(null);
     setProductForm(initialForm);
     setPendingImageFile(null);
@@ -450,7 +470,7 @@ export default function ProductsPage() {
 
     setEditingProductId(details.id);
     setProductForm({
-      type: (details.type as 'SINGLE' | 'COMBO') || 'SINGLE',
+      type: (details.type as 'SINGLE' | 'COMBO' | 'TIME') || 'SINGLE',
       autoCost: true,
       autoPrice: details.autoPrice ?? true,
       sku: details.sku || '',
@@ -462,12 +482,11 @@ export default function ProductsPage() {
       weight: details.weight || '',
       costPrice: formatMoneyValue(details.costPrice),
       price: formatMoneyValue(details.price) || '0',
+      timeRateAmount: formatMoneyValue(details.timeRateAmount),
+      timeRateMinutes: String(Math.max(1, Math.trunc(Number(details.timeRateMinutes || 60)))),
       isActive: Boolean(details.isActive),
     });
     setPendingImageFile(null);
-    await loadComboCatalog().catch(() => {
-      pushToast('error', 'Không tải được danh sách hàng hóa thành phần');
-    });
     if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
     setPendingPreviewUrl('');
 
@@ -490,14 +509,26 @@ export default function ProductsPage() {
       typeof details.comboItems === 'string'
         ? (JSON.parse(details.comboItems) as ComboItem[])
         : (details.comboItems as ComboItem[] | undefined) || [];
-    const normalizedComboItems = rawComboItems.map((item) => ({
-      itemProductId: item.itemProductId,
-      quantity: Number(item.quantity || 1),
-    }));
-    setComboItems(normalizedComboItems);
-    setComboSearchTerms(
-      normalizedComboItems.map((item) => formatComboProductLabel(comboCatalog.find((entry) => entry.id === item.itemProductId))),
-    );
+    if ((details.type || 'SINGLE') === 'COMBO') {
+      let comboRows: Product[] = comboCatalog;
+      try {
+        comboRows = await ensureComboCatalogLoaded();
+      } catch {
+        pushToast('error', 'Không tải được danh sách hàng hóa thành phần');
+      }
+
+      const normalizedComboItems = rawComboItems.map((item) => ({
+        itemProductId: item.itemProductId,
+        quantity: Number(item.quantity || 1),
+      }));
+      setComboItems(normalizedComboItems);
+      setComboSearchTerms(
+        normalizedComboItems.map((item) => formatComboProductLabel(comboRows.find((entry) => entry.id === item.itemProductId))),
+      );
+    } else {
+      setComboItems([]);
+      setComboSearchTerms([]);
+    }
 
     setError('');
     setIsAddProductOpen(true);
@@ -590,19 +621,19 @@ export default function ProductsPage() {
     if (productForm.sku && !/^[A-Za-z0-9_-]{3,50}$/.test(productForm.sku.trim())) {
       fieldErrors.sku = 'Mã hàng hóa chỉ gồm chữ, số, gạch dưới hoặc gạch ngang (3-50 ký tự)';
     }
-    if (productForm.unit && !/^[\p{L}\p{N}\s./-]{1,30}$/u.test(productForm.unit.trim())) {
+    if (productForm.type !== 'TIME' && productForm.unit && !/^[\p{L}\p{N}\s./-]{1,30}$/u.test(productForm.unit.trim())) {
       fieldErrors.unit = 'Đơn vị tính không đúng định dạng';
     }
 
     const weightValue = Number(productForm.weight || 0);
-    if (!Number.isFinite(weightValue) || weightValue < 0) {
+    if (productForm.type !== 'TIME' && (!Number.isFinite(weightValue) || weightValue < 0)) {
       fieldErrors.weight = 'Trọng lượng không hợp lệ';
     }
 
     const costPriceValue = parseMoneyInput(productForm.costPrice);
     const priceValue = parseMoneyInput(productForm.price);
     if (costPriceValue < 0) fieldErrors.costPrice = 'Giá vốn không hợp lệ';
-    if (priceValue <= 0) fieldErrors.price = 'Giá bán phải lớn hơn 0';
+    if (productForm.type !== 'TIME' && priceValue <= 0) fieldErrors.price = 'Giá bán phải lớn hơn 0';
 
     if (productForm.type === 'COMBO') {
       if (comboItems.length === 0) fieldErrors.comboItems = 'Combo phải có ít nhất một hàng hóa thành phần';
@@ -613,6 +644,13 @@ export default function ProductsPage() {
       if (comboItems.some((item) => !item.itemProductId || Number(item.quantity) <= 0)) {
         fieldErrors.comboItems = fieldErrors.comboItems || 'Thành phần combo không hợp lệ';
       }
+    }
+
+    if (productForm.type === 'TIME') {
+      const timeRateAmount = parseMoneyInput(productForm.timeRateAmount);
+      const timeRateMinutes = Math.max(0, Math.trunc(Number(productForm.timeRateMinutes || 0)));
+      if (timeRateAmount <= 0) fieldErrors.timeRateAmount = 'Giá dịch vụ phải lớn hơn 0';
+      if (timeRateMinutes <= 0) fieldErrors.timeRateMinutes = 'Thời lượng chuẩn phải lớn hơn 0';
     }
 
     const configsToValidate = editingProductId ? branchConfigs : buildCreateBranchConfigs();
@@ -664,10 +702,12 @@ export default function ProductsPage() {
         imageUrl,
         imageThumb,
         categoryId: productForm.categoryId || null,
-        unit: productForm.unit || undefined,
-        weight: Number(productForm.weight || 0),
+        unit: productForm.type === 'TIME' ? undefined : (productForm.unit || undefined),
+        weight: productForm.type === 'TIME' ? undefined : Number(productForm.weight || 0),
         costPrice: productForm.costPrice.trim() === '' ? undefined : parseMoneyInput(productForm.costPrice),
-        price: parseMoneyInput(productForm.price),
+        price: productForm.type === 'TIME' ? parseMoneyInput(productForm.timeRateAmount) : parseMoneyInput(productForm.price),
+        timeRateAmount: productForm.type === 'TIME' ? parseMoneyInput(productForm.timeRateAmount) : undefined,
+        timeRateMinutes: productForm.type === 'TIME' ? Math.max(1, Math.trunc(Number(productForm.timeRateMinutes || 0))) : undefined,
         isActive: productForm.isActive,
         branchConfigs: (editingProductId ? branchConfigs : buildCreateBranchConfigs()).map((item) => ({
           branchId: item.branchId,
@@ -1107,13 +1147,14 @@ export default function ProductsPage() {
           <select
             value={filterType}
             onChange={(event) => {
-              setFilterType(event.target.value as 'all' | 'SINGLE' | 'COMBO');
+              setFilterType(event.target.value as 'all' | 'SINGLE' | 'COMBO' | 'TIME');
               setPage(1);
             }}
           >
             <option value="all">Tất cả loại</option>
             <option value="SINGLE">Hàng riêng lẻ</option>
             <option value="COMBO">Combo</option>
+            <option value="TIME">Dịch vụ tính giờ</option>
           </select>
         </label>
 
@@ -1240,14 +1281,20 @@ export default function ProductsPage() {
                       >
                         {product.name} (Combo)
                       </button>
+                    ) : (product.type || 'SINGLE') === 'TIME' ? (
+                      `${product.name} (Tính giờ)`
                     ) : (
                       product.name
                     )}
                   </td>
-                  <td>{product.unit || '-'}</td>
+                  <td>{(product.type || 'SINGLE') === 'TIME' ? '-' : (product.unit || '-')}</td>
                   <td>{product.categoryName || '-'}</td>
                   <td className="num-col">{Math.trunc(Number(product.costPrice || 0)).toLocaleString('vi-VN')}</td>
-                  <td className="num-col">{Math.trunc(Number(product.price || 0)).toLocaleString('vi-VN')}</td>
+                  <td className="num-col">
+                    {(product.type || 'SINGLE') === 'TIME'
+                      ? 'Theo gio'
+                      : Math.trunc(Number(product.price || 0)).toLocaleString('vi-VN')}
+                  </td>
                   <td className="num-col">{Number(product.stock || 0).toLocaleString('vi-VN')}</td>
                   <td>
                     <div className="row-actions">
@@ -1386,17 +1433,26 @@ export default function ProductsPage() {
                   Loại hàng hóa
                   <select
                     value={productForm.type}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const nextType = event.target.value as 'SINGLE' | 'COMBO' | 'TIME';
                       setProductForm((prev) => ({
                         ...prev,
-                        type: event.target.value as 'SINGLE' | 'COMBO',
-                        autoCost: event.target.value === 'COMBO' ? prev.autoCost : false,
-                        autoPrice: event.target.value === 'COMBO' ? prev.autoPrice : false,
-                      }))
-                    }
+                        type: nextType,
+                        autoCost: nextType === 'COMBO' ? prev.autoCost : false,
+                        autoPrice: nextType === 'COMBO' ? prev.autoPrice : false,
+                        weight: nextType === 'TIME' ? '' : prev.weight,
+                        unit: nextType === 'TIME' ? '' : prev.unit,
+                      }));
+                      if (nextType === 'COMBO') {
+                        ensureComboCatalogLoaded().catch(() => {
+                          pushToast('error', 'Không tải được danh sách hàng hóa thành phần');
+                        });
+                      }
+                    }}
                   >
                     <option value="SINGLE">Hàng hóa riêng lẻ</option>
                     <option value="COMBO">Combo</option>
+                    <option value="TIME">Dịch vụ tính giờ</option>
                   </select>
                 </label>
 
@@ -1448,32 +1504,36 @@ export default function ProductsPage() {
                   </select>
                 </label>
 
-                <label>
-                  Trọng lượng (kg)
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={productForm.weight}
-                    onChange={(event) =>
-                      setProductForm({ ...productForm, weight: normalizeDecimalInput(event.target.value, 3) })
-                    }
-                  />
-                </label>
+                {productForm.type !== 'TIME' && (
+                  <label>
+                    Trọng lượng (kg)
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={productForm.weight}
+                      onChange={(event) =>
+                        setProductForm({ ...productForm, weight: normalizeDecimalInput(event.target.value, 3) })
+                      }
+                    />
+                  </label>
+                )}
 
-                <label>
-                  Đơn vị tính
-                  <input
-                    value={productForm.unit}
-                    onChange={(event) => {
-                      setProductForm({ ...productForm, unit: event.target.value });
-                      if (productFieldErrors.unit) setProductFieldErrors((prev) => ({ ...prev, unit: undefined }));
-                    }}
-                    placeholder="Ví dụ: lon, chai, hộp"
-                    maxLength={30}
-                    className={productFieldErrors.unit ? 'field-invalid' : ''}
-                  />
-                  <FormFieldError message={productFieldErrors.unit} />
-                </label>
+                {productForm.type !== 'TIME' && (
+                  <label>
+                    Đơn vị tính
+                    <input
+                      value={productForm.unit}
+                      onChange={(event) => {
+                        setProductForm({ ...productForm, unit: event.target.value });
+                        if (productFieldErrors.unit) setProductFieldErrors((prev) => ({ ...prev, unit: undefined }));
+                      }}
+                      placeholder="Ví dụ: lon, chai, hộp"
+                      maxLength={30}
+                      className={productFieldErrors.unit ? 'field-invalid' : ''}
+                    />
+                    <FormFieldError message={productFieldErrors.unit} />
+                  </label>
+                )}
 
                 <label>
                   Giá vốn
@@ -1515,49 +1575,89 @@ export default function ProductsPage() {
                   </div>
                 </label>
 
-                <label>
-                  Giá bán *
-                  <div className="price-row">
-                    <div className="price-input-wrap">
+                {productForm.type !== 'TIME' && (
+                  <label>
+                    Giá bán *
+                    <div className="price-row">
+                      <div className="price-input-wrap">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={productForm.price}
+                          onFocus={(event) => {
+                            if (parseMoneyInput(productForm.price) === 0) {
+                              setProductForm((prev) => ({ ...prev, price: '' }));
+                            } else {
+                              event.target.select();
+                            }
+                          }}
+                          onBlur={() => {
+                            setProductForm((prev) => ({
+                              ...prev,
+                              price: prev.price.trim() === '' ? '0' : formatMoneyInput(prev.price),
+                            }));
+                          }}
+                          onChange={(event) => {
+                            setProductForm({ ...productForm, price: formatMoneyInput(event.target.value) });
+                            if (productFieldErrors.price) setProductFieldErrors((prev) => ({ ...prev, price: undefined }));
+                          }}
+                          required
+                          disabled={productForm.type === 'COMBO' && productForm.autoPrice}
+                          className={productFieldErrors.price ? 'field-invalid' : ''}
+                        />
+                      </div>
+                      {productForm.type === 'COMBO' && (
+                        <div className="inline-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={productForm.autoPrice}
+                            onChange={(event) => setProductForm((prev) => ({ ...prev, autoPrice: event.target.checked }))}
+                          />
+                          <span>Tự động tính giá bán</span>
+                        </div>
+                      )}
+                    </div>
+                    <FormFieldError message={productFieldErrors.price} />
+                  </label>
+                )}
+
+                {productForm.type === 'TIME' && (
+                  <>
+                    <label>
+                      Giá dịch vụ *
                       <input
                         type="text"
                         inputMode="numeric"
-                        value={productForm.price}
-                        onFocus={(event) => {
-                          if (parseMoneyInput(productForm.price) === 0) {
-                            setProductForm((prev) => ({ ...prev, price: '' }));
-                          } else {
-                            event.target.select();
+                        value={productForm.timeRateAmount}
+                        onChange={(event) => {
+                          setProductForm({ ...productForm, timeRateAmount: formatMoneyInput(event.target.value) });
+                          if (productFieldErrors.timeRateAmount) {
+                            setProductFieldErrors((prev) => ({ ...prev, timeRateAmount: undefined }));
                           }
                         }}
-                        onBlur={() => {
-                          setProductForm((prev) => ({
-                            ...prev,
-                            price: prev.price.trim() === '' ? '0' : formatMoneyInput(prev.price),
-                          }));
-                        }}
-                        onChange={(event) => {
-                          setProductForm({ ...productForm, price: formatMoneyInput(event.target.value) });
-                          if (productFieldErrors.price) setProductFieldErrors((prev) => ({ ...prev, price: undefined }));
-                        }}
-                        required
-                        disabled={productForm.type === 'COMBO' && productForm.autoPrice}
-                        className={productFieldErrors.price ? 'field-invalid' : ''}
+                        className={productFieldErrors.timeRateAmount ? 'field-invalid' : ''}
                       />
-                    </div>
-                    {productForm.type === 'COMBO' && (
-                      <div className="inline-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={productForm.autoPrice}
-                          onChange={(event) => setProductForm((prev) => ({ ...prev, autoPrice: event.target.checked }))}
-                        />
-                        <span>Tự động tính giá bán</span>
-                      </div>
-                    )}
-                  </div>
-                  <FormFieldError message={productFieldErrors.price} />
-                </label>
+                      <FormFieldError message={productFieldErrors.timeRateAmount} />
+                    </label>
+
+                    <label>
+                      Thời lượng chuẩn *
+                      <input
+                        type="number"
+                        min={1}
+                        value={productForm.timeRateMinutes}
+                        onChange={(event) => {
+                          setProductForm({ ...productForm, timeRateMinutes: event.target.value });
+                          if (productFieldErrors.timeRateMinutes) {
+                            setProductFieldErrors((prev) => ({ ...prev, timeRateMinutes: undefined }));
+                          }
+                        }}
+                        className={productFieldErrors.timeRateMinutes ? 'field-invalid' : ''}
+                      />
+                      <FormFieldError message={productFieldErrors.timeRateMinutes} />
+                    </label>
+                  </>
+                )}
               </div>
 
               {productForm.type === 'COMBO' && (

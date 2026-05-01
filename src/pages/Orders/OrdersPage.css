@@ -1341,6 +1341,13 @@
   width: 100%;
 }
 
+.orders-bill-subline {
+  color: #101828;
+  font-size: 13px;
+  font-weight: 400;
+  font-style: italic;
+}
+
 .orders-remove-line-btn {
   background: #fee4e2;
   border: none;

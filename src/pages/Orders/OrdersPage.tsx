@@ -3,7 +3,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { areaService, diningTableService, orderService, roomService } from '../../services/api';
 import { DeleteActionIcon, EditActionIcon } from '../../components/ActionIcons';
 import FilterResetButton from '../../components/FilterResetButton';
+import { printUsingConfiguredRoute } from '../../utils/printerRouting';
 import NewOrderPage from './NewOrderPage';
+import { orderFeatureFlags } from './orderFeatureFlags';
 import './OrdersPage.css';
 
 type OrderRow = {
@@ -42,10 +44,17 @@ type OrderDetailItem = {
   lineId: string;
   productId: string;
   productName: string;
+  pricingTypeSnapshot?: 'FIXED' | 'TIME';
   unit?: string;
   baseUnitPrice?: number;
   unitPrice: number;
   quantity: number;
+  timeRateAmountSnapshot?: number;
+  timeRateMinutesSnapshot?: number;
+  usedMinutes?: number;
+  lineTotal?: number;
+  timerStatus?: 'RUNNING' | 'STOPPED';
+  activeSessionStartedAt?: string | null;
   note: string;
   lineDiscountAmount?: number;
   lineSurchargeAmount?: number;
@@ -77,6 +86,45 @@ type OrderDetail = {
   items: OrderDetailItem[];
 };
 
+type EditingOrderState = {
+  id: string;
+  code: string;
+  selectedTable: {
+    entityType: 'TABLE' | 'ROOM';
+    id: string;
+    name: string;
+    areaId: string;
+    areaName: string;
+    roomId?: string | null;
+    roomName?: string | null;
+  } | null;
+  customerName: string;
+  discountAmount?: number;
+  discountMode?: 'percent' | 'amount';
+  discountValue?: number;
+  surchargeAmount?: number;
+  surchargeMode?: 'percent' | 'amount';
+  surchargeValue?: number;
+  paidAmount?: number;
+  paymentMethod?: 'CASH' | 'BANKING';
+  billItems: {
+    lineId: string;
+    productId: string;
+    productName: string;
+    pricingTypeSnapshot?: 'FIXED' | 'TIME';
+    unit?: string;
+    unitPrice: number;
+    quantity: number;
+    timeRateAmountSnapshot?: number;
+    timeRateMinutesSnapshot?: number;
+    usedMinutes?: number;
+    lineTotal?: number;
+    timerStatus?: 'RUNNING' | 'STOPPED';
+    activeSessionStartedAt?: string | null;
+    note: string;
+  }[];
+};
+
 const orderStateLabel: Record<OrderRow['orderState'], string> = {
   PAID: 'Đã thanh toán',
   DELETED: 'Đã xóa',
@@ -93,6 +141,40 @@ const paymentMethodLabel = (method?: 'CASH' | 'BANKING' | null) => {
   if (method === 'BANKING') return 'Chuyển khoản';
   if (method === 'CASH') return 'Tiền mặt';
   return '-';
+};
+
+const formatNumberVi = (value: number) => Math.trunc(Number(value || 0)).toLocaleString('vi-VN');
+
+const buildOrderA4Content = (order: OrderDetail) => {
+  const lines: string[] = [];
+  lines.push(`Mã hóa đơn: ${order.code}`);
+  lines.push(`Thời gian: ${new Date(order.createdAt).toLocaleString('vi-VN')}`);
+  lines.push(`Khách hàng: ${order.customerName || '-'}`);
+  lines.push(`Khu vực/Vị trí: ${order.locationLabel || '-'}`);
+  lines.push('');
+  lines.push('Danh sách món:');
+
+  order.items.forEach((item, index) => {
+    const lineTotal = item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0);
+    lines.push(`${index + 1}. ${item.productName}`);
+    lines.push(`   SL: ${formatNumberVi(Number(item.quantity || 0))} | Đơn giá: ${formatNumberVi(Number(item.unitPrice || 0))} | Thành tiền: ${formatNumberVi(lineTotal)}`);
+    if (item.note?.trim()) {
+      lines.push(`   Ghi chú: ${item.note.trim()}`);
+    }
+  });
+
+  const discountTotal = Number(order.discountAmount || 0) + order.items.reduce((sum, item) => sum + Number(item.lineDiscountAmount || 0), 0);
+  const surchargeTotal = Number(order.surchargeAmount || 0) + order.items.reduce((sum, item) => sum + Number(item.lineSurchargeAmount || 0), 0);
+
+  lines.push('');
+  lines.push(`Tạm tính: ${formatNumberVi(Number(order.totalAmount || 0))}`);
+  lines.push(`Giảm giá: ${formatNumberVi(discountTotal)}`);
+  lines.push(`Phụ phí: ${formatNumberVi(surchargeTotal)}`);
+  lines.push(`Phải thanh toán: ${formatNumberVi(Number(order.finalAmount ?? order.totalAmount ?? 0))}`);
+  lines.push(`Đã thanh toán: ${formatNumberVi(Number(order.paidAmount || 0))}`);
+  lines.push(`Trạng thái: ${orderStateLabel[order.orderState] || order.orderState}`);
+  lines.push(`Hình thức thanh toán: ${paymentMethodLabel(order.paymentMethod)}`);
+  return lines.join('\n');
 };
 
 export default function OrdersPage() {
@@ -132,37 +214,7 @@ export default function OrdersPage() {
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [isSelectingAllOrders, setIsSelectingAllOrders] = useState(false);
-  const [editingOrder, setEditingOrder] = useState<null | {
-    id: string;
-    code: string;
-    selectedTable: {
-      entityType: 'TABLE' | 'ROOM';
-      id: string;
-      name: string;
-      areaId: string;
-      areaName: string;
-      roomId?: string | null;
-      roomName?: string | null;
-    } | null;
-    customerName: string;
-    discountAmount?: number;
-    discountMode?: 'percent' | 'amount';
-    discountValue?: number;
-    surchargeAmount?: number;
-    surchargeMode?: 'percent' | 'amount';
-    surchargeValue?: number;
-    paidAmount?: number;
-    paymentMethod?: 'CASH' | 'BANKING';
-    billItems: {
-      lineId: string;
-      productId: string;
-      productName: string;
-      unit?: string;
-      unitPrice: number;
-      quantity: number;
-      note: string;
-    }[];
-  }>(null);
+  const [editingOrder, setEditingOrder] = useState<EditingOrderState | null>(null);
 
   const historyPageSize = 5;
 
@@ -276,6 +328,37 @@ export default function OrdersPage() {
       quantity: number;
       note: string;
     }[];
+    billItemsPatch?: {
+      addedItems: {
+        lineId: string;
+        productId: string;
+        productName: string;
+        unit?: string;
+        baseUnitPrice?: number;
+        unitPrice: number;
+        quantity: number;
+        pricingTypeSnapshot?: 'FIXED' | 'TIME';
+        timeRateAmountSnapshot?: number;
+        timeRateMinutesSnapshot?: number;
+        usedMinutes?: number;
+        note: string;
+      }[];
+      updatedItems: ({
+        lineId: string;
+      } & Partial<{
+        productId: string;
+        productName: string;
+        unit?: string;
+        baseUnitPrice?: number;
+        unitPrice: number;
+        quantity: number;
+        pricingTypeSnapshot?: 'FIXED' | 'TIME';
+        usedMinutes?: number;
+        note: string;
+      }>)[];
+      removedItemIds: string[];
+      hasChanges: boolean;
+    };
     totalAmount: number;
     discountAmount: number;
     discountMode: 'percent' | 'amount';
@@ -335,41 +418,7 @@ export default function OrdersPage() {
     try {
       const response = await orderService.getById(order.id);
       const data = response.data;
-      const selectedTable = data?.entityType === 'ROOM'
-        ? {
-            entityType: 'ROOM' as const,
-            id: data.roomId,
-            name: data.roomName || 'Phòng',
-            areaId: 'room-area',
-            areaName: data.areaName || '-',
-            roomId: data.roomId,
-            roomName: data.roomName,
-          }
-        : {
-            entityType: 'TABLE' as const,
-            id: data.tableId,
-            name: data.tableName || 'Bàn',
-            areaId: 'table-area',
-            areaName: data.areaName || '-',
-            roomId: data.roomId,
-            roomName: data.roomName,
-          };
-
-      setEditingOrder({
-        id: data.id,
-        code: data.code,
-        selectedTable,
-        customerName: data.customerName || '',
-        discountAmount: Number(data.discountAmount || 0),
-        discountMode: data.discountMode || 'amount',
-        discountValue: Number(data.discountValue ?? data.discountAmount ?? 0),
-        surchargeAmount: Number(data.surchargeAmount || 0),
-        surchargeMode: data.surchargeMode || 'amount',
-        surchargeValue: Number(data.surchargeValue ?? data.surchargeAmount ?? 0),
-        paidAmount: Math.trunc(Number(data.paidAmount || 0)),
-        paymentMethod: data.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
-        billItems: Array.isArray(data.items) ? data.items : [],
-      });
+      setEditingOrder(mapOrderDetailToEditingState(data));
       setView('edit');
     } catch (error) {
       showToast('error', typeof error === 'string' ? error : 'Không thể cập nhật hóa đơn');
@@ -383,7 +432,9 @@ export default function OrdersPage() {
     }
     try {
       await orderService.print(order.id);
-      window.print();
+      const detailRes = await orderService.getById(order.id);
+      const detail = detailRes.data as OrderDetail;
+      await printUsingConfiguredRoute(`Hóa đơn ${detail.code}`, buildOrderA4Content(detail));
       showToast('success', 'Đã ghi nhận thao tác in hóa đơn');
     } catch (error) {
       showToast('error', typeof error === 'string' ? error : 'Không thể in hóa đơn');
@@ -533,7 +584,7 @@ export default function OrdersPage() {
     }
     try {
       await orderService.print(detailOrder.id);
-      window.print();
+      await printUsingConfiguredRoute(`Hóa đơn ${detailOrder.code}`, buildOrderA4Content(detailOrder));
       showToast('success', 'Đã ghi nhận thao tác in hóa đơn');
     } catch (error) {
       showToast('error', typeof error === 'string' ? error : 'Không thể in hóa đơn');
@@ -552,35 +603,94 @@ export default function OrdersPage() {
   const detailBillSurchargeTotal = detailHeaderSurcharge + detailLineSurchargeTotal;
 
   if (view === 'create') {
-    return <NewOrderPage onBack={() => setView('list')} onSaveOrder={saveOrder} />;
+    return (
+      <>
+        {toast && (
+          <div className="orders-toast-container" aria-live="polite" aria-atomic="true">
+            <div className={`orders-toast orders-toast-${toast.type}`}>{toast.message}</div>
+          </div>
+        )}
+        <NewOrderPage key="order-create" onBack={() => setView('list')} onSaveOrder={saveOrder} onStartTimeLineTimerForNewOrder={async (payload) => {
+          try {
+            const created = await orderService.create({
+          entityType: payload.table.entityType,
+          tableId: payload.table.entityType === 'TABLE' ? payload.table.id : undefined,
+          roomId: payload.table.entityType === 'ROOM' ? payload.table.id : payload.table.roomId || undefined,
+          customerName: payload.customerName,
+          totalAmount: payload.totalAmount,
+          discountAmount: payload.discountAmount,
+          discountMode: payload.discountMode,
+          discountValue: payload.discountValue,
+          surchargeAmount: payload.surchargeAmount,
+          surchargeMode: payload.surchargeMode,
+          surchargeValue: payload.surchargeValue,
+          paidAmount: Math.max(0, Math.trunc(payload.paidAmount || 0)),
+          paymentMethod: payload.paymentMethod,
+          billItems: payload.billItems,
+          branchId: branchId || undefined,
+        });
+
+        const createdOrderId = created.data?.id;
+        if (!createdOrderId) {
+          throw new Error('Không nhận được mã hóa đơn vừa tạo');
+        }
+
+        await orderService.startItemTimer(createdOrderId, payload.lineId);
+        await orderService.getItemTimerStatus(createdOrderId, payload.lineId);
+
+        const latestDetailResponse = await orderService.getById(createdOrderId);
+        setEditingOrder(mapOrderDetailToEditingState(latestDetailResponse.data as OrderDetail));
+        setView('edit');
+        await loadOrders();
+            showToast('success', 'Đã tạo hóa đơn và bắt đầu đếm giờ');
+          } catch (error: unknown) {
+            const errorMessage =
+              typeof error === 'string'
+                ? error
+                : (error as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message
+                  || (error as { message?: string })?.message
+                  || 'Không thể bắt đầu đếm giờ';
+            showToast('error', errorMessage);
+          }
+        }} />
+      </>
+    );
   }
 
   if (view === 'edit' && editingOrder) {
     return (
-      <NewOrderPage
-        mode="edit"
-        defaultTab="product"
-        orderCode={editingOrder.code}
-        initialData={{
-          selectedTable: editingOrder.selectedTable,
-          customerName: editingOrder.customerName,
-          discountAmount: editingOrder.discountAmount,
-          discountMode: editingOrder.discountMode,
-          discountValue: editingOrder.discountValue,
-          surchargeAmount: editingOrder.surchargeAmount,
-          surchargeMode: editingOrder.surchargeMode,
-          surchargeValue: editingOrder.surchargeValue,
-          paidAmount: editingOrder.paidAmount,
-          paymentMethod: editingOrder.paymentMethod,
-          billItems: editingOrder.billItems,
-        }}
-        onBack={() => {
-          setView('list');
-          setEditingOrder(null);
-        }}
-        onSaveOrder={async (payload) => {
+      <>
+        {toast && (
+          <div className="orders-toast-container" aria-live="polite" aria-atomic="true">
+            <div className={`orders-toast orders-toast-${toast.type}`}>{toast.message}</div>
+          </div>
+        )}
+        <NewOrderPage
+          key={`order-edit-${editingOrder.id}`}
+          mode="edit"
+          orderId={editingOrder.id}
+          defaultTab="product"
+          orderCode={editingOrder.code}
+          initialData={{
+            selectedTable: editingOrder.selectedTable,
+            customerName: editingOrder.customerName,
+            discountAmount: editingOrder.discountAmount,
+            discountMode: editingOrder.discountMode,
+            discountValue: editingOrder.discountValue,
+            surchargeAmount: editingOrder.surchargeAmount,
+            surchargeMode: editingOrder.surchargeMode,
+            surchargeValue: editingOrder.surchargeValue,
+            paidAmount: editingOrder.paidAmount,
+            paymentMethod: editingOrder.paymentMethod,
+            billItems: editingOrder.billItems,
+          }}
+          onBack={() => {
+            setView('list');
+            setEditingOrder(null);
+          }}
+          onSaveOrder={async (payload) => {
           try {
-            await orderService.update(editingOrder.id, {
+            const updatePayload = {
               entityType: payload.table.entityType,
               tableId: payload.table.entityType === 'TABLE' ? payload.table.id : undefined,
               roomId: payload.table.entityType === 'ROOM' ? payload.table.id : payload.table.roomId || undefined,
@@ -594,17 +704,55 @@ export default function OrdersPage() {
               surchargeValue: payload.surchargeValue,
               paidAmount: Math.min(Math.trunc(payload.paidAmount), Math.max(0, Math.trunc(payload.totalAmount))),
               paymentMethod: payload.paymentMethod,
-              billItems: payload.billItems,
-            });
+              ...(orderFeatureFlags.orderPatchUpdate
+                ? (payload.billItemsPatch?.hasChanges
+                  ? {
+                    billItemsPatch: {
+                      addedItems: payload.billItemsPatch?.addedItems || [],
+                      updatedItems: payload.billItemsPatch?.updatedItems || [],
+                      removedItemIds: payload.billItemsPatch?.removedItemIds || [],
+                    },
+                  }
+                  : {})
+                : { billItems: payload.billItems }),
+            };
+            await orderService.update(editingOrder.id, updatePayload);
             await loadOrders();
             setView('list');
             setEditingOrder(null);
             showToast('success', 'Cập nhật hóa đơn thành công');
           } catch (error) {
-            showToast('error', typeof error === 'string' ? error : 'Không thể cập nhật hóa đơn');
+            const message = typeof error === 'string' ? error : 'Không thể cập nhật hóa đơn';
+            if (String(message).includes('IMMUTABLE_TIME_SNAPSHOT')) {
+              showToast('error', 'Không thể sửa mức giá/phút snapshot của dòng dịch vụ thời gian đã tạo');
+              return;
+            }
+            showToast('error', message);
           }
-        }}
-      />
+          }}
+          onToggleTimeLineTimer={async (lineId, action) => {
+          if (action === 'start') {
+            await orderService.startItemTimer(editingOrder.id, lineId);
+          } else {
+            await orderService.stopItemTimer(editingOrder.id, lineId);
+          }
+          const latestDetailResponse = await orderService.getById(editingOrder.id);
+          const latestEditingState = mapOrderDetailToEditingState(latestDetailResponse.data as OrderDetail);
+          setEditingOrder(latestEditingState);
+          await loadOrders();
+
+          const targetLine = latestEditingState.billItems.find((item) => item.lineId === lineId);
+          const nextTimerStatus = targetLine?.timerStatus === 'RUNNING' ? 'RUNNING' : 'STOPPED';
+          const nextUsedMinutes = Math.max(0, Math.trunc(Number(targetLine?.usedMinutes || 0)));
+          const nextLineTotal = Math.max(0, Math.trunc(Number(targetLine?.lineTotal || 0)));
+          return {
+            usedMinutes: nextUsedMinutes,
+            lineTotal: nextLineTotal,
+            timerStatus: nextTimerStatus,
+          };
+          }}
+        />
+      </>
     );
   }
 
@@ -1315,3 +1463,56 @@ export default function OrdersPage() {
     ...row,
     orderState: normalizeOrderState(row),
   });
+  const mapOrderDetailToEditingState = (data: OrderDetail): EditingOrderState => {
+    const selectedTable = data?.entityType === 'ROOM'
+      ? {
+          entityType: 'ROOM' as const,
+          id: data.roomId || '',
+          name: data.roomName || 'Phòng',
+          areaId: 'room-area',
+          areaName: data.areaName || '-',
+          roomId: data.roomId,
+          roomName: data.roomName,
+        }
+      : {
+          entityType: 'TABLE' as const,
+          id: data.tableId || '',
+          name: data.tableName || 'Bàn',
+          areaId: 'table-area',
+          areaName: data.areaName || '-',
+          roomId: data.roomId,
+          roomName: data.roomName,
+        };
+
+    return {
+      id: data.id,
+      code: data.code,
+      selectedTable,
+      customerName: data.customerName || '',
+      discountAmount: Number(data.discountAmount || 0),
+      discountMode: data.discountMode || 'amount',
+      discountValue: Number(data.discountValue ?? data.discountAmount ?? 0),
+      surchargeAmount: Number(data.surchargeAmount || 0),
+      surchargeMode: data.surchargeMode || 'amount',
+      surchargeValue: Number(data.surchargeValue ?? data.surchargeAmount ?? 0),
+      paidAmount: Math.trunc(Number(data.paidAmount || 0)),
+      paymentMethod: data.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
+      billItems: Array.isArray(data.items)
+        ? data.items.map((item) => {
+            if (item.pricingTypeSnapshot === 'TIME') {
+              const usedMinutes = Math.max(0, Math.trunc(Number(item.usedMinutes || 0)));
+              const rateMinutes = Math.max(1, Math.trunc(Number(item.timeRateMinutesSnapshot || 1)));
+              const unitPrice = Math.max(0, Math.trunc(Number(item.unitPrice || 0)));
+              return {
+                ...item,
+                lineTotal: Math.floor((unitPrice * usedMinutes) / rateMinutes),
+              };
+            }
+            return {
+              ...item,
+              lineTotal: Math.max(0, Math.trunc(Number(item.quantity || 0)) * Math.trunc(Number(item.unitPrice || 0))),
+            };
+          })
+        : [],
+    };
+  };
