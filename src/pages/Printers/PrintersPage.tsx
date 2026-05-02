@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { PrintActionIcon } from '../../components/ActionIcons';
-import { printA4PlainText } from '../../utils/print';
+import { printUsingConfiguredRoute } from '../../utils/printerRouting';
 import './PrintersPage.css';
 
 type PrinterRole = 'default' | 'backup' | null;
 type TemplateKey = 'receipt_80mm' | 'invoice_a4';
+type ConnectionMode = 'bridge' | 'usb';
 
 type PrinterRow = {
   id: string;
   label: string;
   vendorId?: number;
   productId?: number;
+};
+
+type BridgePrinterMapping = {
+  type?: string;
+  name?: string;
 };
 
 type TemplateRow = {
@@ -239,6 +245,14 @@ export default function PrintersPage() {
   const [backupPrinterId, setBackupPrinterId] = useState('');
   const [templates, setTemplates] = useState<TemplateRow[]>(initialTemplates);
   const [defaultTemplateKey, setDefaultTemplateKey] = useState<TemplateKey>('receipt_80mm');
+  const [connectionMode, setConnectionMode] = useState<ConnectionMode>('bridge');
+  const [bridgeEnabled, setBridgeEnabled] = useState(true);
+  const [bridgeUrl, setBridgeUrl] = useState('ws://127.0.0.1:12212/printer');
+  const [receiptType, setReceiptType] = useState('RECEIPT');
+  const [invoiceType, setInvoiceType] = useState('INVOICE');
+  const [bridgeStatus, setBridgeStatus] = useState<'idle' | 'checking' | 'connected' | 'error'>('idle');
+  const [bridgeStatusText, setBridgeStatusText] = useState('Chua kiem tra ket noi Bridge');
+  const [bridgeMappings, setBridgeMappings] = useState<BridgePrinterMapping[]>([]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewTemplateKey, setPreviewTemplateKey] = useState<TemplateKey>('receipt_80mm');
   const [previewPrinterId, setPreviewPrinterId] = useState('');
@@ -254,11 +268,21 @@ export default function PrintersPage() {
         defaultPrinterId?: string;
         backupPrinterId?: string;
         defaultTemplateKey?: TemplateKey;
+        connectionMode?: ConnectionMode;
+        bridgeEnabled?: boolean;
+        bridgeUrl?: string;
+        receiptType?: string;
+        invoiceType?: string;
         templates?: TemplateRow[];
       };
       if (parsed.defaultPrinterId) setDefaultPrinterId(parsed.defaultPrinterId);
       if (parsed.backupPrinterId) setBackupPrinterId(parsed.backupPrinterId);
       if (parsed.defaultTemplateKey) setDefaultTemplateKey(parsed.defaultTemplateKey);
+      if (parsed.connectionMode === 'bridge' || parsed.connectionMode === 'usb') setConnectionMode(parsed.connectionMode);
+      if (typeof parsed.bridgeEnabled === 'boolean') setBridgeEnabled(parsed.bridgeEnabled);
+      if (typeof parsed.bridgeUrl === 'string' && parsed.bridgeUrl.trim()) setBridgeUrl(parsed.bridgeUrl);
+      if (typeof parsed.receiptType === 'string' && parsed.receiptType.trim()) setReceiptType(parsed.receiptType);
+      if (typeof parsed.invoiceType === 'string' && parsed.invoiceType.trim()) setInvoiceType(parsed.invoiceType);
       if (Array.isArray(parsed.templates) && parsed.templates.length > 0) {
         setTemplates(parsed.templates);
       }
@@ -274,10 +298,15 @@ export default function PrintersPage() {
         defaultPrinterId,
         backupPrinterId,
         defaultTemplateKey,
+        connectionMode,
+        bridgeEnabled,
+        bridgeUrl,
+        receiptType,
+        invoiceType,
         templates,
       }),
     );
-  }, [backupPrinterId, defaultPrinterId, defaultTemplateKey, templates]);
+  }, [backupPrinterId, bridgeEnabled, bridgeUrl, connectionMode, defaultPrinterId, defaultTemplateKey, invoiceType, receiptType, templates]);
 
   useEffect(() => {
     if (!defaultPrinterId || !backupPrinterId) return;
@@ -310,11 +339,65 @@ export default function PrintersPage() {
     }
   };
 
+  const deriveBridgeHttpBaseUrl = (url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return 'http://127.0.0.1:12212';
+    if (trimmed.startsWith('ws://')) return `http://${trimmed.slice(5).replace(/\/printer\/?$/, '')}`;
+    if (trimmed.startsWith('wss://')) return `https://${trimmed.slice(6).replace(/\/printer\/?$/, '')}`;
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed.replace(/\/printer\/?$/, '');
+    return 'http://127.0.0.1:12212';
+  };
+
+  const testBridgeConnection = async () => {
+    if (!bridgeEnabled) {
+      setBridgeStatus('idle');
+      setBridgeStatusText('Bridge dang tat. Bam Enable Bridge de bat ket noi.');
+      setBridgeMappings([]);
+      return;
+    }
+    const baseUrl = deriveBridgeHttpBaseUrl(bridgeUrl);
+    setBridgeStatus('checking');
+    setBridgeStatusText('Dang kiem tra ket noi Bridge...');
+    try {
+      const [printersRes, configRes] = await Promise.all([
+        fetch(`${baseUrl}/system/printers.json`, { method: 'GET' }),
+        fetch(`${baseUrl}/config.json`, { method: 'GET' }),
+      ]);
+      if (!printersRes.ok) throw new Error(`HTTP ${printersRes.status}`);
+      if (!configRes.ok) throw new Error(`HTTP ${configRes.status}`);
+      const printerData = await printersRes.json();
+      const configData = await configRes.json();
+      const rows = Array.isArray(printerData) ? (printerData as Array<{ name?: string }>) : [];
+      const mappings = Array.isArray(configData?.printer?.mappings)
+        ? (configData.printer.mappings as BridgePrinterMapping[])
+        : [];
+      setBridgeMappings(mappings);
+      setBridgeStatus('connected');
+      setBridgeStatusText(`Da ket noi Bridge. Tim thay ${rows.length} printer tren he dieu hanh.`);
+    } catch (connectionError: any) {
+      setBridgeMappings([]);
+      setBridgeStatus('error');
+      setBridgeStatusText(`Khong ket noi duoc Bridge (${connectionError?.message || 'Unknown error'})`);
+    }
+  };
+
   useEffect(() => {
     loadWebUsbPrinters().catch(() => {
       setError('Không đọc được danh sách máy in từ WebUSB');
     });
   }, [hasWebUsb]);
+
+  useEffect(() => {
+    if (connectionMode !== 'bridge') return;
+    testBridgeConnection().catch(() => undefined);
+  }, [connectionMode]);
+
+  useEffect(() => {
+    if (bridgeEnabled) return;
+    setBridgeStatus('idle');
+    setBridgeStatusText('Bridge dang tat. Bam Enable Bridge de bat ket noi.');
+    setBridgeMappings([]);
+  }, [bridgeEnabled]);
 
   const requestPrinter = async () => {
     if (!hasWebUsb) return;
@@ -347,6 +430,18 @@ export default function PrintersPage() {
     if (backupPrinterId === printerId) return 'backup';
     return null;
   };
+
+  const bridgeMappedPrinters = useMemo(() => {
+    const rows = [
+      { code: receiptType, name: bridgeMappings.find((item) => item.type === receiptType)?.name || '' },
+      { code: invoiceType, name: bridgeMappings.find((item) => item.type === invoiceType)?.name || '' },
+    ];
+    return rows.filter((item, index) => item.code && item.name && rows.findIndex((it) => it.code === item.code && it.name === item.name) === index);
+  }, [bridgeMappings, invoiceType, receiptType]);
+
+  const activeUsbPrinters = useMemo(() => {
+    return printers.filter((printer) => printer.id === defaultPrinterId || printer.id === backupPrinterId);
+  }, [backupPrinterId, defaultPrinterId, printers]);
 
   const sendEscPosPayloadToUsbPrinter = async (device: UsbWritableDeviceLike, payload: Uint8Array) => {
     const preferredConfig = device.configuration || device.configurations?.[0];
@@ -448,7 +543,7 @@ export default function PrintersPage() {
 
   const onTestPrint = async () => {
     setPreviewTemplateKey(defaultTemplateKey);
-    setPreviewPrinterId(defaultPrinterId || printers[0]?.id || '');
+    setPreviewPrinterId(defaultPrinterId || activeUsbPrinters[0]?.id || printers[0]?.id || '');
     setIsPreviewOpen(true);
   };
 
@@ -469,8 +564,10 @@ export default function PrintersPage() {
           : '';
 
     try {
-      if (isA4Template) {
-        await printA4PlainText(selectedTemplate.name, selectedTemplate.content);
+      if (connectionMode === 'bridge') {
+        await printUsingConfiguredRoute(selectedTemplate.name, selectedTemplate.content);
+      } else if (isA4Template) {
+        await printUsingConfiguredRoute(selectedTemplate.name, selectedTemplate.content);
       } else {
         await printWithFallback(previewPrinterId, fallbackPrinterId, selectedTemplate.key, selectedTemplate.content);
       }
@@ -487,20 +584,38 @@ export default function PrintersPage() {
       <div className="printers-toolbar">
         <h2>Thiết lập máy in</h2>
         <div className="printers-toolbar-actions">
+          <button
+            type="button"
+            className={connectionMode === 'bridge' ? 'primary-btn' : 'ghost-btn'}
+            onClick={() => setConnectionMode('bridge')}
+          >
+            WebApp Bridge
+          </button>
+          <button
+            type="button"
+            className={connectionMode === 'usb' ? 'primary-btn' : 'ghost-btn'}
+            onClick={() => setConnectionMode('usb')}
+          >
+            WebUSB
+          </button>
           <button className="ghost-btn printers-test-print-btn" onClick={() => onTestPrint().catch(() => undefined)}>
             <PrintActionIcon />
             In thử
           </button>
-          <button className="ghost-btn" onClick={loadWebUsbPrinters} disabled={!hasWebUsb || isLoading}>
-            {isLoading ? 'Đang quét...' : 'Tải lại danh sách USB'}
-          </button>
-          <button className="primary-btn" onClick={requestPrinter} disabled={!hasWebUsb}>
-            Kết nối máy in USB
-          </button>
+          {connectionMode === 'usb' && (
+            <>
+              <button className="ghost-btn" onClick={loadWebUsbPrinters} disabled={!hasWebUsb || isLoading}>
+                {isLoading ? 'Đang quét...' : 'Tải lại danh sách USB'}
+              </button>
+              <button className="primary-btn" onClick={requestPrinter} disabled={!hasWebUsb}>
+                Kết nối máy in USB
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {!hasWebUsb && (
+      {connectionMode === 'usb' && !hasWebUsb && (
         <p className="printer-warning">
           Trình duyệt này không hỗ trợ WebUSB. Vui lòng dùng Chrome/Edge trên desktop để kết nối máy in.
         </p>
@@ -548,7 +663,11 @@ export default function PrintersPage() {
                 </select>
               </label>
               {previewTemplateKey === 'invoice_a4' && (
-                <p className="printer-warning">Mẫu A4 sẽ in qua hộp thoại in của trình duyệt (chọn máy in inkjet/laser tại đó).</p>
+                <p className="printer-warning">
+                  {connectionMode === 'bridge'
+                    ? 'Mau A4 se in silent qua WebApp Bridge (khong mo window.print).'
+                    : 'Mau A4 se in qua hop thoai in cua trinh duyet trong WebUSB mode.'}
+                </p>
               )}
             </div>
 
@@ -571,12 +690,99 @@ export default function PrintersPage() {
 
       <div className="printers-layout">
         <div className="printer-panel">
-          <h3>Danh sách máy in</h3>
-          {printers.length === 0 ? (
-            <div className="empty-state">Chưa tìm thấy máy in USB được cấp quyền.</div>
+          <h3>Cau hinh WebApp Hardware Bridge</h3>
+          <div className="template-list">
+            <article className="template-card is-active">
+              <div className="template-head">
+                <strong>Bridge routing</strong>
+                <button
+                  type="button"
+                  className={bridgeEnabled ? 'ghost-btn' : 'primary-btn'}
+                  onClick={() => setBridgeEnabled((prev) => !prev)}
+                >
+                  {bridgeEnabled ? 'Disable Bridge' : 'Enable Bridge'}
+                </button>
+              </div>
+              <label>
+                WebSocket URL
+                <input value={bridgeUrl} onChange={(event) => setBridgeUrl(event.target.value)} placeholder="ws://127.0.0.1:12212/printer" />
+              </label>
+              <label>
+                Type cho hoa don A4
+                <input value={invoiceType} onChange={(event) => setInvoiceType(event.target.value.toUpperCase())} placeholder="INVOICE" />
+              </label>
+              <label>
+                Type cho hoa don 80mm (ESC/POS)
+                <input value={receiptType} onChange={(event) => setReceiptType(event.target.value.toUpperCase())} placeholder="RECEIPT" />
+              </label>
+              <div className="bridge-actions">
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => testBridgeConnection().catch(() => undefined)}
+                  disabled={!bridgeEnabled || bridgeStatus === 'checking'}
+                >
+                  {bridgeStatus === 'checking' ? 'Dang kiem tra...' : 'Kiem tra ket noi Bridge'}
+                </button>
+              </div>
+              <p className={`bridge-status bridge-status-${bridgeStatus}`}>{bridgeStatusText}</p>
+              {connectionMode === 'bridge' && (
+                <p className="bridge-note">
+                  Luu y: Bridge chi doc danh sach printer tu he dieu hanh. Danh sach nay khong dam bao trang thai bat/tat vat ly cua may in.
+                </p>
+              )}
+            </article>
+          </div>
+        </div>
+
+        <div className="printer-panel">
+          <h3>Danh sách máy in ({connectionMode === 'bridge' ? 'Bridge' : 'WebUSB'})</h3>
+          {connectionMode === 'usb' && (
+            <div className="printers-preview-controls">
+              <label>
+                May in USB mac dinh
+                <select value={defaultPrinterId} onChange={(event) => onSelectDefaultPrinter(event.target.value)}>
+                  <option value="">-- Chon may in --</option>
+                  {printers.map((printer) => (
+                    <option key={printer.id} value={printer.id}>
+                      {printer.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                May in USB thay the
+                <select value={backupPrinterId} onChange={(event) => onSelectBackupPrinter(event.target.value)}>
+                  <option value="">-- Khong dung --</option>
+                  {printers.map((printer) => (
+                    <option key={printer.id} value={printer.id}>
+                      {printer.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+          {connectionMode === 'bridge' ? (
+            bridgeMappedPrinters.length === 0 ? (
+              <div className="empty-state">Chua tim thay mapping cho type dang cau hinh. Hay map type trong Bridge UI.</div>
+            ) : (
+              <div className="printer-list">
+                {bridgeMappedPrinters.map((printer) => (
+                  <article key={`${printer.code}-${printer.name}`} className="printer-card is-active">
+                    <div>
+                      <strong>{printer.name}</strong>
+                      <div className="printer-meta">Code: {printer.code}</div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )
+          ) : activeUsbPrinters.length === 0 ? (
+            <div className="empty-state">Khong co may in USB dang online va duoc gan mac dinh/thay the.</div>
           ) : (
             <div className="printer-list">
-              {printers.map((printer) => {
+              {activeUsbPrinters.map((printer) => {
                 const role = renderPrinterRole(printer.id);
                 return (
                   <article key={printer.id} className={`printer-card ${role ? 'is-active' : ''}`}>

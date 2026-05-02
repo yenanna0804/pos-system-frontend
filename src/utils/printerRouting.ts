@@ -1,6 +1,18 @@
 import { printA4PlainText } from './print';
 
 type TemplateKey = 'receipt_80mm' | 'invoice_a4';
+type ConnectionMode = 'bridge' | 'usb';
+
+type PrinterSettings = {
+  defaultTemplateKey?: TemplateKey;
+  bridgeEnabled?: boolean;
+  bridgeUrl?: string;
+  receiptType?: string;
+  invoiceType?: string;
+  connectionMode?: ConnectionMode;
+  defaultPrinterId?: string;
+  backupPrinterId?: string;
+};
 
 type UsbDeviceLike = {
   serialNumber?: string;
@@ -51,23 +63,63 @@ type UsbWritableDeviceLike = UsbDeviceLike & {
 
 const STORAGE_KEY = 'pos_printer_settings_v1';
 
+const loadSettings = (): PrinterSettings => {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (!saved) return {};
+  try {
+    return JSON.parse(saved) as PrinterSettings;
+  } catch {
+    return {};
+  }
+};
+
 const getDeviceKey = (device: UsbDeviceLike) => {
   if (device.serialNumber?.trim()) return device.serialNumber;
   return `${device.vendorId ?? 'na'}-${device.productId ?? 'na'}-${device.productName ?? 'unknown'}`;
 };
 
-const buildCanvasFromTemplate = (content: string, templateKey: TemplateKey) => {
+const uint8ToBase64 = (bytes: Uint8Array) => {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+};
+
+const textToEscPosPayload = (content: string) => {
+  const encoder = new TextEncoder();
+  const init = new Uint8Array([0x1b, 0x40]);
+  const alignLeft = new Uint8Array([0x1b, 0x61, 0x00]);
+  const text = encoder.encode(`${content}\n\n\n`);
+  const cut = new Uint8Array([0x1d, 0x56, 0x42, 0x00]);
+
+  const payload = new Uint8Array(init.length + alignLeft.length + text.length + cut.length);
+  let cursor = 0;
+  payload.set(init, cursor);
+  cursor += init.length;
+  payload.set(alignLeft, cursor);
+  cursor += alignLeft.length;
+  payload.set(text, cursor);
+  cursor += text.length;
+  payload.set(cut, cursor);
+
+  return payload;
+};
+
+const buildCanvasFromText = (content: string, templateKey: TemplateKey) => {
   const isReceipt = templateKey === 'receipt_80mm';
-  const fontSize = isReceipt ? 22 : 24;
+  const fontSize = isReceipt ? 22 : 26;
   const lineHeight = Math.round(fontSize * 1.45);
-  const horizontalPadding = isReceipt ? 10 : 24;
+  const horizontalPadding = isReceipt ? 10 : 36;
   const lines = content.split('\n');
   const longestLine = lines.reduce((max, line) => Math.max(max, line.length), 0);
   const charsPerLine = isReceipt ? 32 : 48;
 
-  const contentWidth = Math.max(320, Math.ceil((longestLine / charsPerLine) * 560));
-  const width = Math.min(576, contentWidth + horizontalPadding * 2);
-  const height = Math.max(160, lines.length * lineHeight + 24);
+  const contentWidth = Math.max(isReceipt ? 320 : 960, Math.ceil((longestLine / charsPerLine) * (isReceipt ? 560 : 1100)));
+  const width = isReceipt ? Math.min(576, contentWidth + horizontalPadding * 2) : 1240;
+  const height = Math.max(isReceipt ? 160 : 1754, lines.length * lineHeight + (isReceipt ? 24 : 72));
 
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -75,7 +127,7 @@ const buildCanvasFromTemplate = (content: string, templateKey: TemplateKey) => {
 
   const ctx = canvas.getContext('2d');
   if (!ctx) {
-    throw new Error('Không khởi tạo được canvas để tạo mẫu in');
+    throw new Error('Khong khoi tao duoc canvas de in');
   }
 
   ctx.fillStyle = '#ffffff';
@@ -85,71 +137,110 @@ const buildCanvasFromTemplate = (content: string, templateKey: TemplateKey) => {
   ctx.textBaseline = 'top';
 
   lines.forEach((line, index) => {
-    ctx.fillText(line, horizontalPadding, 12 + index * lineHeight);
+    ctx.fillText(line, horizontalPadding, isReceipt ? 12 : 24 + index * lineHeight);
   });
 
   return canvas;
 };
 
-const buildEscPosRasterPayload = (canvas: HTMLCanvasElement) => {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    throw new Error('Không đọc được dữ liệu canvas để in');
-  }
+const submitBridgeJob = (url: string, payload: Record<string, unknown>) =>
+  new Promise<void>((resolve, reject) => {
+    const websocket = new WebSocket(url);
+    let settled = false;
 
-  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const width = image.width;
-  const height = image.height;
-  const bytesPerRow = Math.ceil(width / 8);
-  const raster = new Uint8Array(bytesPerRow * height);
-
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const index = (y * width + x) * 4;
-      const r = image.data[index];
-      const g = image.data[index + 1];
-      const b = image.data[index + 2];
-      const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-      const isBlack = luminance < 160;
-      if (isBlack) {
-        const byteIndex = y * bytesPerRow + (x >> 3);
-        raster[byteIndex] |= 0x80 >> (x & 7);
+    const cleanup = () => {
+      websocket.onopen = null;
+      websocket.onmessage = null;
+      websocket.onerror = null;
+      websocket.onclose = null;
+      if (websocket.readyState === WebSocket.OPEN || websocket.readyState === WebSocket.CONNECTING) {
+        websocket.close();
       }
-    }
+    };
+
+    const finishOk = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+
+    const finishError = (message: string) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(message));
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      finishError('Khong ket noi duoc WebApp Hardware Bridge');
+    }, 3500);
+
+    websocket.onopen = () => {
+      try {
+        websocket.send(JSON.stringify(payload));
+      } catch {
+        window.clearTimeout(timeoutId);
+        finishError('Khong gui duoc lenh in den Bridge');
+      }
+    };
+
+    websocket.onmessage = (event) => {
+      try {
+        const response = JSON.parse(String(event.data)) as { success?: boolean; message?: string };
+        if (response.success === false) {
+          window.clearTimeout(timeoutId);
+          finishError(response.message || 'Bridge tu choi lenh in');
+          return;
+        }
+      } catch {
+      }
+      window.clearTimeout(timeoutId);
+      finishOk();
+    };
+
+    websocket.onerror = () => {
+      window.clearTimeout(timeoutId);
+      finishError('WebSocket den Bridge bi loi');
+    };
+
+    websocket.onclose = () => {
+      window.clearTimeout(timeoutId);
+      if (!settled) {
+        finishError('Bridge da dong ket noi truoc khi in xong');
+      }
+    };
+  });
+
+const printViaBridge = async (title: string, content: string, templateKey: TemplateKey, settings: PrinterSettings) => {
+  const bridgeUrl = settings.bridgeUrl?.trim() || 'ws://127.0.0.1:12212/printer';
+  if (templateKey === 'invoice_a4') {
+    const invoiceType = settings.invoiceType?.trim() || 'INVOICE';
+    const canvas = buildCanvasFromText(content, 'invoice_a4');
+    const imageBase64 = canvas.toDataURL('image/png').split(',')[1] || '';
+    if (!imageBase64) throw new Error('Khong tao duoc du lieu anh de in A4');
+    await submitBridgeJob(bridgeUrl, {
+      id: `invoice-${Date.now()}`,
+      type: invoiceType,
+      url: `${title || 'invoice'}.png`,
+      file_content: imageBase64,
+    });
+    return;
   }
 
-  const xL = bytesPerRow & 0xff;
-  const xH = (bytesPerRow >> 8) & 0xff;
-  const yL = height & 0xff;
-  const yH = (height >> 8) & 0xff;
-
-  const init = new Uint8Array([0x1b, 0x40]);
-  const alignLeft = new Uint8Array([0x1b, 0x61, 0x00]);
-  const rasterHeader = new Uint8Array([0x1d, 0x76, 0x30, 0x00, xL, xH, yL, yH]);
-  const feed = new Uint8Array([0x0a, 0x0a, 0x0a]);
-  const cut = new Uint8Array([0x1d, 0x56, 0x42, 0x00]);
-
-  const payload = new Uint8Array(init.length + alignLeft.length + rasterHeader.length + raster.length + feed.length + cut.length);
-  let cursor = 0;
-  payload.set(init, cursor);
-  cursor += init.length;
-  payload.set(alignLeft, cursor);
-  cursor += alignLeft.length;
-  payload.set(rasterHeader, cursor);
-  cursor += rasterHeader.length;
-  payload.set(raster, cursor);
-  cursor += raster.length;
-  payload.set(feed, cursor);
-  cursor += feed.length;
-  payload.set(cut, cursor);
-
-  return payload;
+  const receiptType = settings.receiptType?.trim() || 'RECEIPT';
+  const payload = textToEscPosPayload(content);
+  await submitBridgeJob(bridgeUrl, {
+    id: `receipt-${Date.now()}`,
+    type: receiptType,
+    raw_content: uint8ToBase64(payload),
+  });
 };
 
 const sendEscPosPayloadToUsbPrinter = async (device: UsbWritableDeviceLike, payload: Uint8Array) => {
   const preferredConfig = device.configuration || device.configurations?.[0];
   if (!preferredConfig) {
-    throw new Error('Không tìm thấy cấu hình USB hợp lệ cho máy in');
+    throw new Error('Khong tim thay cau hinh USB hop le cho may in');
   }
 
   const targetInterface = preferredConfig.interfaces.find((iface) =>
@@ -160,21 +251,21 @@ const sendEscPosPayloadToUsbPrinter = async (device: UsbWritableDeviceLike, payl
   );
   const selectedInterface = targetInterface || fallbackInterface;
   if (!selectedInterface) {
-    throw new Error('Không tìm thấy cổng OUT để gửi lệnh in');
+    throw new Error('Khong tim thay cong OUT de gui lenh in');
   }
 
   const selectedAlternate =
     selectedInterface.alternates.find((alt) => alt.endpoints.some((ep) => ep.direction === 'out' && ep.type === 'bulk')) ||
     selectedInterface.alternates.find((alt) => alt.endpoints.some((ep) => ep.direction === 'out'));
   if (!selectedAlternate) {
-    throw new Error('Không tìm thấy alternate phù hợp để in');
+    throw new Error('Khong tim thay alternate phu hop de in');
   }
 
   const outEndpoint =
     selectedAlternate.endpoints.find((ep) => ep.direction === 'out' && ep.type === 'bulk') ||
     selectedAlternate.endpoints.find((ep) => ep.direction === 'out');
   if (!outEndpoint) {
-    throw new Error('Không tìm thấy endpoint OUT để in');
+    throw new Error('Khong tim thay endpoint OUT de in');
   }
 
   let claimedInterfaceNumber: number | null = null;
@@ -208,58 +299,44 @@ const sendEscPosPayloadToUsbPrinter = async (device: UsbWritableDeviceLike, payl
   }
 };
 
-const printViaUsbByPrinterId = async (printerId: string, templateKey: TemplateKey, content: string) => {
+const printViaUsbByPrinterId = async (printerId: string, content: string) => {
   const usbNavigator = navigator as UsbNavigatorLike;
   const devices = await usbNavigator.usb?.getDevices();
-  if (!devices) throw new Error('WebUSB chưa sẵn sàng');
+  if (!devices) throw new Error('WebUSB chua san sang');
   const device = devices.find((item) => getDeviceKey(item) === printerId) as UsbWritableDeviceLike | undefined;
-  if (!device) throw new Error('Không tìm thấy máy in đã cấp quyền');
-  const canvas = buildCanvasFromTemplate(content, templateKey);
-  const payload = buildEscPosRasterPayload(canvas);
+  if (!device) throw new Error('Khong tim thay may in da cap quyen');
+  const payload = textToEscPosPayload(content);
   await sendEscPosPayloadToUsbPrinter(device, payload);
 };
 
-const printWithFallback = async (primaryPrinterId: string, fallbackPrinterId: string | undefined, content: string) => {
-  try {
-    await printViaUsbByPrinterId(primaryPrinterId, 'receipt_80mm', content);
-    return;
-  } catch (primaryError: any) {
-    if (!fallbackPrinterId || fallbackPrinterId === primaryPrinterId) {
-      throw new Error(primaryError?.message || 'Lỗi không xác định');
-    }
-
-    try {
-      await printViaUsbByPrinterId(fallbackPrinterId, 'receipt_80mm', content);
-    } catch (fallbackError: any) {
-      throw new Error(`Máy in chính lỗi: ${primaryError?.message || 'N/A'} | Máy in thay thế lỗi: ${fallbackError?.message || 'N/A'}`);
-    }
-  }
-};
-
-export const printUsingConfiguredRoute = async (title: string, content: string) => {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  let parsed: { defaultPrinterId?: string; backupPrinterId?: string; defaultTemplateKey?: TemplateKey } = {};
-  if (saved) {
-    try {
-      parsed = JSON.parse(saved) as { defaultPrinterId?: string; backupPrinterId?: string; defaultTemplateKey?: TemplateKey };
-    } catch {
-      parsed = {};
-    }
-  }
-  const templateKey = parsed.defaultTemplateKey || 'receipt_80mm';
-
+const printViaUsb = async (title: string, content: string, templateKey: TemplateKey, settings: PrinterSettings) => {
   if (templateKey === 'invoice_a4') {
     await printA4PlainText(title, content);
     return;
   }
+  if (!settings.defaultPrinterId) {
+    throw new Error('Chua cau hinh may in USB mac dinh');
+  }
+  try {
+    await printViaUsbByPrinterId(settings.defaultPrinterId, content);
+  } catch (primaryError: any) {
+    if (!settings.backupPrinterId || settings.backupPrinterId === settings.defaultPrinterId) {
+      throw primaryError;
+    }
+    await printViaUsbByPrinterId(settings.backupPrinterId, content);
+  }
+};
 
-  if (typeof navigator === 'undefined' || !(navigator as UsbNavigatorLike).usb) {
-    throw new Error('Trình duyệt không hỗ trợ WebUSB để in 80mm. Vui lòng dùng Chrome/Edge desktop hoặc đổi mẫu mặc định sang A4');
+export const printUsingConfiguredRoute = async (title: string, content: string) => {
+  const settings = loadSettings();
+  const templateKey = settings.defaultTemplateKey || 'receipt_80mm';
+  const connectionMode = settings.connectionMode || 'bridge';
+  const bridgeEnabled = settings.bridgeEnabled !== false;
+
+  if (connectionMode === 'bridge' && bridgeEnabled) {
+    await printViaBridge(title, content, templateKey, settings);
+    return;
   }
 
-  if (!parsed.defaultPrinterId) {
-    throw new Error('Chưa cấu hình máy in mặc định trong trang /printers');
-  }
-
-  await printWithFallback(parsed.defaultPrinterId, parsed.backupPrinterId, content);
+  await printViaUsb(title, content, templateKey, settings);
 };

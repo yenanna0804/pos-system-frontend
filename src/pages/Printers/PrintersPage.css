@@ -40,6 +40,10 @@
   padding: 16px;
 }
 
+.template-panel {
+  grid-column: 1 / -1;
+}
+
 .printer-panel h3,
 .template-panel h3 {
   margin: 0 0 16px;
@@ -50,6 +54,12 @@
 .template-list {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+}
+
+.template-panel .template-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 12px;
 }
 
@@ -108,6 +118,72 @@
   padding: 10px;
   resize: vertical;
   width: 100%;
+}
+
+.template-card label {
+  color: #344054;
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.template-card input {
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font-size: 14px;
+  padding: 8px 10px;
+}
+
+.bridge-actions {
+  margin-top: 12px;
+}
+
+.bridge-status {
+  border-radius: 8px;
+  font-size: 13px;
+  margin: 10px 0 0;
+  padding: 8px 10px;
+}
+
+.bridge-status-idle {
+  background: #f2f4f7;
+  color: #344054;
+}
+
+.bridge-status-checking {
+  background: #eff8ff;
+  color: #175cd3;
+}
+
+.bridge-status-connected {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.bridge-status-error {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.bridge-printer-list {
+  border: 1px dashed #d0d5dd;
+  border-radius: 8px;
+  margin-top: 10px;
+  padding: 10px;
+}
+
+.bridge-printer-list ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.bridge-note {
+  color: #475467;
+  font-size: 12px;
+  margin: 10px 0 0;
 }
 
 .empty-state {
