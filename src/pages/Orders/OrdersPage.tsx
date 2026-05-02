@@ -4,6 +4,7 @@ import { areaService, diningTableService, orderService, roomService } from '../.
 import { DeleteActionIcon, EditActionIcon } from '../../components/ActionIcons';
 import FilterResetButton from '../../components/FilterResetButton';
 import { printUsingConfiguredRoute } from '../../utils/printerRouting';
+import type { Receipt80mmData } from '../../utils/receipt80mmGenerator';
 import NewOrderPage from './NewOrderPage';
 import { orderFeatureFlags } from './orderFeatureFlags';
 import './OrdersPage.css';
@@ -175,6 +176,30 @@ const buildOrderA4Content = (order: OrderDetail) => {
   lines.push(`Trạng thái: ${orderStateLabel[order.orderState] || order.orderState}`);
   lines.push(`Hình thức thanh toán: ${paymentMethodLabel(order.paymentMethod)}`);
   return lines.join('\n');
+};
+
+const buildOrder80mmData = (order: OrderDetail): Receipt80mmData => {
+  const discountTotal = Number(order.discountAmount || 0) + order.items.reduce((sum, item) => sum + Number(item.lineDiscountAmount || 0), 0);
+  const surchargeTotal = Number(order.surchargeAmount || 0) + order.items.reduce((sum, item) => sum + Number(item.lineSurchargeAmount || 0), 0);
+
+  return {
+    title: 'Hoa don',
+    orderCode: order.code,
+    datetime: new Date(order.createdAt).toLocaleString('vi-VN'),
+    customerName: order.customerName || '-',
+    location: order.locationLabel || '-',
+    items: order.items.map((item) => ({
+      name: item.productName || '-',
+      quantity: Math.max(0, Math.trunc(Number(item.quantity || 0))),
+      unitPrice: Math.max(0, Math.trunc(Number(item.unitPrice || 0))),
+      lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)))),
+      note: item.note || '',
+    })),
+    subtotal: Math.max(0, Math.trunc(Number(order.totalAmount || 0))),
+    discount: Math.max(0, Math.trunc(discountTotal)),
+    surcharge: Math.max(0, Math.trunc(surchargeTotal)),
+    total: Math.max(0, Math.trunc(Number(order.finalAmount ?? order.totalAmount ?? 0))),
+  };
 };
 
 export default function OrdersPage() {
@@ -434,7 +459,7 @@ export default function OrdersPage() {
       await orderService.print(order.id);
       const detailRes = await orderService.getById(order.id);
       const detail = detailRes.data as OrderDetail;
-      await printUsingConfiguredRoute(`Hóa đơn ${detail.code}`, buildOrderA4Content(detail));
+      await printUsingConfiguredRoute(`Hóa đơn ${detail.code}`, buildOrderA4Content(detail), { receipt80mmData: buildOrder80mmData(detail) });
       showToast('success', 'Đã ghi nhận thao tác in hóa đơn');
     } catch (error) {
       showToast('error', typeof error === 'string' ? error : 'Không thể in hóa đơn');
@@ -584,7 +609,9 @@ export default function OrdersPage() {
     }
     try {
       await orderService.print(detailOrder.id);
-      await printUsingConfiguredRoute(`Hóa đơn ${detailOrder.code}`, buildOrderA4Content(detailOrder));
+      await printUsingConfiguredRoute(`Hóa đơn ${detailOrder.code}`, buildOrderA4Content(detailOrder), {
+        receipt80mmData: buildOrder80mmData(detailOrder),
+      });
       showToast('success', 'Đã ghi nhận thao tác in hóa đơn');
     } catch (error) {
       showToast('error', typeof error === 'string' ? error : 'Không thể in hóa đơn');

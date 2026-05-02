@@ -19,6 +19,11 @@ type BridgePrinterMapping = {
   name?: string;
 };
 
+type BridgeSystemPrinter = {
+  name?: string;
+  description?: string;
+};
+
 type TemplateRow = {
   key: TemplateKey;
   name: string;
@@ -75,37 +80,30 @@ type UsbWritableDeviceLike = UsbDeviceLike & {
 
 const STORAGE_KEY = 'pos_printer_settings_v1';
 
-const RECEIPT_SAMPLE_80MM = `NHÀ HÀNG ABC
-123 Đường Láng, Đống Đa, Hà Nội
-ĐT: 024 3333 4444
---------------------------------
-HÓA ĐƠN BÁN HÀNG
---------------------------------
-Mã HĐ: HD26042910    Chưa trả hết
-Thời gian: 23:16 29/04/2026
-Vị trí: Tầng 1 / Phòng 2
---------------------------------
-STT Tên món               SL T.Tiền
---------------------------------
-1   Bánh flan (ít ngọt)    1 15.000
-    15.000 x 1
-2   Gà rán (6 cái)         3 165.000
-    55.000 x 3, giảm 15.000
-3   Khoai tây chiên        2 50.000
-    25.000 x 2
-4   Bắp xào                1 20.000
-    20.000 x 1
---------------------------------
-Tạm tính:                 265.000
-Giảm giá:                 -15.000
-Phụ phí:                       0
---------------------------------
-PHẢI THANH TOÁN:         250.000đ
-Khách thanh toán:              0đ
-Còn lại:                 250.000đ
---------------------------------
-Cảm ơn quý khách đã sử dụng dịch vụ!
-Hẹn gặp lại ^^`;
+const RECEIPT_SAMPLE_80MM = `^^^"PHIẾU TẠM TÍNH"
+
+{width: 10 *}
+Ngày:     |09/05/2026 21:16:08
+Vị trí:   |Tầng 1 / Bàn 3
+SL khách: |2
+Thu ngân: |abc
+-
+{width:2 * 2 10 11; border:space}
+| "#" |"Tên món"        |"SL"|"ĐG"|"TT"|
+-
+| 1 |Gà rán            |  1|    15.000|     15.000
+| 2 |Bia budweisser    |  3|    55.000|    165.000
+-
+{width:* 12; border:space}
+Tạm tính       |    180.000
+Giảm giá       |     15.000
+Phụ phí        |          0
+-
+"THANH TOÁN" | "165.000đ"
+
+{width:*, align:center}
+Vui lòng kiểm tra kỹ lại nội dung trước khi thanh toán
+===`;
 
 const TEMPLATE_A4_SAMPLE = `HÓA ĐƠN GIÁ TRỊ GIA TĂNG
 
@@ -252,6 +250,7 @@ export default function PrintersPage() {
   const [invoiceType, setInvoiceType] = useState('INVOICE');
   const [bridgeStatus, setBridgeStatus] = useState<'idle' | 'checking' | 'connected' | 'error'>('idle');
   const [bridgeStatusText, setBridgeStatusText] = useState('Chua kiem tra ket noi Bridge');
+  const [bridgePrinters, setBridgePrinters] = useState<BridgeSystemPrinter[]>([]);
   const [bridgeMappings, setBridgeMappings] = useState<BridgePrinterMapping[]>([]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewTemplateKey, setPreviewTemplateKey] = useState<TemplateKey>('receipt_80mm');
@@ -352,6 +351,7 @@ export default function PrintersPage() {
     if (!bridgeEnabled) {
       setBridgeStatus('idle');
       setBridgeStatusText('Bridge dang tat. Bam Enable Bridge de bat ket noi.');
+      setBridgePrinters([]);
       setBridgeMappings([]);
       return;
     }
@@ -367,14 +367,16 @@ export default function PrintersPage() {
       if (!configRes.ok) throw new Error(`HTTP ${configRes.status}`);
       const printerData = await printersRes.json();
       const configData = await configRes.json();
-      const rows = Array.isArray(printerData) ? (printerData as Array<{ name?: string }>) : [];
+      const rows = Array.isArray(printerData) ? (printerData as BridgeSystemPrinter[]) : [];
       const mappings = Array.isArray(configData?.printer?.mappings)
         ? (configData.printer.mappings as BridgePrinterMapping[])
         : [];
+      setBridgePrinters(rows);
       setBridgeMappings(mappings);
       setBridgeStatus('connected');
       setBridgeStatusText(`Da ket noi Bridge. Tim thay ${rows.length} printer tren he dieu hanh.`);
     } catch (connectionError: any) {
+      setBridgePrinters([]);
       setBridgeMappings([]);
       setBridgeStatus('error');
       setBridgeStatusText(`Khong ket noi duoc Bridge (${connectionError?.message || 'Unknown error'})`);
@@ -396,6 +398,7 @@ export default function PrintersPage() {
     if (bridgeEnabled) return;
     setBridgeStatus('idle');
     setBridgeStatusText('Bridge dang tat. Bam Enable Bridge de bat ket noi.');
+    setBridgePrinters([]);
     setBridgeMappings([]);
   }, [bridgeEnabled]);
 
@@ -431,13 +434,38 @@ export default function PrintersPage() {
     return null;
   };
 
-  const bridgeMappedPrinters = useMemo(() => {
-    const rows = [
-      { code: receiptType, name: bridgeMappings.find((item) => item.type === receiptType)?.name || '' },
-      { code: invoiceType, name: bridgeMappings.find((item) => item.type === invoiceType)?.name || '' },
-    ];
-    return rows.filter((item, index) => item.code && item.name && rows.findIndex((it) => it.code === item.code && it.name === item.name) === index);
-  }, [bridgeMappings, invoiceType, receiptType]);
+  const bridgePrinterRows = useMemo(() => {
+    const codesByPrinter = new Map<string, string[]>();
+    bridgeMappings.forEach((mapping) => {
+      const printerName = mapping.name?.trim();
+      if (!printerName) return;
+      const code = mapping.type?.trim();
+      if (!codesByPrinter.has(printerName)) {
+        codesByPrinter.set(printerName, []);
+      }
+      if (code) {
+        const rows = codesByPrinter.get(printerName) as string[];
+        if (!rows.includes(code)) rows.push(code);
+      }
+    });
+
+    return bridgePrinters.map((printer) => {
+      const printerName = printer.name?.trim() || 'Unknown printer';
+      const codes = codesByPrinter.get(printerName) || [];
+      return {
+        name: printerName,
+        codeLabel: codes.length > 0 ? codes.join(', ') : 'Chưa có mã',
+      };
+    });
+  }, [bridgeMappings, bridgePrinters]);
+
+  const bridgeTypeOptions = useMemo(() => {
+    const mappedTypes = bridgeMappings
+      .map((item) => item.type?.trim())
+      .filter((item): item is string => Boolean(item));
+    const baseTypes = ['VIRTUAL', 'INVOICE', 'RECEIPT'];
+    return Array.from(new Set([...baseTypes, ...mappedTypes]));
+  }, [bridgeMappings]);
 
   const activeUsbPrinters = useMemo(() => {
     return printers.filter((printer) => printer.id === defaultPrinterId || printer.id === backupPrinterId);
@@ -708,12 +736,30 @@ export default function PrintersPage() {
                 <input value={bridgeUrl} onChange={(event) => setBridgeUrl(event.target.value)} placeholder="ws://127.0.0.1:12212/printer" />
               </label>
               <label>
-                Type cho hoa don A4
-                <input value={invoiceType} onChange={(event) => setInvoiceType(event.target.value.toUpperCase())} placeholder="INVOICE" />
+                Máy in cho Hoá đơn A4
+                <select
+                  value={invoiceType}
+                  onChange={(event) => setInvoiceType(event.target.value)}
+                >
+                  {bridgeTypeOptions.map((typeOption) => (
+                    <option key={typeOption} value={typeOption}>
+                      {typeOption}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
-                Type cho hoa don 80mm (ESC/POS)
-                <input value={receiptType} onChange={(event) => setReceiptType(event.target.value.toUpperCase())} placeholder="RECEIPT" />
+                Máy in cho Hoá đơn 80mm
+                <select
+                  value={receiptType}
+                  onChange={(event) => setReceiptType(event.target.value)}
+                >
+                  {bridgeTypeOptions.map((typeOption) => (
+                    <option key={typeOption} value={typeOption}>
+                      {typeOption}
+                    </option>
+                  ))}
+                </select>
               </label>
               <div className="bridge-actions">
                 <button
@@ -764,15 +810,15 @@ export default function PrintersPage() {
             </div>
           )}
           {connectionMode === 'bridge' ? (
-            bridgeMappedPrinters.length === 0 ? (
-              <div className="empty-state">Chua tim thay mapping cho type dang cau hinh. Hay map type trong Bridge UI.</div>
+            bridgePrinterRows.length === 0 ? (
+              <div className="empty-state">Chua tim thay may in he thong tu Bridge.</div>
             ) : (
               <div className="printer-list">
-                {bridgeMappedPrinters.map((printer) => (
-                  <article key={`${printer.code}-${printer.name}`} className="printer-card is-active">
+                {bridgePrinterRows.map((printer) => (
+                  <article key={printer.name} className="printer-card is-active">
                     <div>
                       <strong>{printer.name}</strong>
-                      <div className="printer-meta">Code: {printer.code}</div>
+                      <div className="printer-meta">Mã: {printer.codeLabel}</div>
                     </div>
                   </article>
                 ))}

@@ -5,6 +5,7 @@ import OrdersProductPicker from './components/OrdersProductPicker';
 import OrdersTablePicker from './components/OrdersTablePicker';
 import type { BillItem, DuplicateHandling, SelectableTable } from './types';
 import { printUsingConfiguredRoute } from '../../utils/printerRouting';
+import type { Receipt80mmData } from '../../utils/receipt80mmGenerator';
 import { useOrderEditor } from './hooks/useOrderEditor';
 import { toAmountNumber, toPercentNumber, useOrderPricing } from './hooks/useOrderPricing';
 import { useOrderTimer } from './hooks/useOrderTimer';
@@ -214,14 +215,46 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
 
   const onPrintInvoice = async () => {
     if (billItems.length === 0) return;
-    await printUsingConfiguredRoute('Hóa đơn tạm', buildPrintableContent(billItems, 'Hóa đơn'));
+    const receiptData = buildReceipt80mmData(billItems, 'Hóa đơn');
+    await printUsingConfiguredRoute('Hóa đơn tạm', buildPrintableContent(billItems, 'Hóa đơn'), { receipt80mmData: receiptData });
   };
 
   const onPrintOrder = async (selectedLineIds: string[]) => {
     const selectedItems = billItems.filter((item) => selectedLineIds.includes(item.lineId));
     const itemsToPrint = selectedItems.length > 0 ? selectedItems : billItems;
     if (itemsToPrint.length === 0) return;
-    await printUsingConfiguredRoute('Order tạm', buildPrintableContent(itemsToPrint, 'Order'));
+    const receiptData = buildReceipt80mmData(itemsToPrint, 'Order');
+    await printUsingConfiguredRoute('Order tạm', buildPrintableContent(itemsToPrint, 'Order'), { receipt80mmData: receiptData });
+  };
+
+  const buildReceipt80mmData = (items: BillItem[], label: string): Receipt80mmData => {
+    const location = selectedTable
+      ? selectedTable.entityType === 'ROOM'
+        ? `${selectedTable.areaName} / ${selectedTable.roomName || selectedTable.name}`
+        : `${selectedTable.areaName}${selectedTable.roomName ? ` / ${selectedTable.roomName}` : ''} / ${selectedTable.name}`
+      : '-';
+
+    const subtotalSelected = items.reduce((sum, item) => sum + (item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)), 0);
+    const useFullTotals = items.length === billItems.length;
+
+    return {
+      title: label,
+      orderCode: orderCode || 'TAM',
+      datetime: new Date().toLocaleString('vi-VN'),
+      customerName: customerName || '-',
+      location,
+      items: items.map((item) => ({
+        name: item.productName,
+        quantity: Math.max(0, Math.trunc(Number(item.quantity || 0))),
+        unitPrice: Math.max(0, Math.trunc(Number(item.unitPrice || 0))),
+        lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)))),
+        note: item.note || '',
+      })),
+      subtotal: Math.max(0, Math.trunc(subtotalSelected)),
+      discount: useFullTotals ? Math.max(0, Math.trunc(discountAmount)) : 0,
+      surcharge: useFullTotals ? Math.max(0, Math.trunc(surchargeAmount)) : 0,
+      total: useFullTotals ? Math.max(0, Math.trunc(totalAmount)) : Math.max(0, Math.trunc(subtotalSelected)),
+    };
   };
 
   return (

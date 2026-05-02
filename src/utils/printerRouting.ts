@@ -1,4 +1,5 @@
 import { printA4PlainText } from './print';
+import { buildEscPosBytesFromReceiptMarkdown, buildReceipt80mmEscPosBytes, type Receipt80mmData } from './receipt80mmGenerator';
 
 type TemplateKey = 'receipt_80mm' | 'invoice_a4';
 type ConnectionMode = 'bridge' | 'usb';
@@ -12,6 +13,10 @@ type PrinterSettings = {
   connectionMode?: ConnectionMode;
   defaultPrinterId?: string;
   backupPrinterId?: string;
+};
+
+type PrintRouteOptions = {
+  receipt80mmData?: Receipt80mmData;
 };
 
 type UsbDeviceLike = {
@@ -212,7 +217,13 @@ const submitBridgeJob = (url: string, payload: Record<string, unknown>) =>
     };
   });
 
-const printViaBridge = async (title: string, content: string, templateKey: TemplateKey, settings: PrinterSettings) => {
+const printViaBridge = async (
+  title: string,
+  content: string,
+  templateKey: TemplateKey,
+  settings: PrinterSettings,
+  options?: PrintRouteOptions,
+) => {
   const bridgeUrl = settings.bridgeUrl?.trim() || 'ws://127.0.0.1:12212/printer';
   if (templateKey === 'invoice_a4') {
     const invoiceType = settings.invoiceType?.trim() || 'INVOICE';
@@ -229,7 +240,11 @@ const printViaBridge = async (title: string, content: string, templateKey: Templ
   }
 
   const receiptType = settings.receiptType?.trim() || 'RECEIPT';
-  const payload = textToEscPosPayload(content);
+  const payload = options?.receipt80mmData
+    ? await buildReceipt80mmEscPosBytes(options.receipt80mmData)
+    : content.includes('|') || content.includes('^^') || content.includes('{w:')
+      ? await buildEscPosBytesFromReceiptMarkdown(content)
+      : textToEscPosPayload(content);
   await submitBridgeJob(bridgeUrl, {
     id: `receipt-${Date.now()}`,
     type: receiptType,
@@ -327,14 +342,14 @@ const printViaUsb = async (title: string, content: string, templateKey: Template
   }
 };
 
-export const printUsingConfiguredRoute = async (title: string, content: string) => {
+export const printUsingConfiguredRoute = async (title: string, content: string, options?: PrintRouteOptions) => {
   const settings = loadSettings();
   const templateKey = settings.defaultTemplateKey || 'receipt_80mm';
   const connectionMode = settings.connectionMode || 'bridge';
   const bridgeEnabled = settings.bridgeEnabled !== false;
 
   if (connectionMode === 'bridge' && bridgeEnabled) {
-    await printViaBridge(title, content, templateKey, settings);
+    await printViaBridge(title, content, templateKey, settings, options);
     return;
   }
 
