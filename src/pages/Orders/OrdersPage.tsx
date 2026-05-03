@@ -599,11 +599,10 @@ export default function OrdersPage() {
       return;
     }
     try {
-      await orderService.print(order.id);
       const detailRes = await orderService.getById(order.id);
       const detail = detailRes.data as OrderDetail;
       await printUsingConfiguredRoute(`Hóa đơn ${detail.code}`, buildOrderA4Content(detail), { receipt80mmData: buildOrder80mmData(detail) });
-      showToast('success', 'Đã ghi nhận thao tác in hóa đơn');
+      showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {
       showToast('error', typeof error === 'string' ? error : 'Không thể in hóa đơn');
     }
@@ -860,11 +859,10 @@ export default function OrdersPage() {
       return;
     }
     try {
-      await orderService.print(detailOrder.id);
       await printUsingConfiguredRoute(`Hóa đơn ${detailOrder.code}`, buildOrderA4Content(detailOrder), {
         receipt80mmData: buildOrder80mmData(detailOrder),
       });
-      showToast('success', 'Đã ghi nhận thao tác in hóa đơn');
+      showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {
       showToast('error', typeof error === 'string' ? error : 'Không thể in hóa đơn');
     }
