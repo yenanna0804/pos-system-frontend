@@ -202,7 +202,7 @@ const buildOrderA4Content = (order: OrderDetail) => {
   lines.push('');
   lines.push(`Tạm tính: ${formatNumberVi(Number(order.totalAmount || 0))}`);
   lines.push(`Giảm giá: ${formatNumberVi(discountTotal)}`);
-  lines.push(`Phụ phí: ${formatNumberVi(surchargeTotal)}`);
+  lines.push(`Phí dịch vụ: ${formatNumberVi(surchargeTotal)}`);
   lines.push(`Phải thanh toán: ${formatNumberVi(Number(order.finalAmount ?? order.totalAmount ?? 0))}`);
   lines.push(`Đã thanh toán: ${formatNumberVi(Number(order.paidAmount || 0))}`);
   lines.push(`Trạng thái: ${orderStateLabel[order.orderState] || order.orderState}`);
@@ -1179,8 +1179,8 @@ export default function OrdersPage() {
                   discountMode: 'amount',
                   discountValue: 0,
                   surchargeAmount: 0,
-                  surchargeMode: 'amount',
-                  surchargeValue: 0,
+                  surchargeMode: 'percent',
+                  surchargeValue: 5,
                   paidAmount: 0,
                   paymentMethod: 'CASH',
                   orderState: 'DRAFT',
@@ -1196,8 +1196,8 @@ export default function OrdersPage() {
                   billItems: [],
                   discountMode: 'amount',
                   discountValue: '0',
-                  surchargeMode: 'amount',
-                  surchargeValue: '0',
+                  surchargeMode: 'percent',
+                  surchargeValue: '5',
                   paidAmount: 0,
                   paymentMethod: 'CASH',
                 });
@@ -1633,13 +1633,13 @@ export default function OrdersPage() {
                       </div>
                     </div>
                     <div>
-                      <span className="orders-detail-label">Phụ phí</span>
+                      <span className="orders-detail-label">Phí dịch vụ</span>
                       <div className="orders-detail-amount-with-help">
                         <span>{detailBillSurchargeTotal.toLocaleString('vi-VN')}</span>
                         <button
                           type="button"
                           className="orders-detail-help-btn"
-                          aria-label="Xem diễn giải phụ phí"
+                          aria-label="Xem diễn giải Phí dịch vụ"
                           onClick={() => setDetailBreakdownType('surcharge')}
                         >
                           ?
@@ -1687,7 +1687,7 @@ export default function OrdersPage() {
                         <th className="num-col">Đơn giá gốc</th>
                         <th className="num-col">Đơn giá bán</th>
                         <th className="num-col">Giảm giá</th>
-                        <th className="num-col">Phụ phí</th>
+                        <th className="num-col">Phí dịch vụ</th>
                         <th className="num-col">Thành tiền</th>
                         <th>Ghi chú</th>
                       </tr>
@@ -1732,7 +1732,7 @@ export default function OrdersPage() {
                       {detailBreakdownType === 'discount'
                         ? 'Diễn giải giảm giá'
                         : detailBreakdownType === 'surcharge'
-                          ? 'Diễn giải phụ phí'
+                          ? 'Diễn giải phí dịch vụ'
                           : 'Diễn giải tạm tính'}
                     </strong>
                     <button
@@ -1752,7 +1752,7 @@ export default function OrdersPage() {
                     <>
                       <div className="orders-detail-breakdown-row">
                         <span>
-                          Tổng {detailBreakdownType === 'discount' ? 'giảm giá' : 'phụ phí'} toàn hóa đơn
+                          Tổng {detailBreakdownType === 'discount' ? 'giảm giá' : 'phí dịch vụ'} toàn hóa đơn
                         </span>
                         <strong>
                           {(detailBreakdownType === 'discount' ? detailHeaderDiscount : detailHeaderSurcharge).toLocaleString('vi-VN')}
@@ -1760,7 +1760,7 @@ export default function OrdersPage() {
                       </div>
                       <div className="orders-detail-breakdown-row">
                         <span>
-                          Tổng {detailBreakdownType === 'discount' ? 'giảm giá' : 'phụ phí'} sản phẩm
+                          Tổng {detailBreakdownType === 'discount' ? 'giảm giá' : 'phí dịch vụ'} sản phẩm
                         </span>
                         <strong>
                           {(detailBreakdownType === 'discount' ? detailLineDiscountTotal : detailLineSurchargeTotal).toLocaleString('vi-VN')}

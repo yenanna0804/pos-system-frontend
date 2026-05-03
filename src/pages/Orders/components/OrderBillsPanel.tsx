@@ -209,7 +209,7 @@ export default function OrderBillsPanel({
         </div>
 
         <div className="orders-adjustment-group">
-          <div className="orders-adjustment-label">Phụ phí</div>
+          <div className="orders-adjustment-label">Phí dịch vụ</div>
           <div className="orders-adjustment-control">
             <div className="orders-adjustment-mode-switch">
               <button
@@ -248,7 +248,7 @@ export default function OrderBillsPanel({
         <div className="orders-summary-meta">
           <span>Tạm tính: {Math.trunc(subtotal).toLocaleString('vi-VN')}</span>
           <span>Giảm giá: {Math.trunc(discountAmount).toLocaleString('vi-VN')}</span>
-          <span>Phụ phí: {Math.trunc(surchargeAmount).toLocaleString('vi-VN')}</span>
+          <span>Phí dịch vụ: {Math.trunc(surchargeAmount).toLocaleString('vi-VN')}</span>
         </div>
         <strong>PHẢI THANH TOÁN: {Math.trunc(totalAmount).toLocaleString('vi-VN')}</strong>
         </div>

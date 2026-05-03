@@ -81,7 +81,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
   const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>(initialData?.discountMode || 'percent');
   const [discountValue, setDiscountValue] = useState(String(initialData?.discountValue ?? initialData?.discountAmount ?? 0));
   const [surchargeMode, setSurchargeMode] = useState<'percent' | 'amount'>(initialData?.surchargeMode || 'percent');
-  const [surchargeValue, setSurchargeValue] = useState(String(initialData?.surchargeValue ?? initialData?.surchargeAmount ?? 0));
+  const [surchargeValue, setSurchargeValue] = useState(String(initialData?.surchargeValue ?? initialData?.surchargeAmount ?? (mode === 'create' ? 5 : 0)));
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [showEditConfirm, setShowEditConfirm] = useState(false);
   const [showTakeawayConfirm, setShowTakeawayConfirm] = useState(false);
@@ -244,7 +244,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     lines.push(`Tạm tính: ${formatNumberVi(subtotalSelected)}`);
     if (items.length === billItems.length) {
       lines.push(`Giảm giá: ${formatNumberVi(discountAmount)}`);
-      lines.push(`Phụ phí: ${formatNumberVi(surchargeAmount)}`);
+      lines.push(`Phí dịch vụ: ${formatNumberVi(surchargeAmount)}`);
       lines.push(`Phải thanh toán: ${formatNumberVi(totalAmount)}`);
     }
 

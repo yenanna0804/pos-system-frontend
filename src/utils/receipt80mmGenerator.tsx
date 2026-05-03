@@ -193,7 +193,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
 
   drawSummary('Tạm tính', toNumberVi(data.subtotal));
   drawSummary('Giảm giá', toNumberVi(Math.abs(data.discount)));
-  drawSummary('Phụ phí', toNumberVi(data.surcharge));
+  drawSummary('Phí dịch vụ', toNumberVi(data.surcharge));
 
   ctx.fillRect(marginX, y, contentWidth, 2);
   y += 22;
