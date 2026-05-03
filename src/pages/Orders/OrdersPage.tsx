@@ -7,7 +7,6 @@ import { printUsingConfiguredRoute } from '../../utils/printerRouting';
 import type { Receipt80mmData } from '../../utils/receipt80mmGenerator';
 import NewOrderPage from './NewOrderPage';
 import { orderFeatureFlags } from './orderFeatureFlags';
-import type { BillItem } from './types';
 import './OrdersPage.css';
 
 type OrderRow = {
@@ -20,7 +19,7 @@ type OrderRow = {
   finalAmount?: number;
   paidAmount?: number;
   paymentMethod?: 'CASH' | 'BANKING' | null;
-  orderState: 'DRAFT' | 'PAID' | 'DELETED' | 'PARTIAL';
+  orderState: 'PAID' | 'DELETED' | 'PARTIAL';
   createdAt: string;
 };
 
@@ -57,8 +56,6 @@ type OrderDetailItem = {
   lineTotal?: number;
   timerStatus?: 'RUNNING' | 'STOPPED';
   activeSessionStartedAt?: string | null;
-  startAt?: string | null;
-  stopAt?: string | null;
   note: string;
   lineDiscountAmount?: number;
   lineSurchargeAmount?: number;
@@ -87,7 +84,6 @@ type OrderDetail = {
   paymentMethod?: 'CASH' | 'BANKING' | null;
   orderState: OrderRow['orderState'];
   createdAt: string;
-  updatedAt?: string;
   items: OrderDetailItem[];
 };
 
@@ -112,10 +108,8 @@ type EditingOrderState = {
   surchargeValue?: number;
   paidAmount?: number;
   paymentMethod?: 'CASH' | 'BANKING';
-  updatedAt?: string;
   billItems: {
     lineId: string;
-    orderItemId?: string;
     productId: string;
     productName: string;
     pricingTypeSnapshot?: 'FIXED' | 'TIME';
@@ -128,34 +122,17 @@ type EditingOrderState = {
     lineTotal?: number;
     timerStatus?: 'RUNNING' | 'STOPPED';
     activeSessionStartedAt?: string | null;
-    startAt?: string | null;
-    stopAt?: string | null;
     note: string;
   }[];
 };
 
-type CreateOrderDraft = {
-  activeTab: 'table' | 'product';
-  selectedTable: EditingOrderState['selectedTable'];
-  customerName: string;
-  billItems: BillItem[];
-  discountMode: 'percent' | 'amount';
-  discountValue: string;
-  surchargeMode: 'percent' | 'amount';
-  surchargeValue: string;
-  paidAmount?: number;
-  paymentMethod?: 'CASH' | 'BANKING';
-};
-
 const orderStateLabel: Record<OrderRow['orderState'], string> = {
-  DRAFT: 'Nháp',
   PAID: 'Đã thanh toán',
   DELETED: 'Đã xóa',
   PARTIAL: 'Còn nợ',
 };
 
 const orderStateClass: Record<OrderRow['orderState'], string> = {
-  DRAFT: 'orders-status-tag is-draft',
   PAID: 'orders-status-tag is-paid',
   DELETED: 'orders-status-tag is-deleted',
   PARTIAL: 'orders-status-tag is-partial',
@@ -234,7 +211,7 @@ export default function OrdersPage() {
   const [totalItems, setTotalItems] = useState(0);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [statusFilters, setStatusFilters] = useState<string[]>(['DRAFT', 'PAID', 'PARTIAL']);
+  const [statusFilters, setStatusFilters] = useState<string[]>(['PAID', 'PARTIAL']);
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<'' | 'CASH' | 'BANKING'>('');
   const [areaFilter, setAreaFilter] = useState('');
   const [roomFilter, setRoomFilter] = useState('');
@@ -263,12 +240,6 @@ export default function OrdersPage() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [isSelectingAllOrders, setIsSelectingAllOrders] = useState(false);
   const [editingOrder, setEditingOrder] = useState<EditingOrderState | null>(null);
-  const [editingDraftBillItems, setEditingDraftBillItems] = useState<EditingOrderState['billItems']>([]);
-  const [createDraft, setCreateDraft] = useState<CreateOrderDraft | null>(null);
-  const [createDraftOrderId, setCreateDraftOrderId] = useState<string | null>(null);
-  const draftAutosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestDraftAutosaveRequestRef = useRef(0);
-  const isCreatingDraftRef = useRef(false);
 
   const historyPageSize = 5;
 
@@ -280,7 +251,7 @@ export default function OrdersPage() {
   const resetListFilters = () => {
     setSearch('');
     setDebouncedSearch('');
-    setStatusFilters(['DRAFT', 'PAID', 'PARTIAL']);
+    setStatusFilters(['PAID', 'PARTIAL']);
     setPaymentMethodFilter('');
     setAreaFilter('');
     setRoomFilter('');
@@ -339,104 +310,6 @@ export default function OrdersPage() {
   }, [branchId]);
 
   useEffect(() => {
-    const loadCreateDraftFromServer = async () => {
-      if (!branchId) return;
-      try {
-        const listResponse = await orderService.list({
-          branchId,
-          page: 1,
-          pageSize: 1,
-          orderStates: 'DRAFT',
-        });
-        const rows = Array.isArray(listResponse.data)
-          ? listResponse.data
-          : Array.isArray(listResponse.data?.items)
-            ? listResponse.data.items
-            : [];
-        if (rows.length === 0) return;
-        const draftId = rows[0]?.id;
-        if (!draftId) return;
-        const detailResponse = await orderService.getById(draftId);
-        const editingState = mapOrderDetailToEditingState(detailResponse.data as OrderDetail);
-        setCreateDraft({
-          activeTab: 'product',
-          selectedTable: editingState.selectedTable,
-          customerName: editingState.customerName,
-          billItems: editingState.billItems as BillItem[],
-          discountMode: editingState.discountMode || 'amount',
-          discountValue: String(editingState.discountValue ?? editingState.discountAmount ?? 0),
-          surchargeMode: editingState.surchargeMode || 'amount',
-          surchargeValue: String(editingState.surchargeValue ?? editingState.surchargeAmount ?? 0),
-          paidAmount: editingState.paidAmount,
-          paymentMethod: editingState.paymentMethod,
-        });
-        setCreateDraftOrderId(editingState.id);
-      } catch {
-        setCreateDraft(null);
-        setCreateDraftOrderId(null);
-      }
-    };
-    loadCreateDraftFromServer().catch(() => undefined);
-  }, [branchId]);
-
-  useEffect(() => {
-    return () => {
-      if (draftAutosaveTimeoutRef.current) {
-        clearTimeout(draftAutosaveTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const buildCreateOrderPayload = (payload: {
-    table: { entityType: 'TABLE' | 'ROOM'; id: string; name: string; areaName: string; roomName?: string | null; roomId?: string | null } | null;
-    customerName: string;
-    billItems: {
-      lineId: string;
-      productId: string;
-      productName: string;
-      unit?: string;
-      baseUnitPrice?: number;
-      unitPrice: number;
-      quantity: number;
-      pricingTypeSnapshot?: 'FIXED' | 'TIME';
-      timeRateAmountSnapshot?: number;
-      timeRateMinutesSnapshot?: number;
-      usedMinutes?: number;
-      note: string;
-    }[];
-    totalAmount: number;
-    discountAmount: number;
-    discountMode: 'percent' | 'amount';
-    discountValue: number;
-    surchargeAmount: number;
-    surchargeMode: 'percent' | 'amount';
-    surchargeValue: number;
-    paidAmount: number;
-    paymentMethod: 'CASH' | 'BANKING';
-    orderState?: 'DRAFT' | 'PAID' | 'PARTIAL';
-  }) => {
-    const entityType = payload.table?.entityType;
-    return {
-      entityType,
-      tableId: entityType === 'TABLE' ? payload.table?.id : undefined,
-      roomId: entityType === 'ROOM' ? payload.table?.id : payload.table?.roomId || undefined,
-      customerName: payload.customerName,
-      totalAmount: payload.totalAmount,
-      discountAmount: payload.discountAmount,
-      discountMode: payload.discountMode,
-      discountValue: payload.discountValue,
-      surchargeAmount: payload.surchargeAmount,
-      surchargeMode: payload.surchargeMode,
-      surchargeValue: payload.surchargeValue,
-      paidAmount: Math.max(0, Math.trunc(payload.paidAmount || 0)),
-      paymentMethod: payload.paymentMethod,
-      billItems: payload.billItems,
-      orderState: payload.orderState,
-      branchId: branchId || undefined,
-    };
-  };
-
-  useEffect(() => {
     loadOrders().catch((error) => showToast('error', typeof error === 'string' ? error : 'Không tải được danh sách hóa đơn'));
   }, [branchId, page, debouncedSearch, areaFilter, roomFilter, tableFilter, startDate, endDate, statusFilters.join(','), paymentMethodFilter]);
 
@@ -468,7 +341,7 @@ export default function OrdersPage() {
   }, []);
 
   const saveOrder = async (payload: {
-    table: { entityType: 'TABLE' | 'ROOM'; id: string; name: string; areaName: string; roomName?: string | null; roomId?: string | null } | null;
+    table: { entityType: 'TABLE' | 'ROOM'; id: string; name: string; areaName: string; roomName?: string | null; roomId?: string | null };
     customerName: string;
     billItems: {
       lineId: string;
@@ -522,22 +395,24 @@ export default function OrdersPage() {
     paymentMethod: 'CASH' | 'BANKING';
   }) => {
     try {
-      const savePayload = buildCreateOrderPayload(payload);
-      let finalOrderId = createDraftOrderId;
-      if (createDraftOrderId) {
-        await orderService.update(createDraftOrderId, savePayload);
-      } else {
-        const createdDraft = await orderService.create({
-          ...savePayload,
-          orderState: 'DRAFT',
-        });
-        finalOrderId = createdDraft.data?.id || null;
-        if (!finalOrderId) throw new Error('Không nhận được mã hóa đơn nháp');
-        await orderService.update(finalOrderId, savePayload);
-      }
+      await orderService.create({
+        entityType: payload.table.entityType,
+        tableId: payload.table.entityType === 'TABLE' ? payload.table.id : undefined,
+        roomId: payload.table.entityType === 'ROOM' ? payload.table.id : payload.table.roomId || undefined,
+        customerName: payload.customerName,
+        totalAmount: payload.totalAmount,
+        discountAmount: payload.discountAmount,
+        discountMode: payload.discountMode,
+        discountValue: payload.discountValue,
+        surchargeAmount: payload.surchargeAmount,
+        surchargeMode: payload.surchargeMode,
+        surchargeValue: payload.surchargeValue,
+        paidAmount: Math.max(0, Math.trunc(payload.paidAmount || 0)),
+        paymentMethod: payload.paymentMethod,
+        billItems: payload.billItems,
+        branchId: branchId || undefined,
+      });
       await loadOrders();
-      setCreateDraft(null);
-      setCreateDraftOrderId(null);
       setView('list');
       showToast('success', 'Lưu hóa đơn thành công');
     } catch (error) {
@@ -568,9 +443,7 @@ export default function OrdersPage() {
     try {
       const response = await orderService.getById(order.id);
       const data = response.data;
-      const nextEditing = mapOrderDetailToEditingState(data);
-      setEditingOrder(nextEditing);
-      setEditingDraftBillItems(nextEditing.billItems);
+      setEditingOrder(mapOrderDetailToEditingState(data));
       setView('edit');
     } catch (error) {
       showToast('error', typeof error === 'string' ? error : 'Không thể cập nhật hóa đơn');
@@ -601,14 +474,14 @@ export default function OrdersPage() {
     setDeleteConfirmOrder(order);
   };
 
-  const confirmHardDeleteOrder = async () => {
+  const confirmSoftDeleteOrder = async () => {
     if (!deleteConfirmOrder) return;
     try {
-      await orderService.hardRemove(deleteConfirmOrder.id);
+      await orderService.remove(deleteConfirmOrder.id);
       await loadOrders();
-      showToast('success', 'Đã xóa vĩnh viễn hóa đơn');
+      showToast('success', 'Đã xóa hóa đơn');
     } catch (error) {
-      showToast('error', typeof error === 'string' ? error : 'Không thể xóa vĩnh viễn hóa đơn');
+      showToast('error', typeof error === 'string' ? error : 'Không thể xóa hóa đơn');
     } finally {
       setDeleteConfirmOrder(null);
     }
@@ -764,134 +637,49 @@ export default function OrdersPage() {
             <div className={`orders-toast orders-toast-${toast.type}`}>{toast.message}</div>
           </div>
         )}
-        <NewOrderPage
-          key="order-create"
-          orderId={createDraftOrderId || undefined}
-          defaultTab={createDraft?.activeTab || 'table'}
-          initialData={createDraft ? {
-            selectedTable: createDraft.selectedTable,
-            customerName: createDraft.customerName,
-            billItems: createDraft.billItems.map((item) => ({
-              ...item,
-              timerStatus: item.timerStatus === 'ON'
-                ? 'RUNNING'
-                : item.timerStatus === 'OFF'
-                  ? 'STOPPED'
-                  : item.timerStatus,
-            })),
-            discountMode: createDraft.discountMode,
-            discountValue: Number(createDraft.discountValue || 0),
-            surchargeMode: createDraft.surchargeMode,
-            surchargeValue: Number(createDraft.surchargeValue || 0),
-            paidAmount: createDraft.paidAmount,
-            paymentMethod: createDraft.paymentMethod,
-          } : undefined}
-          onDraftChange={(draft) => {
-            const normalized: CreateOrderDraft = {
-              ...draft,
-              selectedTable: draft.selectedTable,
-              billItems: draft.billItems,
-            };
-            setCreateDraft(normalized);
+        <NewOrderPage key="order-create" onBack={() => setView('list')} onSaveOrder={saveOrder} onStartTimeLineTimerForNewOrder={async (payload) => {
+          try {
+            const created = await orderService.create({
+          entityType: payload.table.entityType,
+          tableId: payload.table.entityType === 'TABLE' ? payload.table.id : undefined,
+          roomId: payload.table.entityType === 'ROOM' ? payload.table.id : payload.table.roomId || undefined,
+          customerName: payload.customerName,
+          totalAmount: payload.totalAmount,
+          discountAmount: payload.discountAmount,
+          discountMode: payload.discountMode,
+          discountValue: payload.discountValue,
+          surchargeAmount: payload.surchargeAmount,
+          surchargeMode: payload.surchargeMode,
+          surchargeValue: payload.surchargeValue,
+          paidAmount: Math.max(0, Math.trunc(payload.paidAmount || 0)),
+          paymentMethod: payload.paymentMethod,
+          billItems: payload.billItems,
+          branchId: branchId || undefined,
+        });
 
-            const autosavePayload = buildCreateOrderPayload({
-              table: normalized.selectedTable,
-              customerName: normalized.customerName,
-              billItems: normalized.billItems,
-              totalAmount: Math.max(0, normalized.billItems.reduce((sum, item) => sum + Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)), 0)),
-              discountAmount: 0,
-              discountMode: normalized.discountMode,
-              discountValue: Number(normalized.discountValue || 0),
-              surchargeAmount: 0,
-              surchargeMode: normalized.surchargeMode,
-              surchargeValue: Number(normalized.surchargeValue || 0),
-              paidAmount: Math.max(0, Math.trunc(Number(normalized.paidAmount || 0))),
-              paymentMethod: normalized.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
-              orderState: 'DRAFT',
-            });
-            if (!createDraftOrderId) return;
+        const createdOrderId = created.data?.id;
+        if (!createdOrderId) {
+          throw new Error('Không nhận được mã hóa đơn vừa tạo');
+        }
 
-            if (draftAutosaveTimeoutRef.current) {
-              clearTimeout(draftAutosaveTimeoutRef.current);
-            }
-            draftAutosaveTimeoutRef.current = setTimeout(async () => {
-              const reqId = latestDraftAutosaveRequestRef.current + 1;
-              latestDraftAutosaveRequestRef.current = reqId;
-              try {
-                await orderService.update(createDraftOrderId, autosavePayload);
-              } catch (error: unknown) {
-                const message =
-                  typeof error === 'string'
-                    ? error
-                    : (error as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message
-                      || (error as { message?: string })?.message
-                      || 'Không tự lưu được hóa đơn nháp';
-                showToast('error', message);
-              }
-            }, 500);
-          }}
-          onBack={async () => {
-            await loadOrders();
-            setView('list');
-          }}
-          onSaveOrder={saveOrder}
-          onToggleTimeLineTimer={async (lineId, action) => {
-            if (!createDraftOrderId || !createDraft) throw new Error('Chưa có hóa đơn nháp');
-            const nowIso = new Date().toISOString();
-            const line = createDraft.billItems.find((item) => item.lineId === lineId);
-            if (!line) throw new Error('Không tìm thấy dòng món');
+        await orderService.startItemTimer(createdOrderId, payload.lineId);
+        await orderService.getItemTimerStatus(createdOrderId, payload.lineId);
 
-            const nextStartAt = action === 'start' ? nowIso : line.startAt || null;
-            const nextStopAt = action === 'stop' ? nowIso : null;
-            const nextItems = createDraft.billItems.map((item) => (
-              item.lineId === lineId
-                ? {
-                  ...item,
-                  startAt: nextStartAt,
-                  stopAt: nextStopAt,
-                  timerStatus: (action === 'start' ? 'RUNNING' : 'STOPPED') as 'RUNNING' | 'STOPPED',
-                  activeSessionStartedAt: action === 'start' ? nextStartAt : null,
-                }
-                : item
-            ));
-
-            await orderService.update(
-              createDraftOrderId,
-              buildCreateOrderPayload({
-                table: createDraft.selectedTable,
-                customerName: createDraft.customerName,
-                billItems: nextItems,
-                totalAmount: Math.max(0, nextItems.reduce((sum, item) => sum + Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)), 0)),
-                discountAmount: 0,
-                discountMode: createDraft.discountMode,
-                discountValue: Number(createDraft.discountValue || 0),
-                surchargeAmount: 0,
-                surchargeMode: createDraft.surchargeMode,
-                surchargeValue: Number(createDraft.surchargeValue || 0),
-                paidAmount: Math.max(0, Math.trunc(Number(createDraft.paidAmount || 0))),
-                paymentMethod: createDraft.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
-                orderState: 'DRAFT',
-              }),
-            );
-            const latestDetailResponse = await orderService.getById(createDraftOrderId);
-            const latestDraftState = mapOrderDetailToEditingState(latestDetailResponse.data as OrderDetail);
-            setCreateDraft((prev) => (prev ? {
-              ...prev,
-              selectedTable: latestDraftState.selectedTable,
-              customerName: latestDraftState.customerName,
-              billItems: latestDraftState.billItems as BillItem[],
-            } : prev));
-            const nextLine = latestDraftState.billItems.find((item) => item.lineId === lineId);
-
-            return {
-              usedMinutes: Math.max(0, Math.trunc(Number(nextLine?.usedMinutes || 0))),
-              lineTotal: Math.max(0, Math.trunc(Number(nextLine?.lineTotal || 0))),
-              timerStatus: nextLine?.timerStatus === 'RUNNING' ? 'RUNNING' : 'STOPPED',
-              startAt: nextLine?.startAt || null,
-              stopAt: nextLine?.stopAt || null,
-            };
-          }}
-        />
+        const latestDetailResponse = await orderService.getById(createdOrderId);
+        setEditingOrder(mapOrderDetailToEditingState(latestDetailResponse.data as OrderDetail));
+        setView('edit');
+        await loadOrders();
+            showToast('success', 'Đã tạo hóa đơn và bắt đầu đếm giờ');
+          } catch (error: unknown) {
+            const errorMessage =
+              typeof error === 'string'
+                ? error
+                : (error as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message
+                  || (error as { message?: string })?.message
+                  || 'Không thể bắt đầu đếm giờ';
+            showToast('error', errorMessage);
+          }
+        }} />
       </>
     );
   }
@@ -926,18 +714,14 @@ export default function OrdersPage() {
           onBack={() => {
             setView('list');
             setEditingOrder(null);
-            setEditingDraftBillItems([]);
           }}
-          onBillItemsChange={(items) => setEditingDraftBillItems(items as EditingOrderState['billItems'])}
           onSaveOrder={async (payload) => {
           try {
-            const entityType = payload.table?.entityType;
             const updatePayload = {
-              entityType,
-              tableId: entityType === 'TABLE' ? payload.table?.id : undefined,
-              roomId: entityType === 'ROOM' ? payload.table?.id : payload.table?.roomId || undefined,
+              entityType: payload.table.entityType,
+              tableId: payload.table.entityType === 'TABLE' ? payload.table.id : undefined,
+              roomId: payload.table.entityType === 'ROOM' ? payload.table.id : payload.table.roomId || undefined,
               customerName: payload.customerName,
-              billItems: payload.billItems,
               totalAmount: payload.totalAmount,
               discountAmount: payload.discountAmount,
               discountMode: payload.discountMode,
@@ -947,21 +731,22 @@ export default function OrdersPage() {
               surchargeValue: payload.surchargeValue,
               paidAmount: Math.min(Math.trunc(payload.paidAmount), Math.max(0, Math.trunc(payload.totalAmount))),
               paymentMethod: payload.paymentMethod,
-              ...(orderFeatureFlags.orderPatchUpdate && payload.billItemsPatch?.hasChanges
-                ? {
-                  billItemsPatch: {
-                    addedItems: payload.billItemsPatch?.addedItems || [],
-                    updatedItems: payload.billItemsPatch?.updatedItems || [],
-                    removedItemIds: payload.billItemsPatch?.removedItemIds || [],
-                  },
-                }
-                : {}),
+              ...(orderFeatureFlags.orderPatchUpdate
+                ? (payload.billItemsPatch?.hasChanges
+                  ? {
+                    billItemsPatch: {
+                      addedItems: payload.billItemsPatch?.addedItems || [],
+                      updatedItems: payload.billItemsPatch?.updatedItems || [],
+                      removedItemIds: payload.billItemsPatch?.removedItemIds || [],
+                    },
+                  }
+                  : {})
+                : { billItems: payload.billItems }),
             };
             await orderService.update(editingOrder.id, updatePayload);
             await loadOrders();
             setView('list');
             setEditingOrder(null);
-            setEditingDraftBillItems([]);
             showToast('success', 'Cập nhật hóa đơn thành công');
           } catch (error) {
             const message = typeof error === 'string' ? error : 'Không thể cập nhật hóa đơn';
@@ -973,56 +758,25 @@ export default function OrdersPage() {
           }
           }}
           onToggleTimeLineTimer={async (lineId, action) => {
-            const sourceItems = editingDraftBillItems.length > 0 ? editingDraftBillItems : editingOrder.billItems;
-            const line = sourceItems.find((item) => item.lineId === lineId);
-            if (!line) throw new Error('Không tìm thấy dòng món trong hóa đơn');
-            const nowIso = new Date().toISOString();
-            const nextStartAt = action === 'start' ? nowIso : line.startAt || null;
-            const nextStopAt = action === 'stop' ? nowIso : null;
-            const nextItems = sourceItems.map((item) => (
-              item.lineId === lineId
-                ? {
-                  ...item,
-                  startAt: nextStartAt,
-                  stopAt: nextStopAt,
-                  timerStatus: (action === 'start' ? 'RUNNING' : 'STOPPED') as 'RUNNING' | 'STOPPED',
-                  activeSessionStartedAt: action === 'start' ? nextStartAt : null,
-                }
-                : item
-            ));
+          if (action === 'start') {
+            await orderService.startItemTimer(editingOrder.id, lineId);
+          } else {
+            await orderService.stopItemTimer(editingOrder.id, lineId);
+          }
+          const latestDetailResponse = await orderService.getById(editingOrder.id);
+          const latestEditingState = mapOrderDetailToEditingState(latestDetailResponse.data as OrderDetail);
+          setEditingOrder(latestEditingState);
+          await loadOrders();
 
-            const entityType = editingOrder.selectedTable?.entityType;
-            await orderService.update(editingOrder.id, {
-              entityType,
-              tableId: entityType === 'TABLE' ? editingOrder.selectedTable?.id : undefined,
-              roomId: entityType === 'ROOM' ? editingOrder.selectedTable?.id : editingOrder.selectedTable?.roomId || undefined,
-              customerName: editingOrder.customerName,
-              billItems: nextItems,
-              totalAmount: Math.max(0, nextItems.reduce((sum, item) => sum + Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)), 0)),
-              discountAmount: editingOrder.discountAmount ?? 0,
-              discountMode: editingOrder.discountMode || 'amount',
-              discountValue: Number(editingOrder.discountValue ?? editingOrder.discountAmount ?? 0),
-              surchargeAmount: editingOrder.surchargeAmount ?? 0,
-              surchargeMode: editingOrder.surchargeMode || 'amount',
-              surchargeValue: Number(editingOrder.surchargeValue ?? editingOrder.surchargeAmount ?? 0),
-              paidAmount: Math.max(0, Math.trunc(Number(editingOrder.paidAmount || 0))),
-              paymentMethod: editingOrder.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
-            });
-
-            const latestDetailResponse = await orderService.getById(editingOrder.id);
-            const latestEditingState = mapOrderDetailToEditingState(latestDetailResponse.data as OrderDetail);
-            setEditingOrder(latestEditingState);
-            setEditingDraftBillItems(latestEditingState.billItems);
-            await loadOrders();
-
-            const nextLine = latestEditingState.billItems.find((item) => item.lineId === lineId);
-            return {
-              usedMinutes: Math.max(0, Math.trunc(Number(nextLine?.usedMinutes || 0))),
-              lineTotal: Math.max(0, Math.trunc(Number(nextLine?.lineTotal || 0))),
-              timerStatus: nextLine?.timerStatus === 'RUNNING' ? 'RUNNING' : 'STOPPED',
-              startAt: nextLine?.startAt || null,
-              stopAt: nextLine?.stopAt || null,
-            };
+          const targetLine = latestEditingState.billItems.find((item) => item.lineId === lineId);
+          const nextTimerStatus = targetLine?.timerStatus === 'RUNNING' ? 'RUNNING' : 'STOPPED';
+          const nextUsedMinutes = Math.max(0, Math.trunc(Number(targetLine?.usedMinutes || 0)));
+          const nextLineTotal = Math.max(0, Math.trunc(Number(targetLine?.lineTotal || 0)));
+          return {
+            usedMinutes: nextUsedMinutes,
+            lineTotal: nextLineTotal,
+            timerStatus: nextTimerStatus,
+          };
           }}
         />
       </>
@@ -1039,61 +793,7 @@ export default function OrdersPage() {
       <div className="orders-toolbar">
         <h2>Danh sách hóa đơn</h2>
         <div className="orders-toolbar-actions">
-          <button
-            className="orders-primary-btn"
-            onClick={async () => {
-              if (!branchId) {
-                showToast('error', 'Vui lòng chọn chi nhánh trước khi tạo hóa đơn');
-                return;
-              }
-              if (isCreatingDraftRef.current) return;
-              isCreatingDraftRef.current = true;
-              try {
-                const created = await orderService.create({
-                  customerName: '',
-                  totalAmount: 0,
-                  discountAmount: 0,
-                  discountMode: 'amount',
-                  discountValue: 0,
-                  surchargeAmount: 0,
-                  surchargeMode: 'amount',
-                  surchargeValue: 0,
-                  paidAmount: 0,
-                  paymentMethod: 'CASH',
-                  orderState: 'DRAFT',
-                  billItems: [],
-                  branchId,
-                });
-                const newDraftId = created.data?.id;
-                if (!newDraftId) throw new Error('Không nhận được mã hóa đơn nháp');
-                setCreateDraft({
-                  activeTab: 'table',
-                  selectedTable: null,
-                  customerName: '',
-                  billItems: [],
-                  discountMode: 'amount',
-                  discountValue: '0',
-                  surchargeMode: 'amount',
-                  surchargeValue: '0',
-                  paidAmount: 0,
-                  paymentMethod: 'CASH',
-                });
-                setCreateDraftOrderId(newDraftId);
-                await loadOrders();
-                setView('create');
-              } catch (error: unknown) {
-                const message =
-                  typeof error === 'string'
-                    ? error
-                    : (error as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message
-                      || (error as { message?: string })?.message
-                      || 'Không tạo được hóa đơn nháp';
-                showToast('error', message);
-              } finally {
-                isCreatingDraftRef.current = false;
-              }
-            }}
-          >
+          <button className="orders-primary-btn" onClick={() => setView('create')}>
             Thêm mới hóa đơn
           </button>
           <div className="orders-toolbar-secondary-actions">
@@ -1151,7 +851,6 @@ export default function OrdersPage() {
               {showStatusDropdown && (
                 <div className="orders-multi-select-menu">
                   {[
-                    { value: 'DRAFT', label: 'Nháp' },
                     { value: 'PAID', label: 'Đã thanh toán' },
                     { value: 'PARTIAL', label: 'Chưa trả hết' },
                     { value: 'DELETED', label: 'Đã xóa' },
@@ -1738,16 +1437,16 @@ export default function OrdersPage() {
       {deleteConfirmOrder && (
         <div className="orders-confirm-overlay" onClick={() => setDeleteConfirmOrder(null)}>
           <div className="orders-confirm-modal" onClick={(event) => event.stopPropagation()}>
-            <h3>Xác nhận xóa vĩnh viễn hóa đơn</h3>
+            <h3>Xác nhận xóa hóa đơn</h3>
             <p>
-              Bạn có chắc chắn muốn xóa vĩnh viễn hóa đơn <strong>{deleteConfirmOrder.code}</strong> không?
+              Bạn có chắc chắn muốn xóa hóa đơn <strong>{deleteConfirmOrder.code}</strong> không?
             </p>
-            <p>Thao tác này sẽ xóa hẳn dữ liệu và không thể hoàn tác.</p>
+            <p>Hóa đơn sẽ chuyển sang trạng thái Đã xóa và có thể tra cứu lại lịch sử.</p>
             <div className="orders-confirm-actions">
               <button type="button" className="orders-ghost-btn" onClick={() => setDeleteConfirmOrder(null)}>
                 Hủy
               </button>
-              <button type="button" className="danger-btn" onClick={confirmHardDeleteOrder}>
+              <button type="button" className="danger-btn" onClick={confirmSoftDeleteOrder}>
                 Xóa
               </button>
             </div>
@@ -1825,7 +1524,6 @@ export default function OrdersPage() {
       surchargeValue: Number(data.surchargeValue ?? data.surchargeAmount ?? 0),
       paidAmount: Math.trunc(Number(data.paidAmount || 0)),
       paymentMethod: data.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
-      updatedAt: data.updatedAt,
       billItems: Array.isArray(data.items)
         ? data.items.map((item) => {
             if (item.pricingTypeSnapshot === 'TIME') {
@@ -1834,13 +1532,11 @@ export default function OrdersPage() {
               const unitPrice = Math.max(0, Math.trunc(Number(item.unitPrice || 0)));
               return {
                 ...item,
-                orderItemId: item.lineId,
                 lineTotal: Math.floor((unitPrice * usedMinutes) / rateMinutes),
               };
             }
             return {
               ...item,
-              orderItemId: item.lineId,
               lineTotal: Math.max(0, Math.trunc(Number(item.quantity || 0)) * Math.trunc(Number(item.unitPrice || 0))),
             };
           })

@@ -38,6 +38,8 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
   const [roomFilter, setRoomFilter] = useState('');
   const [tableFilter, setTableFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const [error, setError] = useState('');
 
   const pageSize = 7;
@@ -59,11 +61,6 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
     setAreas((areasRes.data || []) as Area[]);
     setRooms((roomsRes.data || []) as Room[]);
 
-    const incomingAreas = (areasRes.data || []) as Area[];
-    if (!areaFilter && incomingAreas.length > 0) {
-      setAreaFilter(incomingAreas[0].id);
-    }
-
     const tableData = tablesRes.data;
     const tableRows: DiningTable[] = Array.isArray(tableData)
       ? tableData
@@ -71,6 +68,8 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
         ? tableData.items
         : [];
     setTables(tableRows);
+    setTotalPages(tableData?.pagination?.totalPages || 1);
+    setTotalItems(tableData?.pagination?.total || tableRows.length);
   };
 
   useEffect(() => {
@@ -108,8 +107,11 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
     });
   }, [areas, rooms, tables, effectiveAreaFilter, roomFilter, tableFilter]);
 
+  const currentPage = Math.min(page, totalPages);
+
   const resetListFilters = () => {
     setSearch('');
+    setAreaFilter('');
     setRoomFilter('');
     setTableFilter('');
     setPage(1);
@@ -136,6 +138,26 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
               </svg>
             </button>
           </div>
+        </label>
+
+        <label>
+          Khu vực
+          <select
+            value={areaFilter}
+            onChange={(event) => {
+              setAreaFilter(event.target.value);
+              setRoomFilter('');
+              setTableFilter('');
+              setPage(1);
+            }}
+          >
+            <option value="">Tất cả khu vực</option>
+            {areas.map((area) => (
+              <option key={area.id} value={area.id}>
+                {area.name}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label>
@@ -191,111 +213,119 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
 
       {error && <p className="orders-picker-error">{error}</p>}
 
-      {areas.length > 0 && (
-        <div className="orders-area-tabs" role="tablist" aria-label="Khu vực">
-          {areas.map((area) => {
-            const isActive = area.id === effectiveAreaFilter;
-            return (
-              <button
-                key={area.id}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                className={`orders-area-tab ${isActive ? 'is-active' : ''}`}
-                onClick={() => {
-                  setAreaFilter(area.id);
-                  setRoomFilter('');
-                  setTableFilter('');
-                  setPage(1);
-                }}
-              >
-                {area.name}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
       <div className="orders-tree-wrap">
         {grouped.length === 0 ? (
           <div className="orders-empty-row">Không có dữ liệu</div>
         ) : (
           grouped.map((group) => (
-            <div className="orders-tree-content" key={group.area.id}>
-              {group.directTables.map((table) => {
-                const isSelected = selectedTableId === table.id;
-                return (
-                  <button
-                    type="button"
-                    className={`orders-tree-row orders-table-row ${isSelected ? 'is-selected' : ''}`}
-                    key={table.id}
-                    onClick={() => onSelectTable({ ...table, entityType: 'TABLE' })}
-                  >
-                    <span className="orders-tree-node-label">
-                      <span className="orders-tree-dot orders-table-dot" />
-                      <span>Bàn: {table.name}</span>
-                    </span>
-                    {isSelected && <span className="orders-selected-tag">Đã chọn</span>}
-                  </button>
-                );
-              })}
+            <div className="orders-area-group-card" key={group.area.id}>
+              <div className="orders-area-group-header">
+                <strong>{group.area.name}</strong>
+              </div>
 
-              {group.roomGroups.map((roomGroup) => (
-                <div className="orders-room-block" key={roomGroup.room.id}>
-                  <button
-                    type="button"
-                    className={`orders-tree-row orders-room-row ${selectedTableId === roomGroup.room.id ? 'is-selected' : ''}`}
-                    onClick={() =>
-                      onSelectTable({
-                        entityType: 'ROOM',
-                        id: roomGroup.room.id,
-                        name: roomGroup.room.name,
-                        areaId: group.area.id,
-                        areaName: group.area.name,
-                        roomId: roomGroup.room.id,
-                        roomName: roomGroup.room.name,
-                      })
-                    }
-                  >
-                    <span className="orders-tree-node-label">
-                      <span className="orders-tree-dot orders-room-dot" />
-                      <span>Phòng: {roomGroup.room.name}</span>
-                    </span>
-                    {selectedTableId === roomGroup.room.id && <span className="orders-selected-tag">Đã chọn</span>}
-                  </button>
+              <div className="orders-tree-content">
+                {group.directTables.map((table) => {
+                  const isSelected = selectedTableId === table.id;
+                  return (
+                    <button
+                      type="button"
+                      className={`orders-tree-row orders-table-row ${isSelected ? 'is-selected' : ''}`}
+                      key={table.id}
+                       onClick={() => onSelectTable({ ...table, entityType: 'TABLE' })}
+                    >
+                      <span className="orders-tree-node-label">
+                        <span className="orders-tree-dot orders-table-dot" />
+                        <span>Bàn: {table.name}</span>
+                      </span>
+                      {isSelected && <span className="orders-selected-tag">Đã chọn</span>}
+                    </button>
+                  );
+                })}
 
-                  {roomGroup.tables.length > 0 && (
-                    <div className="orders-room-children">
-                      {roomGroup.tables.map((table) => {
-                        const isSelected = selectedTableId === table.id;
-                        return (
-                          <button
-                            type="button"
-                            className={`orders-tree-row orders-table-row orders-child-table-row ${isSelected ? 'is-selected' : ''}`}
-                            key={table.id}
-                            onClick={() => onSelectTable({ ...table, entityType: 'TABLE' })}
-                          >
-                            <span className="orders-tree-node-label">
-                              <span className="orders-tree-dot orders-table-dot" />
-                              <span>Bàn: {table.name}</span>
-                            </span>
-                            {isSelected && <span className="orders-selected-tag">Đã chọn</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              ))}
+                {group.roomGroups.map((roomGroup) => (
+                  <div className="orders-room-block" key={roomGroup.room.id}>
+                    <button
+                      type="button"
+                      className={`orders-tree-row orders-room-row ${selectedTableId === roomGroup.room.id ? 'is-selected' : ''}`}
+                      onClick={() =>
+                        onSelectTable({
+                          entityType: 'ROOM',
+                          id: roomGroup.room.id,
+                          name: roomGroup.room.name,
+                          areaId: group.area.id,
+                          areaName: group.area.name,
+                          roomId: roomGroup.room.id,
+                          roomName: roomGroup.room.name,
+                        })
+                      }
+                    >
+                      <span className="orders-tree-node-label">
+                        <span className="orders-tree-dot orders-room-dot" />
+                        <span>Phòng: {roomGroup.room.name}</span>
+                      </span>
+                      {selectedTableId === roomGroup.room.id && <span className="orders-selected-tag">Đã chọn</span>}
+                    </button>
 
-              {group.directTables.length === 0 && group.roomGroups.length === 0 && (
-                <div className="orders-empty-row">Chưa có phòng/bàn trong khu vực</div>
-              )}
+                    {roomGroup.tables.length > 0 && (
+                      <div className="orders-room-children">
+                        {roomGroup.tables.map((table) => {
+                          const isSelected = selectedTableId === table.id;
+                          return (
+                            <button
+                              type="button"
+                              className={`orders-tree-row orders-table-row ${isSelected ? 'is-selected' : ''}`}
+                              key={table.id}
+                              onClick={() => onSelectTable({ ...table, entityType: 'TABLE' })}
+                            >
+                              <span className="orders-tree-node-label">
+                                <span className="orders-tree-dot orders-table-dot" />
+                                <span>Bàn: {table.name}</span>
+                              </span>
+                              {isSelected && <span className="orders-selected-tag">Đã chọn</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {group.directTables.length === 0 && group.roomGroups.length === 0 && (
+                  <div className="orders-empty-row">Chưa có phòng/bàn trong khu vực</div>
+                )}
+              </div>
             </div>
           ))
         )}
       </div>
 
+      <div className="pagination-bar">
+        <span>
+          Trang {currentPage}/{totalPages} - {totalItems} bản ghi
+        </span>
+        <div className="pagination-actions">
+          <button className="ghost-btn" disabled={currentPage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+            Trước
+          </button>
+          {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((pageNumber) => (
+            <button
+              key={pageNumber}
+              className={`ghost-btn ${pageNumber === currentPage ? 'active' : ''}`}
+              disabled={pageNumber === currentPage}
+              onClick={() => setPage(pageNumber)}
+            >
+              {pageNumber}
+            </button>
+          ))}
+          <button
+            className="ghost-btn"
+            disabled={currentPage >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          >
+            Sau
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

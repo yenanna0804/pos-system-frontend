@@ -18,8 +18,6 @@ export function useOrderEditor(initialBillItems: BillItem[]) {
       usedMinutes: item.usedMinutes,
       timerStatus: item.timerStatus,
       activeSessionStartedAt: item.activeSessionStartedAt,
-      startAt: item.startAt,
-      stopAt: item.stopAt,
       note: item.note,
     }))),
     [initialBillItems],
@@ -87,8 +85,6 @@ export function useOrderEditor(initialBillItems: BillItem[]) {
         if ((item.note || '') !== (initialItem.note || '')) changed.note = item.note;
         if ((item.pricingTypeSnapshot || 'FIXED') !== (initialItem.pricingTypeSnapshot || 'FIXED')) changed.pricingTypeSnapshot = item.pricingTypeSnapshot;
         if (Number(item.usedMinutes || 0) !== Number(initialItem.usedMinutes || 0)) changed.usedMinutes = item.usedMinutes;
-        if ((item.startAt || null) !== (initialItem.startAt || null)) changed.startAt = item.startAt || null;
-        if ((item.stopAt || null) !== (initialItem.stopAt || null)) changed.stopAt = item.stopAt || null;
         return changed;
       })
       .filter((item) => Object.keys(item).length > 1);

@@ -73,7 +73,7 @@
 }
 
 .dashboard-content {
-  padding: 0px;
+  padding: 24px;
   max-width: 1760px;
   margin: 0 auto;
   width: 100%;
@@ -124,7 +124,7 @@
 .dashboard-content h2 {
   font-size: 22px;
   color: #333;
-  margin: 0px;
+  margin: 0 0 24px;
 }
 
 .stats-grid {

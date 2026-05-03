@@ -21,8 +21,6 @@ type Props = {
   onUpdateUnitPrice: (lineId: string, unitPrice: number) => void;
   onToggleTimeLineTimer?: (lineId: string, action: 'start' | 'stop') => Promise<void>;
   timerLoadingLineIds?: string[];
-  timerErrorLineIds?: string[];
-  timerUnsyncedLineIds?: string[];
   discountMode: AdjustmentMode;
   discountValue: string;
   onDiscountModeChange: (value: AdjustmentMode) => void;
@@ -61,8 +59,6 @@ export default function OrderBillsPanel({
   onUpdateUnitPrice,
   onToggleTimeLineTimer,
   timerLoadingLineIds = [],
-  timerErrorLineIds = [],
-  timerUnsyncedLineIds = [],
   discountMode,
   discountValue,
   onDiscountModeChange,
@@ -322,6 +318,8 @@ export default function OrderBillsPanel({
         ) : (
           billItems.map((item, index) => (
             (() => {
+              const isTimerRunning = item.timerStatus === 'RUNNING' || item.timerStatus === 'ON';
+              const usedMinutes = Math.max(0, Math.trunc(Number(item.usedMinutes || 0)));
               return (
             <div className="orders-bill-line" key={item.lineId}>
               <div className="orders-bill-line-main">
@@ -346,11 +344,6 @@ export default function OrderBillsPanel({
                     {index + 1}. {item.productName}
                   </h4>
                   {item.pricingTypeSnapshot !== 'TIME' && <small>{item.unit ? `Đơn vị: ${item.unit}` : 'Đơn vị: -'}</small>}
-                  {item.pricingTypeSnapshot === 'TIME' && (
-                    <small>
-                      Block: {Math.max(1, Math.trunc(Number(item.timeRateMinutesSnapshot || 0)))} phút
-                    </small>
-                  )}
                   <button type="button" className="orders-note-trigger" onClick={() => setEditingNoteLineId(item.lineId)}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                       <rect x="5" y="3" width="14" height="18" rx="2" />
@@ -416,11 +409,9 @@ export default function OrderBillsPanel({
                 {item.pricingTypeSnapshot === 'TIME' && (
                   <TimeLineControls
                     lineId={item.lineId}
-                    startAt={item.startAt}
-                    stopAt={item.stopAt}
+                    isRunning={isTimerRunning}
+                    usedMinutes={usedMinutes}
                     isLoading={timerLoadingLineIds.includes(item.lineId)}
-                    isUnsynced={timerUnsyncedLineIds.includes(item.lineId)}
-                    hasError={timerErrorLineIds.includes(item.lineId)}
                     onToggleTimeLineTimer={onToggleTimeLineTimer}
                   />
                 )}
