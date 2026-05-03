@@ -396,6 +396,7 @@ export default function OrdersPage() {
     };
   }, []);
 
+
   const buildCreateOrderPayload = (payload: {
     table: { entityType: 'TABLE' | 'ROOM'; id: string; name: string; areaName: string; roomName?: string | null; roomId?: string | null } | null;
     customerName: string;
