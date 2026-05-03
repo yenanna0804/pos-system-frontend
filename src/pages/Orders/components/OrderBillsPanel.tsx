@@ -46,6 +46,8 @@ const formatThousands = (value: string) => {
   return Number(digits).toLocaleString('vi-VN');
 };
 
+const toMoney = (value: unknown) => Math.max(0, Math.trunc(Number(value) || 0));
+
 export default function OrderBillsPanel({
   selectedTable,
   customerName,
@@ -95,11 +97,14 @@ export default function OrderBillsPanel({
   const subtotal = billItems.reduce((sum, item) => sum + getLineAmount(item), 0);
   const discountRaw = discountMode === 'amount' ? toAmountNumber(discountValue) : toPercentNumber(discountValue);
   const surchargeRaw = surchargeMode === 'amount' ? toAmountNumber(surchargeValue) : toPercentNumber(surchargeValue);
-  const discountAmount = discountMode === 'percent' ? Math.min(subtotal, (subtotal * Math.max(0, discountRaw)) / 100) : Math.max(0, discountRaw);
-  const subtotalAfterDiscount = Math.max(0, subtotal - discountAmount);
+  const subtotalAmount = toMoney(subtotal);
+  const discountAmount = discountMode === 'percent'
+    ? toMoney(Math.min(subtotalAmount, (subtotalAmount * Math.max(0, discountRaw)) / 100))
+    : Math.min(subtotalAmount, toMoney(discountRaw));
+  const subtotalAfterDiscount = Math.max(0, subtotalAmount - discountAmount);
   const surchargeAmount = surchargeMode === 'percent'
-    ? (subtotalAfterDiscount * Math.max(0, surchargeRaw)) / 100
-    : Math.max(0, surchargeRaw);
+    ? toMoney((subtotalAfterDiscount * Math.max(0, surchargeRaw)) / 100)
+    : toMoney(surchargeRaw);
 
   return (
     <aside className="orders-bills-panel">

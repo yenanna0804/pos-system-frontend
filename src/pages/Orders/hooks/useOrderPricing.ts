@@ -4,6 +4,8 @@ import { orderFeatureFlags } from '../orderFeatureFlags';
 
 export type AdjustmentMode = 'percent' | 'amount';
 
+const toMoney = (value: unknown) => Math.max(0, Math.trunc(Number(value) || 0));
+
 export const toAmountNumber = (value: string) => {
   const numeric = Number(value.replace(/\D/g, ''));
   return Number.isFinite(numeric) ? numeric : 0;
@@ -57,20 +59,24 @@ export function useOrderPricing(params: {
 
   const discountAmount = useMemo(() => {
     const discountRaw = discountMode === 'amount' ? toAmountNumber(discountValue) : toPercentNumber(discountValue);
+    const subtotalAmount = toMoney(subtotal);
     return discountMode === 'percent'
-      ? Math.min(subtotal, (subtotal * Math.max(0, discountRaw)) / 100)
-      : Math.max(0, discountRaw);
+      ? toMoney(Math.min(subtotalAmount, (subtotalAmount * Math.max(0, discountRaw)) / 100))
+      : Math.min(subtotalAmount, toMoney(discountRaw));
   }, [discountMode, discountValue, subtotal]);
 
   const surchargeAmount = useMemo(() => {
     const surchargeRaw = surchargeMode === 'amount' ? toAmountNumber(surchargeValue) : toPercentNumber(surchargeValue);
-    const subtotalAfterDiscount = Math.max(0, subtotal - discountAmount);
+    const subtotalAfterDiscount = Math.max(0, toMoney(subtotal) - toMoney(discountAmount));
     return surchargeMode === 'percent'
-      ? (subtotalAfterDiscount * Math.max(0, surchargeRaw)) / 100
-      : Math.max(0, surchargeRaw);
+      ? toMoney((subtotalAfterDiscount * Math.max(0, surchargeRaw)) / 100)
+      : toMoney(surchargeRaw);
   }, [surchargeMode, surchargeValue, subtotal, discountAmount]);
 
-  const totalAmount = useMemo(() => Math.max(0, subtotal - discountAmount + surchargeAmount), [subtotal, discountAmount, surchargeAmount]);
+  const totalAmount = useMemo(
+    () => Math.max(0, toMoney(subtotal) - toMoney(discountAmount) + toMoney(surchargeAmount)),
+    [subtotal, discountAmount, surchargeAmount],
+  );
 
   return {
     subtotal,
