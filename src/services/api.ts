@@ -130,7 +130,7 @@ export const diningTableService = {
 };
 
 export type OrderPayload = {
-  entityType: 'TABLE' | 'ROOM';
+  entityType?: 'TABLE' | 'ROOM';
   tableId?: string;
   roomId?: string;
   customerName?: string;
@@ -143,6 +143,7 @@ export type OrderPayload = {
   surchargeValue?: number;
   paidAmount?: number;
   paymentMethod?: 'CASH' | 'BANKING';
+  orderState?: 'DRAFT' | 'PAID' | 'PARTIAL';
   billItems: {
     lineId: string;
     productId: string;
@@ -156,6 +157,8 @@ export type OrderPayload = {
     timeRateAmountSnapshot?: number;
     timeRateMinutesSnapshot?: number;
     usedMinutes?: number;
+    startAt?: string | null;
+    stopAt?: string | null;
   }[];
   branchId?: string;
   billItemsPatch?: {
@@ -172,6 +175,8 @@ export type OrderPayload = {
       timeRateAmountSnapshot?: number;
       timeRateMinutesSnapshot?: number;
       usedMinutes?: number;
+      startAt?: string | null;
+      stopAt?: string | null;
     }[];
     updatedItems?: {
       lineId: string;
@@ -186,6 +191,8 @@ export type OrderPayload = {
       timeRateAmountSnapshot?: number;
       timeRateMinutesSnapshot?: number;
       usedMinutes?: number;
+      startAt?: string | null;
+      stopAt?: string | null;
     }[];
     removedItemIds?: string[];
   };
@@ -213,6 +220,21 @@ export const orderService = {
   hardRemove: (id: string) => api.delete(`/orders/${id}/hard`),
   history: (id: string) => api.get(`/orders/${id}/logs`),
   startItemTimer: (orderId: string, itemId: string) => api.post(`/orders/${orderId}/items/${itemId}/timer/start`),
+  startTimeLineCommand: (orderId: string, payload: {
+    clientLineId: string;
+    expectedOrderUpdatedAt?: string;
+    lineSnapshot?: {
+      productId: string;
+      productName?: string;
+      unit?: string;
+      unitPrice?: number;
+      quantity?: number;
+      pricingTypeSnapshot?: 'FIXED' | 'TIME';
+      timeRateAmountSnapshot?: number;
+      timeRateMinutesSnapshot?: number;
+      note?: string;
+    };
+  }) => api.post(`/orders/${orderId}/commands/start-time-line`, payload),
   stopItemTimer: (orderId: string, itemId: string) => api.post(`/orders/${orderId}/items/${itemId}/timer/stop`),
   getItemTimerStatus: (orderId: string, itemId: string) => api.get(`/orders/${orderId}/items/${itemId}/timer/status`),
 };

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import OrderBillsPanel from './components/OrderBillsPanel';
 import OrdersProductPicker from './components/OrdersProductPicker';
@@ -36,7 +36,7 @@ type Props = {
   };
   defaultTab?: 'table' | 'product';
   onSaveOrder: (payload: {
-    table: SelectableTable;
+    table: SelectableTable | null;
     customerName: string;
     billItems: BillItem[];
     totalAmount: number;
@@ -55,25 +55,23 @@ type Props = {
       hasChanges: boolean;
     };
   }) => Promise<void>;
-  onToggleTimeLineTimer?: (lineId: string, action: 'start' | 'stop') => Promise<{ usedMinutes: number; lineTotal: number; timerStatus: 'RUNNING' | 'STOPPED' }>;
-  onStartTimeLineTimerForNewOrder?: (payload: {
-    table: SelectableTable;
+  onToggleTimeLineTimer?: (lineId: string, action: 'start' | 'stop') => Promise<{ usedMinutes: number; lineTotal: number; timerStatus: 'RUNNING' | 'STOPPED'; startAt?: string | null; stopAt?: string | null }>;
+  onBillItemsChange?: (items: BillItem[]) => void;
+  onDraftChange?: (draft: {
+    activeTab: 'table' | 'product';
+    selectedTable: SelectableTable | null;
     customerName: string;
     billItems: BillItem[];
-    totalAmount: number;
-    discountAmount: number;
     discountMode: 'percent' | 'amount';
-    discountValue: number;
-    surchargeAmount: number;
+    discountValue: string;
     surchargeMode: 'percent' | 'amount';
-    surchargeValue: number;
-    paidAmount: number;
-    paymentMethod: 'CASH' | 'BANKING';
-    lineId: string;
-  }) => Promise<void>;
+    surchargeValue: string;
+    paidAmount?: number;
+    paymentMethod?: 'CASH' | 'BANKING';
+  }) => void;
 };
 
-export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', orderCode, orderId, initialData, defaultTab = 'table', onToggleTimeLineTimer, onStartTimeLineTimerForNewOrder }: Props) {
+export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', orderCode, orderId, initialData, defaultTab = 'table', onToggleTimeLineTimer, onBillItemsChange, onDraftChange }: Props) {
   const { branchId } = useAuth();
   const [activeTab, setActiveTab] = useState<'table' | 'product'>(defaultTab);
   const [selectedTable, setSelectedTable] = useState<SelectableTable | null>(initialData?.selectedTable || null);
@@ -86,9 +84,55 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
   const [surchargeValue, setSurchargeValue] = useState(String(initialData?.surchargeValue ?? initialData?.surchargeAmount ?? 0));
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [showEditConfirm, setShowEditConfirm] = useState(false);
-  const { timerLoadingLineIds, createToggleHandler } = useOrderTimer();
+  const [showTakeawayConfirm, setShowTakeawayConfirm] = useState(false);
+  const { timerLoadingLineIds, timerErrorLineIds, timerUnsyncedLineIds, markLineUnsynced, markLineSynced, createToggleHandler } = useOrderTimer();
 
-  const canOpenProductTab = Boolean(selectedTable);
+  useEffect(() => {
+    if (mode !== 'edit') return;
+    billItems.forEach((item) => {
+      if (item.pricingTypeSnapshot !== 'TIME') return;
+      if (item.orderItemId) {
+        markLineSynced(item.lineId);
+      } else {
+        markLineUnsynced(item.lineId);
+      }
+    });
+  }, [mode, billItems, markLineSynced, markLineUnsynced]);
+
+  useEffect(() => {
+    onBillItemsChange?.(billItems);
+  }, [billItems, onBillItemsChange]);
+
+  useEffect(() => {
+    if (mode !== 'create') return;
+    onDraftChange?.({
+      activeTab,
+      selectedTable,
+      customerName,
+      billItems,
+      discountMode,
+      discountValue,
+      surchargeMode,
+      surchargeValue,
+      paidAmount: initialData?.paidAmount,
+      paymentMethod: initialData?.paymentMethod,
+    });
+  }, [
+    mode,
+    onDraftChange,
+    activeTab,
+    selectedTable,
+    customerName,
+    billItems,
+    discountMode,
+    discountValue,
+    surchargeMode,
+    surchargeValue,
+    initialData?.paidAmount,
+    initialData?.paymentMethod,
+  ]);
+
+  const canOpenProductTab = true;
 
   const { totalAmount, discountAmount, surchargeAmount } = useOrderPricing({
     billItems,
@@ -102,18 +146,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     () =>
       createToggleHandler({
         orderId,
-        selectedTable,
-        customerName,
-        billItems,
-        totalAmount,
-        discountAmount,
-        discountMode,
-        discountValue,
-        surchargeAmount,
-        surchargeMode,
-        surchargeValue,
         onToggleTimeLineTimer,
-        onStartTimeLineTimerForNewOrder,
         setBillItems,
       }),
     [
@@ -131,13 +164,11 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
       surchargeMode,
       surchargeValue,
       onToggleTimeLineTimer,
-      onStartTimeLineTimerForNewOrder,
       setBillItems,
     ],
   );
 
   const executeSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING') => {
-    if (!selectedTable) return;
     if (billItems.length === 0) return;
 
     setIsSavingOrder(true);
@@ -146,6 +177,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
         table: selectedTable,
         customerName,
         billItems,
+        billItemsPatch,
         totalAmount,
         discountAmount,
         discountMode,
@@ -162,7 +194,13 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
   };
 
   const handleSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING') => {
-    if (!selectedTable || billItems.length === 0) return;
+    if (billItems.length === 0) return;
+    if (!selectedTable && mode === 'create') {
+      pendingPaidAmountRef.current = paidAmount;
+      pendingPaymentMethodRef.current = paymentMethod;
+      setShowTakeawayConfirm(true);
+      return;
+    }
     if (mode === 'edit') {
       pendingPaidAmountRef.current = paidAmount;
       pendingPaymentMethodRef.current = paymentMethod;
@@ -259,6 +297,29 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
 
   return (
     <section className="orders-create-page">
+      {showTakeawayConfirm && (
+        <div className="orders-confirm-overlay" onClick={() => setShowTakeawayConfirm(false)}>
+          <div className="orders-confirm-modal" onClick={(event) => event.stopPropagation()}>
+            <h3>Xác nhận lưu hóa đơn</h3>
+            <p>Bạn chưa chọn phòng/bàn, hệ thống sẽ tự lưu hóa đơn này là hóa đơn mang về (Mang về).</p>
+            <div className="orders-confirm-actions">
+              <button type="button" className="orders-ghost-btn" onClick={() => setShowTakeawayConfirm(false)}>
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="orders-primary-btn"
+                onClick={async () => {
+                  setShowTakeawayConfirm(false);
+                  await executeSaveOrder(pendingPaidAmountRef.current, pendingPaymentMethodRef.current);
+                }}
+              >
+                Đồng ý
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showEditConfirm && (
         <div className="orders-confirm-overlay" onClick={() => setShowEditConfirm(false)}>
           <div className="orders-confirm-modal" onClick={(event) => event.stopPropagation()}>
@@ -286,132 +347,146 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
         </div>
       )}
 
-      <div className="orders-create-header">
-        <button type="button" className="orders-ghost-btn" onClick={onBack}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-            <circle cx="12" cy="12" r="9" />
-            <path d="M13.5 8.5L10 12l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Quay lại danh sách
-        </button>
-        <h2>{mode === 'edit' ? `Sửa hóa đơn${orderCode ? ` - ${orderCode}` : ''}` : 'Thêm mới hóa đơn'}</h2>
-      </div>
+      <div className="orders-create-shell">
+        <div className="orders-create-topbar">
+          <div className="orders-step-tabs">
+            <button
+              type="button"
+              className={`orders-step-tab ${activeTab === 'table' ? 'active' : ''}`}
+              onClick={() => setActiveTab('table')}
+            >
+              Chọn phòng/bàn
+            </button>
+            <button
+              type="button"
+              className={`orders-step-tab ${activeTab === 'product' ? 'active' : ''}`}
+              onClick={() => {
+                if (!canOpenProductTab) return;
+                setActiveTab('product');
+              }}
+              disabled={!canOpenProductTab}
+            >
+              Chọn món
+            </button>
+          </div>
 
-      <div className="orders-step-tabs">
-        <button
-          type="button"
-          className={`orders-step-tab ${activeTab === 'table' ? 'active' : ''}`}
-          onClick={() => setActiveTab('table')}
-        >
-          Chọn phòng/bàn
-        </button>
-        <button
-          type="button"
-          className={`orders-step-tab ${activeTab === 'product' ? 'active' : ''}`}
-          onClick={() => {
-            if (!canOpenProductTab) return;
-            setActiveTab('product');
-          }}
-          disabled={!canOpenProductTab}
-        >
-          Chọn món
-        </button>
-      </div>
-
-      {activeTab === 'table' && (
-        <div className="orders-tab-panel">
-          <OrdersTablePicker
-            branchId={branchId}
-            selectedTableId={selectedTable?.id || ''}
-            onSelectTable={(table) => {
-              setSelectedTable(table);
-              setActiveTab('product');
-            }}
-          />
-          <div className="orders-table-confirm-bar">
-            <div>
-              {selectedTable
-                ? selectedTable.entityType === 'ROOM'
-                  ? `Đang chọn: ${selectedTable.areaName} / ${selectedTable.roomName || selectedTable.name}`
-                  : `Đang chọn: ${selectedTable.areaName}${selectedTable.roomName ? ` / ${selectedTable.roomName}` : ''} / ${selectedTable.name}`
-                : 'Vui lòng chọn 1 phòng hoặc 1 bàn để tiếp tục'}
-            </div>
+          <div className="orders-create-header">
+            <h2>{mode === 'edit' ? `Sửa hóa đơn${orderCode ? ` - ${orderCode}` : ''}` : 'Thêm mới hóa đơn'}</h2>
+            <button type="button" className="orders-ghost-btn" onClick={onBack}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                <circle cx="12" cy="12" r="9" />
+                <path d="M13.5 8.5L10 12l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Quay lại danh sách
+            </button>
           </div>
         </div>
-      )}
 
-      {activeTab === 'product' && (
-        <div className="orders-product-layout">
-          <div className="orders-product-left">
+      <div className="orders-product-layout">
+        <div className="orders-product-left">
+          {activeTab === 'table' ? (
+            <div className="orders-tab-panel">
+              <OrdersTablePicker
+                branchId={branchId}
+                selectedTableId={selectedTable?.id || ''}
+                onSelectTable={(table) => {
+                  setSelectedTable(table);
+                  setActiveTab('product');
+                }}
+              />
+              <div className="orders-table-confirm-bar">
+                <div>
+                  {selectedTable
+                    ? selectedTable.entityType === 'ROOM'
+                      ? `Đang chọn: ${selectedTable.areaName} / ${selectedTable.roomName || selectedTable.name}`
+                      : `Đang chọn: ${selectedTable.areaName}${selectedTable.roomName ? ` / ${selectedTable.roomName}` : ''} / ${selectedTable.name}`
+                    : 'Chưa chọn phòng/bàn. Khi lưu hệ thống sẽ tự gán (Mang về).'}
+                </div>
+              </div>
+            </div>
+          ) : (
             <OrdersProductPicker branchId={branchId} onAddProduct={(product) => addProductToBill(product, duplicateHandling)} />
-          </div>
-          <OrderBillsPanel
-            selectedTable={selectedTable}
-            customerName={customerName}
-            onCustomerNameChange={setCustomerName}
-            duplicateHandling={duplicateHandling}
-            onDuplicateHandlingChange={setDuplicateHandling}
-            billItems={billItems}
-            onIncreaseQty={(lineId) =>
-              setBillItems((prev) =>
-                prev.map((item) => {
+          )}
+        </div>
+        <OrderBillsPanel
+          selectedTable={selectedTable}
+          customerName={customerName}
+          onCustomerNameChange={setCustomerName}
+          duplicateHandling={duplicateHandling}
+          onDuplicateHandlingChange={setDuplicateHandling}
+          billItems={billItems}
+          onIncreaseQty={(lineId) =>
+            setBillItems((prev) =>
+              prev.map((item) => {
+                if (item.lineId !== lineId) return item;
+                if (item.pricingTypeSnapshot === 'TIME') return item;
+                return { ...item, quantity: item.quantity + 1 };
+              }),
+            )
+          }
+          onDecreaseQty={(lineId) =>
+            setBillItems((prev) =>
+              prev
+                .map((item) => {
                   if (item.lineId !== lineId) return item;
                   if (item.pricingTypeSnapshot === 'TIME') return item;
-                  return { ...item, quantity: item.quantity + 1 };
-                }),
-              )
-            }
-            onDecreaseQty={(lineId) =>
-              setBillItems((prev) =>
-                prev
-                  .map((item) => {
-                    if (item.lineId !== lineId) return item;
-                    if (item.pricingTypeSnapshot === 'TIME') return item;
-                    return { ...item, quantity: Math.max(0, item.quantity - 1) };
-                  })
-                  .filter((item) => item.quantity > 0),
-              )
-            }
-            onSetQty={(lineId, quantity) =>
-              setBillItems((prev) =>
-                prev
-                  .map((item) => {
-                    if (item.lineId !== lineId) return item;
-                    if (item.pricingTypeSnapshot === 'TIME') return item;
-                    return { ...item, quantity: Math.max(0, Math.round(quantity)) };
-                  })
-                  .filter((item) => item.quantity > 0),
-              )
-            }
-            onRemoveLine={(lineId) => setBillItems((prev) => prev.filter((item) => item.lineId !== lineId))}
-            onUpdateNote={(lineId, note) =>
-              setBillItems((prev) => prev.map((item) => (item.lineId === lineId ? { ...item, note } : item)))
-            }
-            onUpdateUnitPrice={(lineId, unitPrice) =>
-              setBillItems((prev) =>
-                prev.map((item) => (item.lineId === lineId ? { ...item, unitPrice: Math.max(0, Math.trunc(unitPrice)) } : item)),
-              )
-            }
-            onToggleTimeLineTimer={onToggleTimer}
-            timerLoadingLineIds={timerLoadingLineIds}
-            discountMode={discountMode}
-            discountValue={discountValue}
-            onDiscountModeChange={setDiscountMode}
-            onDiscountValueChange={setDiscountValue}
-            surchargeMode={surchargeMode}
-            surchargeValue={surchargeValue}
-            onSurchargeModeChange={setSurchargeMode}
-            onSurchargeValueChange={setSurchargeValue}
-            totalAmount={totalAmount}
-            initialPaidAmount={initialData?.paidAmount}
-            initialPaymentMethod={initialData?.paymentMethod}
-            onSaveOrder={handleSaveOrder}
-            onPrintInvoice={() => onPrintInvoice().catch(() => undefined)}
-            onPrintOrder={(selectedLineIds) => onPrintOrder(selectedLineIds).catch(() => undefined)}
-            disableSave={!selectedTable || billItems.length === 0 || isSavingOrder}
-          />
-        </div>
-      )}
+                  return { ...item, quantity: Math.max(0, item.quantity - 1) };
+                })
+                .filter((item) => item.quantity > 0),
+            )
+          }
+          onSetQty={(lineId, quantity) =>
+            setBillItems((prev) =>
+              prev
+                .map((item) => {
+                  if (item.lineId !== lineId) return item;
+                  if (item.pricingTypeSnapshot === 'TIME') return item;
+                  return { ...item, quantity: Math.max(0, Math.round(quantity)) };
+                })
+                .filter((item) => item.quantity > 0),
+            )
+          }
+          onRemoveLine={(lineId) => setBillItems((prev) => prev.filter((item) => item.lineId !== lineId))}
+          onUpdateNote={(lineId, note) =>
+            setBillItems((prev) => prev.map((item) => (item.lineId === lineId ? { ...item, note } : item)))
+          }
+          onUpdateUnitPrice={(lineId, unitPrice) =>
+            setBillItems((prev) =>
+              prev.map((item) => {
+                if (item.lineId !== lineId) return item;
+                const nextUnitPrice = Math.max(0, Math.trunc(unitPrice));
+                if (item.pricingTypeSnapshot !== 'TIME') {
+                  return { ...item, unitPrice: nextUnitPrice };
+                }
+                const usedMinutes = Math.max(0, Math.trunc(Number(item.usedMinutes || 0)));
+                const rateMinutes = Math.max(1, Math.trunc(Number(item.timeRateMinutesSnapshot || 1)));
+                const nextLineTotal = Math.floor((nextUnitPrice * usedMinutes) / rateMinutes);
+                return { ...item, unitPrice: nextUnitPrice, lineTotal: nextLineTotal };
+              }),
+            )
+          }
+          onToggleTimeLineTimer={onToggleTimer}
+          timerLoadingLineIds={timerLoadingLineIds}
+          timerErrorLineIds={timerErrorLineIds}
+          timerUnsyncedLineIds={timerUnsyncedLineIds}
+          discountMode={discountMode}
+          discountValue={discountValue}
+          onDiscountModeChange={setDiscountMode}
+          onDiscountValueChange={setDiscountValue}
+          surchargeMode={surchargeMode}
+          surchargeValue={surchargeValue}
+          onSurchargeModeChange={setSurchargeMode}
+          onSurchargeValueChange={setSurchargeValue}
+          totalAmount={totalAmount}
+          initialPaidAmount={initialData?.paidAmount}
+          initialPaymentMethod={initialData?.paymentMethod}
+          onSaveOrder={handleSaveOrder}
+          onPrintInvoice={() => onPrintInvoice().catch(() => undefined)}
+          onPrintOrder={(selectedLineIds) => onPrintOrder(selectedLineIds).catch(() => undefined)}
+          disableSave={billItems.length === 0 || isSavingOrder}
+        />
+      </div>
+      </div>
     </section>
   );
 }
