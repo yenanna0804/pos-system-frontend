@@ -15,6 +15,10 @@ export const toPercentNumber = (value: string) => {
 };
 
 export const getLineAmount = (item: BillItem) => {
+  if (item.lineTotal != null) {
+    return Math.max(0, Math.trunc(Number(item.lineTotal) || 0));
+  }
+
   if (item.pricingTypeSnapshot === 'TIME') {
     const usedMinutes = Math.max(0, Math.trunc(Number(item.usedMinutes || 0)));
     const rateMinutes = Math.max(1, Math.trunc(Number(item.timeRateMinutesSnapshot || 1)));
@@ -35,9 +39,6 @@ export const getLineAmount = (item: BillItem) => {
       }
     }
 
-    if (orderFeatureFlags.timeLineLevelPricing && item.lineTotal != null) {
-      return Math.max(0, Math.trunc(Number(item.lineTotal) || 0));
-    }
     return computedAmount;
   }
   return Math.max(0, Math.trunc(Number(item.unitPrice || 0))) * Math.max(0, Math.trunc(Number(item.quantity || 0)));

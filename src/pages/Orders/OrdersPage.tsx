@@ -1932,20 +1932,10 @@ export default function OrdersPage() {
       updatedAt: data.updatedAt,
       billItems: Array.isArray(data.items)
         ? data.items.map((item) => {
-            if (item.pricingTypeSnapshot === 'TIME') {
-              const usedMinutes = Math.max(0, Math.trunc(Number(item.usedMinutes || 0)));
-              const rateMinutes = Math.max(1, Math.trunc(Number(item.timeRateMinutesSnapshot || 1)));
-              const unitPrice = Math.max(0, Math.trunc(Number(item.unitPrice || 0)));
-              return {
-                ...item,
-                orderItemId: item.lineId,
-                lineTotal: Math.floor((unitPrice * usedMinutes) / rateMinutes),
-              };
-            }
             return {
               ...item,
               orderItemId: item.lineId,
-              lineTotal: Math.max(0, Math.trunc(Number(item.quantity || 0)) * Math.trunc(Number(item.unitPrice || 0))),
+              lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? 0))),
             };
           })
         : [],
