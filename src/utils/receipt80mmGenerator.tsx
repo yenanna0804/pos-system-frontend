@@ -1,5 +1,3 @@
-import { Cut, Image, Printer, Raw, render } from 'react-thermal-printer';
-
 export type Receipt80mmItem = {
   name: string;
   quantity: number;
@@ -61,7 +59,7 @@ const wrapByWidth = (ctx: CanvasRenderingContext2D, text: string, maxWidth: numb
   return lines;
 };
 
-const buildReceiptBitmapDataUrl = (data: Receipt80mmData) => {
+const buildReceiptCanvas = (data: Receipt80mmData) => {
   const width = 576;
   const marginX = 16;
   const contentWidth = width - marginX * 2;
@@ -209,29 +207,75 @@ const buildReceiptBitmapDataUrl = (data: Receipt80mmData) => {
   y += lineHeight;
   ctx.fillText('trước khi thanh toán', width / 2, y);
 
+  return canvas;
+};
+
+export const buildReceipt80mmBitmapDataUrl = (data?: Receipt80mmData) => {
+  const source = data || DEFAULT_RECEIPT_80MM_DATA;
+  const canvas = buildReceiptCanvas(source);
   const dataUrl = canvas.toDataURL('image/png');
   if (!dataUrl) throw new Error('Khong tao duoc du lieu bitmap');
   return dataUrl;
 };
 
-export const buildReceipt80mmBitmapDataUrl = (data?: Receipt80mmData) => {
-  const source = data || DEFAULT_RECEIPT_80MM_DATA;
-  return buildReceiptBitmapDataUrl(source);
-};
+const buildImageEscPosBytesFromCanvas = (canvas: HTMLCanvasElement) => {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Khong doc duoc du lieu canvas');
+  const { width, height } = canvas;
+  const imageData = ctx.getImageData(0, 0, width, height).data;
+  const widthBytes = Math.ceil(width / 8);
+  const raster = new Uint8Array(widthBytes * height);
 
-const buildImageEscPosBytes = async (dataUrl: string) => {
-  const escPosInit = Uint8Array.from([0x1b, 0x40]);
-  const receipt = (
-    <Printer type="epson" width={48}>
-      <Raw data={escPosInit} />
-      <Image align="center" src={dataUrl} />
-      <Cut lineFeeds={4} />
-      <Raw data={escPosInit} />
-    </Printer>
-  );
-  return render(receipt);
+  for (let y = 0; y < height; y += 1) {
+    for (let xb = 0; xb < widthBytes; xb += 1) {
+      let byte = 0;
+      for (let bit = 0; bit < 8; bit += 1) {
+        const x = xb * 8 + bit;
+        if (x >= width) continue;
+        const idx = (y * width + x) * 4;
+        const r = imageData[idx];
+        const g = imageData[idx + 1];
+        const b = imageData[idx + 2];
+        const a = imageData[idx + 3];
+        const luminance = (r * 299 + g * 587 + b * 114) / 1000;
+        const isBlack = a > 16 && luminance < 170;
+        if (isBlack) {
+          byte |= 1 << (7 - bit);
+        }
+      }
+      raster[y * widthBytes + xb] = byte;
+    }
+  }
+
+  const xL = widthBytes & 0xff;
+  const xH = (widthBytes >> 8) & 0xff;
+  const yL = height & 0xff;
+  const yH = (height >> 8) & 0xff;
+
+  const escInit = Uint8Array.from([0x1b, 0x40]);
+  const alignLeft = Uint8Array.from([0x1b, 0x61, 0x00]);
+  const rasterHeader = Uint8Array.from([0x1d, 0x76, 0x30, 0x00, xL, xH, yL, yH]);
+  const lf = Uint8Array.from([0x0a, 0x0a]);
+  const cut = Uint8Array.from([0x1d, 0x56, 0x42, 0x00]);
+
+  const wrapped = new Uint8Array(escInit.length + alignLeft.length + rasterHeader.length + raster.length + lf.length + cut.length);
+  let cursor = 0;
+  wrapped.set(escInit, cursor);
+  cursor += escInit.length;
+  wrapped.set(alignLeft, cursor);
+  cursor += alignLeft.length;
+  wrapped.set(rasterHeader, cursor);
+  cursor += rasterHeader.length;
+  wrapped.set(raster, cursor);
+  cursor += raster.length;
+  wrapped.set(lf, cursor);
+  cursor += lf.length;
+  wrapped.set(cut, cursor);
+
+  return wrapped;
 };
 
 export const buildReceipt80mmEscPosBytes = async (data: Receipt80mmData) => {
-  return buildImageEscPosBytes(buildReceipt80mmBitmapDataUrl(data));
+  const canvas = buildReceiptCanvas(data);
+  return buildImageEscPosBytesFromCanvas(canvas);
 };

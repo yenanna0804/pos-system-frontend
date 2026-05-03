@@ -71,6 +71,17 @@ type UsbWritableDeviceLike = UsbDeviceLike & {
 };
 
 const STORAGE_KEY = 'pos_printer_settings_v1';
+let printQueue: Promise<void> = Promise.resolve();
+
+const uint8ToBase64 = (bytes: Uint8Array) => {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+};
 
 const loadSettings = (): PrinterSettings => {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -85,16 +96,6 @@ const loadSettings = (): PrinterSettings => {
 const getDeviceKey = (device: UsbDeviceLike) => {
   if (device.serialNumber?.trim()) return device.serialNumber;
   return `${device.vendorId ?? 'na'}-${device.productId ?? 'na'}-${device.productName ?? 'unknown'}`;
-};
-
-const uint8ToBase64 = (bytes: Uint8Array) => {
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
 };
 
 const buildCanvasFromText = (content: string, templateKey: TemplateKey) => {
@@ -150,8 +151,10 @@ const submitBridgeJob = (url: string, payload: Record<string, unknown>) =>
     const finishOk = () => {
       if (settled) return;
       settled = true;
-      cleanup();
-      resolve();
+      window.setTimeout(() => {
+        cleanup();
+        resolve();
+      }, 260);
     };
 
     const finishError = (message: string) => {
@@ -200,6 +203,23 @@ const submitBridgeJob = (url: string, payload: Record<string, unknown>) =>
       }
     };
   });
+
+const enqueuePrintJob = async <T>(job: () => Promise<T>) => {
+  const run = async () => {
+    try {
+      return await job();
+    } finally {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 900));
+    }
+  };
+
+  const next = printQueue.then(run, run);
+  printQueue = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+};
 
 const printViaBridge = async (
   title: string,
@@ -323,15 +343,17 @@ const printViaUsb = async (title: string, content: string, templateKey: Template
 };
 
 export const printUsingConfiguredRoute = async (title: string, content: string, options?: PrintRouteOptions) => {
-  const settings = loadSettings();
-  const templateKey = settings.defaultTemplateKey || 'receipt_80mm';
-  const connectionMode = settings.connectionMode || 'bridge';
-  const bridgeEnabled = settings.bridgeEnabled !== false;
+  await enqueuePrintJob(async () => {
+    const settings = loadSettings();
+    const templateKey = settings.defaultTemplateKey || 'receipt_80mm';
+    const connectionMode = settings.connectionMode || 'bridge';
+    const bridgeEnabled = settings.bridgeEnabled !== false;
 
-  if (connectionMode === 'bridge' && bridgeEnabled) {
-    await printViaBridge(title, content, templateKey, settings, options);
-    return;
-  }
+    if (connectionMode === 'bridge' && bridgeEnabled) {
+      await printViaBridge(title, content, templateKey, settings, options);
+      return;
+    }
 
-  await printViaUsb(title, content, templateKey, settings, options);
+    await printViaUsb(title, content, templateKey, settings, options);
+  });
 };
