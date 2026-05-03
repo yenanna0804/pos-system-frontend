@@ -23,6 +23,7 @@ export type ProductOption = {
 
 export type BillItem = {
   lineId: string;
+  orderItemId?: string;
   productId: string;
   productName: string;
   unit?: string;
@@ -36,6 +37,8 @@ export type BillItem = {
   lineTotal?: number;
   timerStatus?: 'RUNNING' | 'STOPPED' | 'ON' | 'OFF';
   activeSessionStartedAt?: string | null;
+  startAt?: string | null;
+  stopAt?: string | null;
   note: string;
 };
 
