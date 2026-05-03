@@ -1,4 +1,4 @@
-import { Cut, Image, Printer, render } from 'react-thermal-printer';
+import { Cut, Image, Printer, Raw, render } from 'react-thermal-printer';
 
 export type Receipt80mmItem = {
   name: string;
@@ -220,10 +220,13 @@ export const buildReceipt80mmBitmapDataUrl = (data?: Receipt80mmData) => {
 };
 
 const buildImageEscPosBytes = async (dataUrl: string) => {
+  const escPosInit = Uint8Array.from([0x1b, 0x40]);
   const receipt = (
     <Printer type="epson" width={48}>
+      <Raw data={escPosInit} />
       <Image align="center" src={dataUrl} />
-      <Cut partial />
+      <Cut lineFeeds={4} />
+      <Raw data={escPosInit} />
     </Printer>
   );
   return render(receipt);
