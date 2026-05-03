@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { PrintActionIcon } from '../../components/ActionIcons';
 import { printUsingConfiguredRoute } from '../../utils/printerRouting';
+import { buildReceipt80mmBitmapDataUrl, DEFAULT_RECEIPT_80MM_DATA } from '../../utils/receipt80mmGenerator';
 import './PrintersPage.css';
 
 type PrinterRole = 'default' | 'backup' | null;
@@ -47,30 +48,14 @@ type UsbNavigatorLike = Navigator & {
 
 const STORAGE_KEY = 'pos_printer_settings_v1';
 
-const RECEIPT_SAMPLE_80MM = `^^^"PHIẾU TẠM TÍNH"
+const RECEIPT_SAMPLE_80MM = `Mẫu 80mm hiện được render bằng bitmap code-driven.
 
-{width: 10 *}
-Ngày:     |09/05/2026 21:16:08
-Vị trí:   |Tầng 1 / Bàn 3
-SL khách: |2
-Thu ngân: |abc
--
-{width:2 * 2 10 11; border:space}
-| "#" |"Tên món"        |"SL"|"ĐG"|"TT"|
--
-| 1 |Gà rán            |  1|    15.000|     15.000
-| 2 |Bia budweisser    |  3|    55.000|    165.000
--
-{width:* 12; border:space}
-Tạm tính       |    180.000
-Giảm giá       |     15.000
-Phụ phí        |          0
--
-"THANH TOÁN" | "165.000đ"
+Nguồn template:
+- src/utils/receipt80mmGenerator.tsx
+- Hàm: buildReceipt80mmEscPosBytes(...)
 
-{width:*, align:center}
-Vui lòng kiểm tra kỹ lại nội dung trước khi thanh toán
-===`;
+In thử và in thật đều dùng cùng renderer này.
+Nội dung thô trong màn hình này chỉ để tham khảo.`;
 
 const TEMPLATE_A4_SAMPLE = `HÓA ĐƠN GIÁ TRỊ GIA TĂNG
 
@@ -119,7 +104,6 @@ export default function PrintersPage() {
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
   const [defaultPrinterId, setDefaultPrinterId] = useState('');
   const [backupPrinterId, setBackupPrinterId] = useState('');
-  const [templates, setTemplates] = useState<TemplateRow[]>(initialTemplates);
   const [defaultTemplateKey, setDefaultTemplateKey] = useState<TemplateKey>('receipt_80mm');
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>('bridge');
   const [bridgeEnabled, setBridgeEnabled] = useState(true);
@@ -149,7 +133,6 @@ export default function PrintersPage() {
         bridgeUrl?: string;
         receiptType?: string;
         invoiceType?: string;
-        templates?: TemplateRow[];
       };
       if (parsed.defaultPrinterId) setDefaultPrinterId(parsed.defaultPrinterId);
       if (parsed.backupPrinterId) setBackupPrinterId(parsed.backupPrinterId);
@@ -159,9 +142,6 @@ export default function PrintersPage() {
       if (typeof parsed.bridgeUrl === 'string' && parsed.bridgeUrl.trim()) setBridgeUrl(parsed.bridgeUrl);
       if (typeof parsed.receiptType === 'string' && parsed.receiptType.trim()) setReceiptType(parsed.receiptType);
       if (typeof parsed.invoiceType === 'string' && parsed.invoiceType.trim()) setInvoiceType(parsed.invoiceType);
-      if (Array.isArray(parsed.templates) && parsed.templates.length > 0) {
-        setTemplates(parsed.templates);
-      }
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     }
@@ -179,10 +159,9 @@ export default function PrintersPage() {
         bridgeUrl,
         receiptType,
         invoiceType,
-        templates,
       }),
     );
-  }, [backupPrinterId, bridgeEnabled, bridgeUrl, connectionMode, defaultPrinterId, defaultTemplateKey, invoiceType, receiptType, templates]);
+  }, [backupPrinterId, bridgeEnabled, bridgeUrl, connectionMode, defaultPrinterId, defaultTemplateKey, invoiceType, receiptType]);
 
   useEffect(() => {
     if (!defaultPrinterId || !backupPrinterId) return;
@@ -301,10 +280,6 @@ export default function PrintersPage() {
     setDefaultPrinterId((prev) => (prev === printerId ? '' : prev));
   };
 
-  const onChangeTemplate = (key: TemplateKey, nextContent: string) => {
-    setTemplates((prev) => prev.map((item) => (item.key === key ? { ...item, content: nextContent } : item)));
-  };
-
   const renderPrinterRole = (printerId: string): PrinterRole => {
     if (defaultPrinterId === printerId) return 'default';
     if (backupPrinterId === printerId) return 'backup';
@@ -355,7 +330,7 @@ export default function PrintersPage() {
   };
 
   const onPrintFromPreview = async () => {
-    const selectedTemplate = templates.find((item) => item.key === previewTemplateKey) || templates[0];
+    const selectedTemplate = initialTemplates.find((item) => item.key === previewTemplateKey) || initialTemplates[0];
     if (!selectedTemplate) return;
 
     try {
@@ -367,7 +342,11 @@ export default function PrintersPage() {
     }
   };
 
-  const previewTemplate = templates.find((item) => item.key === previewTemplateKey) || templates[0];
+  const previewTemplate = initialTemplates.find((item) => item.key === previewTemplateKey) || initialTemplates[0];
+  const receiptPreviewImage = useMemo(
+    () => (previewTemplate?.key === 'receipt_80mm' ? buildReceipt80mmBitmapDataUrl(DEFAULT_RECEIPT_80MM_DATA) : ''),
+    [previewTemplate?.key],
+  );
 
   return (
     <section className="printers-page">
@@ -429,7 +408,7 @@ export default function PrintersPage() {
                   value={previewTemplateKey}
                   onChange={(event) => setPreviewTemplateKey(event.target.value as TemplateKey)}
                 >
-                  {templates.map((template) => (
+                  {initialTemplates.map((template) => (
                     <option key={template.key} value={template.key}>
                       {template.name}
                     </option>
@@ -440,7 +419,11 @@ export default function PrintersPage() {
             </div>
 
             <div className={`printers-preview-paper ${previewTemplate?.key === 'receipt_80mm' ? 'is-80mm' : 'is-a4'}`}>
-              <pre>{previewTemplate?.content || ''}</pre>
+              {previewTemplate?.key === 'receipt_80mm' ? (
+                <img src={receiptPreviewImage} alt="80mm bitmap preview" style={{ width: '100%', display: 'block' }} />
+              ) : (
+                <pre>{previewTemplate?.content || ''}</pre>
+              )}
             </div>
 
             <div className="modal-actions">
@@ -608,7 +591,7 @@ export default function PrintersPage() {
         <div className="template-panel">
           <h3>Danh sách mẫu in</h3>
           <div className="template-list">
-            {templates.map((template) => (
+            {initialTemplates.map((template) => (
               <article key={template.key} className={`template-card ${defaultTemplateKey === template.key ? 'is-active' : ''}`}>
                 <div className="template-head">
                   <strong>{template.name}</strong>
@@ -621,11 +604,15 @@ export default function PrintersPage() {
                     Đặt in mặc định
                   </label>
                 </div>
-                <textarea
-                  value={template.content}
-                  onChange={(event) => onChangeTemplate(template.key, event.target.value)}
-                  rows={14}
-                />
+                {template.key === 'receipt_80mm' ? (
+                  <img
+                    src={buildReceipt80mmBitmapDataUrl(DEFAULT_RECEIPT_80MM_DATA)}
+                    alt="80mm render preview"
+                    style={{ width: '100%', display: 'block', background: '#fff' }}
+                  />
+                ) : (
+                  <pre>{template.content}</pre>
+                )}
               </article>
             ))}
           </div>

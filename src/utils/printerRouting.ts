@@ -1,5 +1,9 @@
 import { printA4PlainText } from './print';
-import { buildEscPosBytesFromReceiptMarkdown, buildReceipt80mmEscPosBytes, type Receipt80mmData } from './receipt80mmGenerator';
+import {
+  DEFAULT_RECEIPT_80MM_DATA,
+  buildReceipt80mmEscPosBytes,
+  type Receipt80mmData,
+} from './receipt80mmGenerator';
 
 type TemplateKey = 'receipt_80mm' | 'invoice_a4';
 type ConnectionMode = 'bridge' | 'usb';
@@ -91,26 +95,6 @@ const uint8ToBase64 = (bytes: Uint8Array) => {
     binary += String.fromCharCode(...chunk);
   }
   return btoa(binary);
-};
-
-const textToEscPosPayload = (content: string) => {
-  const encoder = new TextEncoder();
-  const init = new Uint8Array([0x1b, 0x40]);
-  const alignLeft = new Uint8Array([0x1b, 0x61, 0x00]);
-  const text = encoder.encode(`${content}\n\n\n`);
-  const cut = new Uint8Array([0x1d, 0x56, 0x42, 0x00]);
-
-  const payload = new Uint8Array(init.length + alignLeft.length + text.length + cut.length);
-  let cursor = 0;
-  payload.set(init, cursor);
-  cursor += init.length;
-  payload.set(alignLeft, cursor);
-  cursor += alignLeft.length;
-  payload.set(text, cursor);
-  cursor += text.length;
-  payload.set(cut, cursor);
-
-  return payload;
 };
 
 const buildCanvasFromText = (content: string, templateKey: TemplateKey) => {
@@ -219,7 +203,7 @@ const submitBridgeJob = (url: string, payload: Record<string, unknown>) =>
 
 const printViaBridge = async (
   title: string,
-  content: string,
+  _content: string,
   templateKey: TemplateKey,
   settings: PrinterSettings,
   options?: PrintRouteOptions,
@@ -227,7 +211,7 @@ const printViaBridge = async (
   const bridgeUrl = settings.bridgeUrl?.trim() || 'ws://127.0.0.1:12212/printer';
   if (templateKey === 'invoice_a4') {
     const invoiceType = settings.invoiceType?.trim() || 'INVOICE';
-    const canvas = buildCanvasFromText(content, 'invoice_a4');
+    const canvas = buildCanvasFromText(_content, 'invoice_a4');
     const imageBase64 = canvas.toDataURL('image/png').split(',')[1] || '';
     if (!imageBase64) throw new Error('Khong tao duoc du lieu anh de in A4');
     await submitBridgeJob(bridgeUrl, {
@@ -240,11 +224,7 @@ const printViaBridge = async (
   }
 
   const receiptType = settings.receiptType?.trim() || 'RECEIPT';
-  const payload = options?.receipt80mmData
-    ? await buildReceipt80mmEscPosBytes(options.receipt80mmData)
-    : content.includes('|') || content.includes('^^') || content.includes('{w:')
-      ? await buildEscPosBytesFromReceiptMarkdown(content)
-      : textToEscPosPayload(content);
+  const payload = await buildReceipt80mmEscPosBytes(options?.receipt80mmData || DEFAULT_RECEIPT_80MM_DATA);
   await submitBridgeJob(bridgeUrl, {
     id: `receipt-${Date.now()}`,
     type: receiptType,
@@ -314,17 +294,17 @@ const sendEscPosPayloadToUsbPrinter = async (device: UsbWritableDeviceLike, payl
   }
 };
 
-const printViaUsbByPrinterId = async (printerId: string, content: string) => {
+const printViaUsbByPrinterId = async (printerId: string, _content: string, options?: PrintRouteOptions) => {
   const usbNavigator = navigator as UsbNavigatorLike;
   const devices = await usbNavigator.usb?.getDevices();
   if (!devices) throw new Error('WebUSB chua san sang');
   const device = devices.find((item) => getDeviceKey(item) === printerId) as UsbWritableDeviceLike | undefined;
   if (!device) throw new Error('Khong tim thay may in da cap quyen');
-  const payload = textToEscPosPayload(content);
+  const payload = await buildReceipt80mmEscPosBytes(options?.receipt80mmData || DEFAULT_RECEIPT_80MM_DATA);
   await sendEscPosPayloadToUsbPrinter(device, payload);
 };
 
-const printViaUsb = async (title: string, content: string, templateKey: TemplateKey, settings: PrinterSettings) => {
+const printViaUsb = async (title: string, content: string, templateKey: TemplateKey, settings: PrinterSettings, options?: PrintRouteOptions) => {
   if (templateKey === 'invoice_a4') {
     await printA4PlainText(title, content);
     return;
@@ -333,12 +313,12 @@ const printViaUsb = async (title: string, content: string, templateKey: Template
     throw new Error('Chua cau hinh may in USB mac dinh');
   }
   try {
-    await printViaUsbByPrinterId(settings.defaultPrinterId, content);
+    await printViaUsbByPrinterId(settings.defaultPrinterId, content, options);
   } catch (primaryError: any) {
     if (!settings.backupPrinterId || settings.backupPrinterId === settings.defaultPrinterId) {
       throw primaryError;
     }
-    await printViaUsbByPrinterId(settings.backupPrinterId, content);
+    await printViaUsbByPrinterId(settings.backupPrinterId, content, options);
   }
 };
 
@@ -353,5 +333,5 @@ export const printUsingConfiguredRoute = async (title: string, content: string, 
     return;
   }
 
-  await printViaUsb(title, content, templateKey, settings);
+  await printViaUsb(title, content, templateKey, settings, options);
 };
