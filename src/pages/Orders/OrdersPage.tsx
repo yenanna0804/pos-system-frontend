@@ -34,6 +34,7 @@ type OrderLogRow = {
   id: string;
   action: 'CREATE_ORDER' | 'UPDATE_ORDER' | 'DELETE_ORDER' | 'PAY_PARTIAL' | 'PAY_FULL' | 'PRINT_ORDER' | string;
   detail?: string | null;
+  snapshot?: unknown;
   createdByName?: string | null;
   createdAt: string;
 };
@@ -125,6 +126,8 @@ type EditingOrderState = {
     timeRateAmountSnapshot?: number;
     timeRateMinutesSnapshot?: number;
     usedMinutes?: number;
+    lineDiscountAmount?: number;
+    lineSurchargeAmount?: number;
     lineTotal?: number;
     timerStatus?: 'RUNNING' | 'STOPPED';
     activeSessionStartedAt?: string | null;
@@ -151,7 +154,7 @@ const orderStateLabel: Record<OrderRow['orderState'], string> = {
   DRAFT: 'Nháp',
   PAID: 'Đã thanh toán',
   DELETED: 'Đã xóa',
-  PARTIAL: 'Còn nợ',
+  PARTIAL: 'Chưa thanh toán',
 };
 
 const orderStateClass: Record<OrderRow['orderState'], string> = {
@@ -168,6 +171,12 @@ const paymentMethodLabel = (method?: 'CASH' | 'BANKING' | null) => {
 };
 
 const formatNumberVi = (value: number) => Math.trunc(Number(value || 0)).toLocaleString('vi-VN');
+const formatUnitPriceDisplay = (price: number, pricingType?: 'FIXED' | 'TIME', rateMinutes?: number) => {
+  const normalizedPrice = Math.max(0, Math.trunc(Number(price || 0))).toLocaleString('vi-VN');
+  if (pricingType !== 'TIME') return normalizedPrice;
+  const minutes = Math.max(1, Math.trunc(Number(rateMinutes || 0)));
+  return `${normalizedPrice} / ${minutes} phút`;
+};
 
 const buildOrderA4Content = (order: OrderDetail) => {
   const lines: string[] = [];
@@ -402,6 +411,8 @@ export default function OrdersPage() {
       timeRateAmountSnapshot?: number;
       timeRateMinutesSnapshot?: number;
       usedMinutes?: number;
+      lineDiscountAmount?: number;
+      lineSurchargeAmount?: number;
       note: string;
     }[];
     totalAmount: number;
@@ -493,6 +504,8 @@ export default function OrdersPage() {
         timeRateAmountSnapshot?: number;
         timeRateMinutesSnapshot?: number;
         usedMinutes?: number;
+        lineDiscountAmount?: number;
+        lineSurchargeAmount?: number;
         note: string;
       }[];
       updatedItems: ({
@@ -506,6 +519,8 @@ export default function OrdersPage() {
         quantity: number;
         pricingTypeSnapshot?: 'FIXED' | 'TIME';
         usedMinutes?: number;
+        lineDiscountAmount?: number;
+        lineSurchargeAmount?: number;
         note: string;
       }>)[];
       removedItemIds: string[];
@@ -697,6 +712,115 @@ export default function OrdersPage() {
       default:
         return action;
     }
+  };
+
+  const formatLogValue = (value: unknown) => {
+    if (value == null || value === '') return '-';
+    if (typeof value === 'number') return Math.trunc(value).toLocaleString('vi-VN');
+    if (typeof value === 'boolean') return value ? 'Có' : 'Không';
+    return String(value);
+  };
+
+  const toHistoryFieldLabel = (key: string) => {
+    const labels: Record<string, string> = {
+      customerName: 'Khách hàng',
+      totalAmount: 'Tạm tính',
+      finalAmount: 'Phải thanh toán',
+      paidAmount: 'Khách thanh toán',
+      paymentMethod: 'Phương thức thanh toán',
+      orderState: 'Trạng thái',
+      productName: 'Tên món',
+      quantity: 'Số lượng',
+      unitPrice: 'Đơn giá bán',
+      lineTotal: 'Thành tiền',
+      note: 'Ghi chú',
+    };
+    return labels[key] || key;
+  };
+
+  const toDisplayValue = (key: string, value: unknown) => {
+    if (key === 'paymentMethod') {
+      return paymentMethodLabel(String(value) as 'CASH' | 'BANKING');
+    }
+    if (key === 'orderState') {
+      return orderStateLabel[String(value) as OrderRow['orderState']] || String(value);
+    }
+    if (key === 'totalAmount' || key === 'finalAmount' || key === 'paidAmount' || key === 'unitPrice' || key === 'lineTotal') {
+      return Math.trunc(Number(value || 0)).toLocaleString('vi-VN');
+    }
+    return formatLogValue(value);
+  };
+
+  const buildLogDetails = (log: OrderLogRow) => {
+    const lines: string[] = [];
+    const snapshot = (log.snapshot || {}) as Record<string, unknown>;
+
+    if (log.action === 'CREATE_ORDER') {
+      const createdOrder = (snapshot.order || {}) as Record<string, unknown>;
+      const createdItems = Array.isArray(snapshot.items) ? (snapshot.items as Array<Record<string, unknown>>) : [];
+      const createFields = ['customerName', 'totalAmount', 'finalAmount', 'paidAmount', 'paymentMethod', 'orderState'];
+      createFields.forEach((key) => {
+        if (key in createdOrder) {
+          lines.push(`${toHistoryFieldLabel(key)}: ${toDisplayValue(key, createdOrder[key])}`);
+        }
+      });
+      if (createdItems.length > 0) {
+        const itemNames = createdItems.map((item) => formatLogValue(item.productName)).filter((name) => name !== '-');
+        lines.push(`Món đã thêm: ${itemNames.length > 0 ? itemNames.join(', ') : `${createdItems.length} món`}`);
+      }
+      if (lines.length === 0 && log.detail) {
+        lines.push(log.detail);
+      }
+      return lines;
+    }
+
+    if (log.action === 'UPDATE_ORDER') {
+      const changes = (snapshot.changes || {}) as {
+        order?: Record<string, { from: unknown; to: unknown }>;
+        items?: {
+          added?: Array<Record<string, unknown>>;
+          removed?: Array<Record<string, unknown>>;
+          updated?: Array<{ productName?: string; fields?: Record<string, { from: unknown; to: unknown }> }>;
+        };
+      };
+      const orderChanges = (changes.order || snapshot.order || {}) as Record<string, { from: unknown; to: unknown }>;
+      const itemChanges = (changes.items || snapshot.items || undefined) as {
+        added?: Array<Record<string, unknown>>;
+        removed?: Array<Record<string, unknown>>;
+        updated?: Array<{ productName?: string; fields?: Record<string, { from: unknown; to: unknown }> }>;
+      } | undefined;
+      const showOrderFields = new Set(['customerName', 'totalAmount', 'finalAmount', 'paidAmount', 'paymentMethod', 'orderState']);
+      Object.entries(orderChanges).forEach(([key, change]) => {
+        if (!showOrderFields.has(key)) return;
+        const normalizedChange = change as { from: unknown; to: unknown };
+        lines.push(`${toHistoryFieldLabel(key)}: ${toDisplayValue(key, normalizedChange.from)} → ${toDisplayValue(key, normalizedChange.to)}`);
+      });
+      if (itemChanges?.added?.length) {
+        const names = itemChanges.added.map((item) => formatLogValue(item.productName)).filter((name) => name !== '-');
+        lines.push(`Món thêm: ${names.length > 0 ? names.join(', ') : `${itemChanges.added.length} món`}`);
+      }
+      if (itemChanges?.removed?.length) {
+        const names = itemChanges.removed.map((item) => formatLogValue(item.productName)).filter((name) => name !== '-');
+        lines.push(`Món xóa: ${names.length > 0 ? names.join(', ') : `${itemChanges.removed.length} món`}`);
+      }
+      if (itemChanges?.updated?.length) {
+        const itemFieldAllow = new Set(['quantity', 'unitPrice', 'lineTotal', 'note']);
+        itemChanges.updated.forEach((item, idx) => {
+          const itemName = item.productName || `#${idx + 1}`;
+          Object.entries(item.fields || {}).forEach(([key, change]) => {
+            if (!itemFieldAllow.has(key)) return;
+            lines.push(`Món ${itemName} - ${toHistoryFieldLabel(key)}: ${toDisplayValue(key, change.from)} → ${toDisplayValue(key, change.to)}`);
+          });
+        });
+      }
+      if (lines.length === 0 && log.detail) {
+        lines.push(log.detail);
+      }
+      return lines;
+    }
+
+    if (log.detail) lines.push(log.detail);
+    return lines;
   };
 
   const openOrderDetail = async (order: OrderRow) => {
@@ -1153,7 +1277,7 @@ export default function OrdersPage() {
                   {[
                     { value: 'DRAFT', label: 'Nháp' },
                     { value: 'PAID', label: 'Đã thanh toán' },
-                    { value: 'PARTIAL', label: 'Chưa trả hết' },
+                    { value: 'PARTIAL', label: 'Chưa thanh toán' },
                     { value: 'DELETED', label: 'Đã xóa' },
                   ].map((option) => (
                     <label key={option.value} className="orders-multi-select-option">
@@ -1557,6 +1681,9 @@ export default function OrdersPage() {
                         <th>STT</th>
                         <th>Tên món</th>
                         <th>Đơn vị</th>
+                        <th>Bắt đầu</th>
+                        <th>Kết thúc</th>
+                        <th>Tổng TG (phút)</th>
                         <th className="num-col">Số lượng</th>
                         <th className="num-col">Đơn giá gốc</th>
                         <th className="num-col">Đơn giá bán</th>
@@ -1569,7 +1696,7 @@ export default function OrdersPage() {
                     <tbody>
                       {detailOrder.items.length === 0 ? (
                         <tr>
-                          <td colSpan={10} className="orders-empty-row">
+                          <td colSpan={13} className="orders-empty-row">
                             Chưa có món trong hóa đơn
                           </td>
                         </tr>
@@ -1579,12 +1706,15 @@ export default function OrdersPage() {
                             <td>{idx + 1}</td>
                             <td>{item.productName || '-'}</td>
                             <td>{item.unit || '-'}</td>
+                            <td>{item.startAt ? new Date(item.startAt).toLocaleString('vi-VN') : '-'}</td>
+                            <td>{item.stopAt ? new Date(item.stopAt).toLocaleString('vi-VN') : '-'}</td>
+                            <td className="num-col">{Math.max(0, Math.trunc(Number(item.usedMinutes || 0))).toLocaleString('vi-VN')}</td>
                             <td className="num-col">{Number(item.quantity || 0).toLocaleString('vi-VN')}</td>
-                            <td className="num-col">{Math.trunc(Number(item.baseUnitPrice ?? item.unitPrice ?? 0)).toLocaleString('vi-VN')}</td>
-                            <td className="num-col">{Math.trunc(Number(item.unitPrice || 0)).toLocaleString('vi-VN')}</td>
+                            <td className="num-col">{formatUnitPriceDisplay(Number(item.baseUnitPrice ?? item.unitPrice ?? 0), item.pricingTypeSnapshot, item.timeRateMinutesSnapshot)}</td>
+                            <td className="num-col">{formatUnitPriceDisplay(Number(item.unitPrice || 0), item.pricingTypeSnapshot, item.timeRateMinutesSnapshot)}</td>
                             <td className="num-col">{Math.trunc(Number(item.lineDiscountAmount || 0)).toLocaleString('vi-VN')}</td>
                             <td className="num-col">{Math.trunc(Number(item.lineSurchargeAmount || 0)).toLocaleString('vi-VN')}</td>
-                            <td className="num-col">{Math.trunc(Number(item.quantity || 0) * Number(item.unitPrice || 0)).toLocaleString('vi-VN')}</td>
+                            <td className="num-col">{Math.trunc(Number(item.lineTotal ?? 0)).toLocaleString('vi-VN')}</td>
                             <td>{item.note || '-'}</td>
                           </tr>
                         ))
@@ -1691,43 +1821,18 @@ export default function OrdersPage() {
                           <td>
                             <span className="orders-status-tag is-paid">Thành công</span>
                           </td>
-                          <td>{log.detail || '-'}</td>
+                          <td>
+                            {buildLogDetails(log).length === 0
+                              ? '-'
+                              : buildLogDetails(log).map((line, lineIdx) => (
+                                <div key={`${log.id}-detail-${lineIdx}`}>{line}</div>
+                              ))}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
 
-                  <div className="orders-pagination-bar">
-                    <span>
-                      Trang {safeHistoryPage}/{historyTotalPages} - {historyLogs.length} bản ghi
-                    </span>
-                    <div className="orders-pagination-actions">
-                      <button
-                        className="orders-pagination-btn"
-                        disabled={safeHistoryPage <= 1}
-                        onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
-                      >
-                        Trước
-                      </button>
-                      {Array.from({ length: historyTotalPages }, (_, idx) => idx + 1).map((pageNumber) => (
-                        <button
-                          key={pageNumber}
-                          className={`orders-pagination-btn ${pageNumber === safeHistoryPage ? 'active' : ''}`}
-                          disabled={pageNumber === safeHistoryPage}
-                          onClick={() => setHistoryPage(pageNumber)}
-                        >
-                          {pageNumber}
-                        </button>
-                      ))}
-                      <button
-                        className="orders-pagination-btn"
-                        disabled={safeHistoryPage >= historyTotalPages}
-                        onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
-                      >
-                        Sau
-                      </button>
-                    </div>
-                  </div>
                 </>
               )}
             </div>

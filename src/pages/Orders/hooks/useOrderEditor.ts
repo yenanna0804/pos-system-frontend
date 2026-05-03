@@ -16,6 +16,8 @@ export function useOrderEditor(initialBillItems: BillItem[]) {
       unitPrice: item.unitPrice,
       quantity: item.quantity,
       usedMinutes: item.usedMinutes,
+      lineDiscountAmount: item.lineDiscountAmount,
+      lineSurchargeAmount: item.lineSurchargeAmount,
       timerStatus: item.timerStatus,
       activeSessionStartedAt: item.activeSessionStartedAt,
       startAt: item.startAt,
@@ -87,6 +89,8 @@ export function useOrderEditor(initialBillItems: BillItem[]) {
         if ((item.note || '') !== (initialItem.note || '')) changed.note = item.note;
         if ((item.pricingTypeSnapshot || 'FIXED') !== (initialItem.pricingTypeSnapshot || 'FIXED')) changed.pricingTypeSnapshot = item.pricingTypeSnapshot;
         if (Number(item.usedMinutes || 0) !== Number(initialItem.usedMinutes || 0)) changed.usedMinutes = item.usedMinutes;
+        if (Number(item.lineDiscountAmount || 0) !== Number(initialItem.lineDiscountAmount || 0)) changed.lineDiscountAmount = item.lineDiscountAmount;
+        if (Number(item.lineSurchargeAmount || 0) !== Number(initialItem.lineSurchargeAmount || 0)) changed.lineSurchargeAmount = item.lineSurchargeAmount;
         if ((item.startAt || null) !== (initialItem.startAt || null)) changed.startAt = item.startAt || null;
         if ((item.stopAt || null) !== (initialItem.stopAt || null)) changed.stopAt = item.stopAt || null;
         return changed;

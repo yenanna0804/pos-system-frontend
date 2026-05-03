@@ -159,6 +159,8 @@ export type OrderPayload = {
     usedMinutes?: number;
     startAt?: string | null;
     stopAt?: string | null;
+    lineDiscountAmount?: number;
+    lineSurchargeAmount?: number;
   }[];
   branchId?: string;
   billItemsPatch?: {
@@ -177,6 +179,8 @@ export type OrderPayload = {
       usedMinutes?: number;
       startAt?: string | null;
       stopAt?: string | null;
+      lineDiscountAmount?: number;
+      lineSurchargeAmount?: number;
     }[];
     updatedItems?: {
       lineId: string;
@@ -193,6 +197,8 @@ export type OrderPayload = {
       usedMinutes?: number;
       startAt?: string | null;
       stopAt?: string | null;
+      lineDiscountAmount?: number;
+      lineSurchargeAmount?: number;
     }[];
     removedItemIds?: string[];
   };

@@ -595,7 +595,8 @@
 }
 
 .orders-detail-modal {
-  max-width: 1080px;
+  max-width: 1440px;
+  width: min(96vw, 1440px);
   position: relative;
 }
 
@@ -704,9 +705,9 @@
 }
 
 .orders-status-tag.is-partial {
-  background-color: #fdecea;   
-  border: 1px solid #f04438;   
-  color: #b42318;             
+  background: #fffaeb;
+  border-color: #fec84b;
+  color: #b54708;
 }
 
 .orders-status-tag.is-deleted {

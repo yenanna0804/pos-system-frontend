@@ -372,7 +372,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
 
           <div className="orders-create-header">
             <h2>{mode === 'edit' ? `Sửa hóa đơn${orderCode ? ` - ${orderCode}` : ''}` : 'Thêm mới hóa đơn'}</h2>
-            <button type="button" className="orders-ghost-btn" onClick={onBack}>
+             <button type="button" className="orders-ghost-btn" onClick={onBack}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                 <circle cx="12" cy="12" r="9" />
                 <path d="M13.5 8.5L10 12l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
