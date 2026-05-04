@@ -67,15 +67,25 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const bodySize = 24;
   const lineHeight = 34;
 
-  const xIndex = marginX;
-  const xName = marginX + 40;
-  const xQtyRight = marginX + 280;
-  const xUnitRight = marginX + 396;
-  const xTotalRight = marginX + contentWidth;
-  const nameColumnWidth = xQtyRight - xName - 12;
-  const xCol1Right = xName - 12;
-  const xCol2Right = xQtyRight + 10;
-  const xCol3Right = xUnitRight + 10;
+  const tableLeft = marginX;
+  const tableRight = marginX + contentWidth;
+  const colHashWidth = 52;
+  const colSlWidth = 56;
+  const colDgWidth = 114;
+  const colTtWidth = 122;
+
+  const colHashRight = tableLeft + colHashWidth;
+  const colNameRight = tableRight - (colSlWidth + colDgWidth + colTtWidth);
+  const colSlRight = colNameRight + colSlWidth;
+  const colDgRight = colSlRight + colDgWidth;
+  const colTtRight = tableRight;
+
+  const xHashCenter = tableLeft + Math.floor(colHashWidth / 2);
+  const xSlCenter = colNameRight + Math.floor(colSlWidth / 2);
+  const xName = colHashRight + 10;
+  const xUnitRight = colDgRight - 10;
+  const xTotalRight = colTtRight - 10;
+  const nameColumnWidth = colNameRight - xName - 8;
 
   const sampleCanvas = document.createElement('canvas');
   const sampleCtx = sampleCanvas.getContext('2d');
@@ -103,7 +113,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   ctx.textBaseline = 'top';
 
   let y = 10;
-  const title = data.title || 'PHIẾU THANH TOÁN';
+  const title = 'PHIẾU THANH TOÁN';
   ctx.font = `bold ${titleSize}px 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
   ctx.textAlign = 'center';
   ctx.fillText(title, width / 2, y);
@@ -131,11 +141,13 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   y += 10;
 
   ctx.font = `bold ${bodySize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('#', xHashCenter, y);
   ctx.textAlign = 'left';
-  ctx.fillText('#', xIndex + 4, y);
   ctx.fillText('Tên món', xName, y);
+  ctx.textAlign = 'center';
+  ctx.fillText('SL', xSlCenter, y);
   ctx.textAlign = 'right';
-  ctx.fillText('SL', xQtyRight, y);
   ctx.fillText('ĐG', xUnitRight, y);
   ctx.fillText('TT', xTotalRight, y);
   y += lineHeight;
@@ -149,12 +161,14 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     const inlineNote = inlineNoteRaw?.trim();
     const nameLines = wrapByWidth(ctx, (baseName || '').trim(), nameColumnWidth);
 
+    ctx.textAlign = 'center';
+    ctx.fillText(String(idx + 1), xHashCenter, y);
     ctx.textAlign = 'left';
-    ctx.fillText(String(idx + 1), xIndex + 4, y);
     ctx.fillText(nameLines[0], xName, y);
 
+    ctx.textAlign = 'center';
+    ctx.fillText(String(Math.trunc(item.quantity)), xSlCenter, y);
     ctx.textAlign = 'right';
-    ctx.fillText(String(Math.trunc(item.quantity)), xQtyRight, y);
     ctx.fillText(toNumberVi(item.unitPrice), xUnitRight, y);
     ctx.fillText(toNumberVi(item.lineTotal), xTotalRight, y);
     y += lineHeight;
@@ -178,9 +192,12 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
 
   const tableBottom = y;
   ctx.fillRect(marginX, y, contentWidth, 2);
-  ctx.fillRect(xCol1Right, tableTop, 2, tableBottom - tableTop + 2);
-  ctx.fillRect(xCol2Right, tableTop, 2, tableBottom - tableTop + 2);
-  ctx.fillRect(xCol3Right, tableTop, 2, tableBottom - tableTop + 2);
+  ctx.fillRect(tableLeft, tableTop, 2, tableBottom - tableTop + 2);
+  ctx.fillRect(colHashRight, tableTop, 2, tableBottom - tableTop + 2);
+  ctx.fillRect(colNameRight, tableTop, 2, tableBottom - tableTop + 2);
+  ctx.fillRect(colSlRight, tableTop, 2, tableBottom - tableTop + 2);
+  ctx.fillRect(colDgRight, tableTop, 2, tableBottom - tableTop + 2);
+  ctx.fillRect(tableRight, tableTop, 2, tableBottom - tableTop + 2);
   y += 12;
 
   const drawSummary = (label: string, value: string) => {
