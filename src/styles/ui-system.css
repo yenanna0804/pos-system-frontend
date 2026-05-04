@@ -29,6 +29,11 @@
   --ui-control-height: 40px;
   --ui-font-sm: 13px;
   --ui-font-md: 14px;
+
+  /* Alias tương thích ngược — dùng khi code cũ dùng tên biến khác */
+  --border-radius-sm: var(--ui-radius-sm);
+  --border-radius-md: var(--ui-radius-md);
+  --border-radius-lg: var(--ui-radius-lg);
 }
 
 body {
@@ -189,7 +194,7 @@ body {
 .ui-pagination-btn.active,
 .pagination-actions .ghost-btn.active,
 .orders-pagination-btn.active {
-  background: #1890ff;
+  background: var(--ui-primary);
   color: #fff;
 }
 

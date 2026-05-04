@@ -37,7 +37,7 @@ export type BillItem = {
   lineDiscountAmount?: number;
   lineSurchargeAmount?: number;
   lineTotal?: number;
-  timerStatus?: 'RUNNING' | 'STOPPED' | 'ON' | 'OFF';
+  timerStatus?: 'RUNNING' | 'STOPPED';
   activeSessionStartedAt?: string | null;
   startAt?: string | null;
   stopAt?: string | null;

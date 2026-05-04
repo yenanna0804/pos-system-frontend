@@ -129,6 +129,26 @@ export const diningTableService = {
   remove: (id: string) => api.delete(`/dining-tables/${id}`),
 };
 
+/** Shape đầy đủ của một dòng món trong hóa đơn */
+export type BillItemPayload = {
+  lineId: string;
+  productId: string;
+  productName: string;
+  unit?: string;
+  baseUnitPrice?: number;
+  unitPrice: number;
+  quantity: number;
+  note: string;
+  pricingTypeSnapshot?: 'FIXED' | 'TIME';
+  timeRateAmountSnapshot?: number;
+  timeRateMinutesSnapshot?: number;
+  usedMinutes?: number;
+  startAt?: string | null;
+  stopAt?: string | null;
+  lineDiscountAmount?: number;
+  lineSurchargeAmount?: number;
+};
+
 export type OrderPayload = {
   entityType?: 'TABLE' | 'ROOM';
   tableId?: string;
@@ -143,63 +163,12 @@ export type OrderPayload = {
   surchargeValue?: number;
   paidAmount?: number;
   paymentMethod?: 'CASH' | 'BANKING';
-  orderState?: 'DRAFT' | 'PAID' | 'PARTIAL';
-  billItems: {
-    lineId: string;
-    productId: string;
-    productName: string;
-    unit?: string;
-    baseUnitPrice?: number;
-    unitPrice: number;
-    quantity: number;
-    note: string;
-    pricingTypeSnapshot?: 'FIXED' | 'TIME';
-    timeRateAmountSnapshot?: number;
-    timeRateMinutesSnapshot?: number;
-    usedMinutes?: number;
-    startAt?: string | null;
-    stopAt?: string | null;
-    lineDiscountAmount?: number;
-    lineSurchargeAmount?: number;
-  }[];
+  orderState?: 'DRAFT' | 'PAID' | 'PARTIAL' | 'DELETED';
+  billItems: BillItemPayload[];
   branchId?: string;
   billItemsPatch?: {
-    addedItems?: {
-      lineId?: string;
-      productId: string;
-      productName: string;
-      unit?: string;
-      baseUnitPrice?: number;
-      unitPrice: number;
-      quantity: number;
-      note: string;
-      pricingTypeSnapshot?: 'FIXED' | 'TIME';
-      timeRateAmountSnapshot?: number;
-      timeRateMinutesSnapshot?: number;
-      usedMinutes?: number;
-      startAt?: string | null;
-      stopAt?: string | null;
-      lineDiscountAmount?: number;
-      lineSurchargeAmount?: number;
-    }[];
-    updatedItems?: {
-      lineId: string;
-      productId?: string;
-      productName?: string;
-      unit?: string;
-      baseUnitPrice?: number;
-      unitPrice?: number;
-      quantity?: number;
-      note?: string;
-      pricingTypeSnapshot?: 'FIXED' | 'TIME';
-      timeRateAmountSnapshot?: number;
-      timeRateMinutesSnapshot?: number;
-      usedMinutes?: number;
-      startAt?: string | null;
-      stopAt?: string | null;
-      lineDiscountAmount?: number;
-      lineSurchargeAmount?: number;
-    }[];
+    addedItems?: (Omit<BillItemPayload, 'lineId'> & { lineId?: string })[];
+    updatedItems?: (Partial<BillItemPayload> & { lineId: string })[];
     removedItemIds?: string[];
   };
 };
@@ -225,24 +194,6 @@ export const orderService = {
   remove: (id: string) => api.delete(`/orders/${id}`),
   hardRemove: (id: string) => api.delete(`/orders/${id}/hard`),
   history: (id: string) => api.get(`/orders/${id}/logs`),
-  startItemTimer: (orderId: string, itemId: string) => api.post(`/orders/${orderId}/items/${itemId}/timer/start`),
-  startTimeLineCommand: (orderId: string, payload: {
-    clientLineId: string;
-    expectedOrderUpdatedAt?: string;
-    lineSnapshot?: {
-      productId: string;
-      productName?: string;
-      unit?: string;
-      unitPrice?: number;
-      quantity?: number;
-      pricingTypeSnapshot?: 'FIXED' | 'TIME';
-      timeRateAmountSnapshot?: number;
-      timeRateMinutesSnapshot?: number;
-      note?: string;
-    };
-  }) => api.post(`/orders/${orderId}/commands/start-time-line`, payload),
-  stopItemTimer: (orderId: string, itemId: string) => api.post(`/orders/${orderId}/items/${itemId}/timer/stop`),
-  getItemTimerStatus: (orderId: string, itemId: string) => api.get(`/orders/${orderId}/items/${itemId}/timer/status`),
 };
 
 export default api;

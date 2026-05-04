@@ -77,7 +77,8 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
   const [selectedTable, setSelectedTable] = useState<SelectableTable | null>(initialData?.selectedTable || null);
   const [customerName, setCustomerName] = useState(initialData?.customerName || '');
   const [duplicateHandling, setDuplicateHandling] = useState<DuplicateHandling>('merge');
-  const { billItems, setBillItems, addProductToBill, billItemsPatch } = useOrderEditor(initialData?.billItems || []);
+  const editorResetKey = `${mode}:${orderId || 'create'}`;
+  const { billItems, setBillItems, addProductToBill, billItemsPatch } = useOrderEditor(initialData?.billItems || [], editorResetKey);
   const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>(initialData?.discountMode || 'percent');
   const [discountValue, setDiscountValue] = useState(String(initialData?.discountValue ?? initialData?.discountAmount ?? 0));
   const [surchargeMode, setSurchargeMode] = useState<'percent' | 'amount'>(initialData?.surchargeMode || 'percent');
@@ -303,12 +304,12 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
             <h3>Xác nhận lưu hóa đơn</h3>
             <p>Bạn chưa chọn phòng/bàn, hệ thống sẽ tự lưu hóa đơn này là hóa đơn mang về (Mang về).</p>
             <div className="orders-confirm-actions">
-              <button type="button" className="orders-ghost-btn" onClick={() => setShowTakeawayConfirm(false)}>
+              <button type="button" className="ghost-btn" onClick={() => setShowTakeawayConfirm(false)}>
                 Hủy
               </button>
               <button
                 type="button"
-                className="orders-primary-btn"
+                className="primary-btn"
                 onClick={async () => {
                   setShowTakeawayConfirm(false);
                   await executeSaveOrder(pendingPaidAmountRef.current, pendingPaymentMethodRef.current);
@@ -329,12 +330,12 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
             </p>
             <p>Thao tác này không thể hoàn tác</p>
             <div className="orders-confirm-actions">
-              <button type="button" className="orders-ghost-btn" onClick={() => setShowEditConfirm(false)}>
+              <button type="button" className="ghost-btn" onClick={() => setShowEditConfirm(false)}>
                 Hủy
               </button>
               <button
                 type="button"
-                className="orders-primary-btn"
+                className="primary-btn"
                 onClick={async () => {
                   setShowEditConfirm(false);
                   await executeSaveOrder(pendingPaidAmountRef.current, pendingPaymentMethodRef.current);
@@ -372,7 +373,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
 
           <div className="orders-create-header">
             <h2>{mode === 'edit' ? `Sửa hóa đơn${orderCode ? ` - ${orderCode}` : ''}` : 'Thêm mới hóa đơn'}</h2>
-             <button type="button" className="orders-ghost-btn" onClick={onBack}>
+             <button type="button" className="ghost-btn" onClick={onBack}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                 <circle cx="12" cy="12" r="9" />
                 <path d="M13.5 8.5L10 12l3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />

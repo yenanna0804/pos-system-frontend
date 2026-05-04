@@ -6,31 +6,14 @@ const generateLineId = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
-export function useOrderEditor(initialBillItems: BillItem[]) {
+export function useOrderEditor(initialBillItems: BillItem[], resetKey: string) {
   const [billItems, setBillItems] = useState<BillItem[]>(initialBillItems);
   const initialItemsRef = useRef<BillItem[]>(initialBillItems);
-  const initialItemsSignature = useMemo(
-    () => JSON.stringify((initialBillItems || []).map((item) => ({
-      lineId: item.lineId,
-      productId: item.productId,
-      unitPrice: item.unitPrice,
-      quantity: item.quantity,
-      usedMinutes: item.usedMinutes,
-      lineDiscountAmount: item.lineDiscountAmount,
-      lineSurchargeAmount: item.lineSurchargeAmount,
-      timerStatus: item.timerStatus,
-      activeSessionStartedAt: item.activeSessionStartedAt,
-      startAt: item.startAt,
-      stopAt: item.stopAt,
-      note: item.note,
-    }))),
-    [initialBillItems],
-  );
 
   useEffect(() => {
     setBillItems(initialBillItems);
     initialItemsRef.current = initialBillItems;
-  }, [initialItemsSignature]);
+  }, [resetKey]);
 
   const addProductToBill = (product: ProductOption, duplicateHandling: DuplicateHandling) => {
     setBillItems((prev) => {

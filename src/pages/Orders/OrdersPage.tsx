@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { areaService, diningTableService, orderService, roomService } from '../../services/api';
 import { DeleteActionIcon, EditActionIcon } from '../../components/ActionIcons';
@@ -234,9 +235,74 @@ const buildOrder80mmData = (order: OrderDetail): Receipt80mmData => {
   };
 };
 
+const normalizeOrderState = (row: { orderState?: OrderState; paidAmount?: number; finalAmount?: number; totalAmount?: number }): OrderState => {
+  const apiState = row.orderState;
+  if (apiState) return apiState;
+  const paidAmount = Math.trunc(Number(row.paidAmount || 0));
+  const payableAmount = Math.trunc(Number(row.finalAmount ?? row.totalAmount ?? 0));
+  if (paidAmount >= payableAmount && payableAmount > 0) return 'PAID';
+  if (paidAmount < payableAmount) return 'PARTIAL';
+  return 'PARTIAL';
+};
+
+const mapOrderRow = (row: OrderRowApi): OrderRow => ({
+  ...row,
+  orderState: normalizeOrderState(row),
+});
+
+const mapOrderDetailToEditingState = (data: OrderDetail): EditingOrderState => {
+  const selectedTable = data?.entityType === 'ROOM'
+    ? {
+        entityType: 'ROOM' as const,
+        id: data.roomId || '',
+        name: data.roomName || 'Phòng',
+        areaId: 'room-area',
+        areaName: data.areaName || '-',
+        roomId: data.roomId,
+        roomName: data.roomName,
+      }
+    : {
+        entityType: 'TABLE' as const,
+        id: data.tableId || '',
+        name: data.tableName || 'Bàn',
+        areaId: 'table-area',
+        areaName: data.areaName || '-',
+        roomId: data.roomId,
+        roomName: data.roomName,
+      };
+
+  return {
+    id: data.id,
+    code: data.code,
+    selectedTable,
+    customerName: data.customerName || '',
+    discountAmount: Number(data.discountAmount || 0),
+    discountMode: data.discountMode || 'amount',
+    discountValue: Number(data.discountValue ?? data.discountAmount ?? 0),
+    surchargeAmount: Number(data.surchargeAmount || 0),
+    surchargeMode: data.surchargeMode || 'amount',
+    surchargeValue: Number(data.surchargeValue ?? data.surchargeAmount ?? 0),
+    paidAmount: Math.trunc(Number(data.paidAmount || 0)),
+    paymentMethod: data.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
+    updatedAt: data.updatedAt,
+    billItems: Array.isArray(data.items)
+      ? data.items.map((item) => ({
+          ...item,
+          orderItemId: item.lineId,
+          lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? 0))),
+        }))
+      : [],
+  };
+};
+
 export default function OrdersPage() {
   const { branchId } = useAuth();
-  const [view, setView] = useState<'list' | 'create' | 'edit'>('list');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const editRouteMatch = useMatch('/orders/:id/edit');
+  const editingOrderIdFromRoute = editRouteMatch?.params?.id || null;
+  const isCreateRoute = location.pathname === '/orders/new';
+  const isEditRoute = Boolean(editingOrderIdFromRoute);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -281,6 +347,13 @@ export default function OrdersPage() {
 
   const historyPageSize = 5;
 
+  const clearDraftAutosaveTimeout = () => {
+    if (draftAutosaveTimeoutRef.current) {
+      clearTimeout(draftAutosaveTimeoutRef.current);
+      draftAutosaveTimeoutRef.current = null;
+    }
+  };
+
   const showToast = (type: 'error' | 'success', message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 2800);
@@ -313,7 +386,7 @@ export default function OrdersPage() {
     roomId: roomFilter || undefined,
     tableId: tableFilter || undefined,
     startDate: startDate || undefined,
-    endDate: endDate ? `${endDate}T23:59:59.999Z` : undefined,
+    endDate: endDate ? `${endDate}:59` : undefined,
   });
 
   const loadOrders = async () => {
@@ -390,14 +463,40 @@ export default function OrdersPage() {
 
   useEffect(() => {
     return () => {
-      if (draftAutosaveTimeoutRef.current) {
-        clearTimeout(draftAutosaveTimeoutRef.current);
-      }
+      clearDraftAutosaveTimeout();
     };
   }, []);
 
+  useEffect(() => {
+    if (!isCreateRoute) {
+      clearDraftAutosaveTimeout();
+    }
+  }, [isCreateRoute]);
 
-  const buildCreateOrderPayload = (payload: {
+  useEffect(() => {
+    const loadEditingOrderFromRoute = async () => {
+      if (!isEditRoute || !editingOrderIdFromRoute) {
+        setEditingOrder(null);
+        setEditingDraftBillItems([]);
+        return;
+      }
+      try {
+        const response = await orderService.getById(editingOrderIdFromRoute);
+        const nextEditing = mapOrderDetailToEditingState(response.data as OrderDetail);
+        setEditingOrder(nextEditing);
+        setEditingDraftBillItems(nextEditing.billItems);
+      } catch (error) {
+        setEditingOrder(null);
+        setEditingDraftBillItems([]);
+        showToast('error', typeof error === 'string' ? error : 'Không thể cập nhật hóa đơn');
+        navigate('/orders');
+      }
+    };
+    loadEditingOrderFromRoute().catch(() => undefined);
+  }, [isEditRoute, editingOrderIdFromRoute, navigate]);
+
+
+  const buildCreateOrderPayload = useCallback((payload: {
     table: { entityType: 'TABLE' | 'ROOM'; id: string; name: string; areaName: string; roomName?: string | null; roomId?: string | null } | null;
     customerName: string;
     billItems: {
@@ -446,7 +545,7 @@ export default function OrdersPage() {
       orderState: payload.orderState,
       branchId: branchId || undefined,
     };
-  };
+  }, [branchId]);
 
   useEffect(() => {
     loadOrders().catch((error) => showToast('error', typeof error === 'string' ? error : 'Không tải được danh sách hóa đơn'));
@@ -554,7 +653,7 @@ export default function OrdersPage() {
       await loadOrders();
       setCreateDraft(null);
       setCreateDraftOrderId(null);
-      setView('list');
+      navigate('/orders');
       showToast('success', 'Lưu hóa đơn thành công');
     } catch (error) {
       showToast('error', typeof error === 'string' ? error : 'Không lưu được hóa đơn');
@@ -581,16 +680,7 @@ export default function OrdersPage() {
       showToast('error', 'Không thể sửa hóa đơn đã xóa');
       return;
     }
-    try {
-      const response = await orderService.getById(order.id);
-      const data = response.data;
-      const nextEditing = mapOrderDetailToEditingState(data);
-      setEditingOrder(nextEditing);
-      setEditingDraftBillItems(nextEditing.billItems);
-      setView('edit');
-    } catch (error) {
-      showToast('error', typeof error === 'string' ? error : 'Không thể cập nhật hóa đơn');
-    }
+    navigate(`/orders/${order.id}/edit`);
   };
 
   const onPrintOrder = async (order: OrderRow) => {
@@ -879,7 +969,89 @@ export default function OrdersPage() {
   const detailBillDiscountTotal = detailHeaderDiscount + detailLineDiscountTotal;
   const detailBillSurchargeTotal = detailHeaderSurcharge + detailLineSurchargeTotal;
 
-  if (view === 'create') {
+  const createInitialData = useMemo(() => (createDraft ? {
+    selectedTable: createDraft.selectedTable,
+    customerName: createDraft.customerName,
+    billItems: createDraft.billItems,
+    discountMode: createDraft.discountMode,
+    discountValue: Number(createDraft.discountValue || 0),
+    surchargeMode: createDraft.surchargeMode,
+    surchargeValue: Number(createDraft.surchargeValue || 0),
+    paidAmount: createDraft.paidAmount,
+    paymentMethod: createDraft.paymentMethod,
+  } : undefined), [createDraft]);
+
+  const handleCreateDraftChange = useCallback((draft: {
+    activeTab: 'table' | 'product';
+    selectedTable: EditingOrderState['selectedTable'];
+    customerName: string;
+    billItems: BillItem[];
+    discountMode: 'percent' | 'amount';
+    discountValue: string;
+    surchargeMode: 'percent' | 'amount';
+    surchargeValue: string;
+    paidAmount?: number;
+    paymentMethod?: 'CASH' | 'BANKING';
+  }) => {
+    if (!isCreateRoute || location.pathname !== '/orders/new') return;
+    const normalized: CreateOrderDraft = {
+      ...draft,
+      selectedTable: draft.selectedTable,
+      billItems: draft.billItems,
+    };
+    setCreateDraft((prev) => {
+      const sameAsCurrent = prev
+        && prev.activeTab === normalized.activeTab
+        && prev.selectedTable?.id === normalized.selectedTable?.id
+        && prev.customerName === normalized.customerName
+        && prev.discountMode === normalized.discountMode
+        && prev.discountValue === normalized.discountValue
+        && prev.surchargeMode === normalized.surchargeMode
+        && prev.surchargeValue === normalized.surchargeValue
+        && Number(prev.paidAmount || 0) === Number(normalized.paidAmount || 0)
+        && (prev.paymentMethod || 'CASH') === (normalized.paymentMethod || 'CASH')
+        && prev.billItems === normalized.billItems;
+      if (sameAsCurrent) return prev;
+      return normalized;
+    });
+
+    const autosavePayload = buildCreateOrderPayload({
+      table: normalized.selectedTable,
+      customerName: normalized.customerName,
+      billItems: normalized.billItems,
+      totalAmount: Math.max(0, normalized.billItems.reduce((sum, item) => sum + Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)), 0)),
+      discountAmount: 0,
+      discountMode: normalized.discountMode,
+      discountValue: Number(normalized.discountValue || 0),
+      surchargeAmount: 0,
+      surchargeMode: normalized.surchargeMode,
+      surchargeValue: Number(normalized.surchargeValue || 0),
+      paidAmount: Math.max(0, Math.trunc(Number(normalized.paidAmount || 0))),
+      paymentMethod: normalized.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
+      orderState: 'DRAFT',
+    });
+    const autosaveOrderId = createDraftOrderId;
+    if (!autosaveOrderId) return;
+
+    clearDraftAutosaveTimeout();
+    draftAutosaveTimeoutRef.current = setTimeout(async () => {
+      const reqId = latestDraftAutosaveRequestRef.current + 1;
+      latestDraftAutosaveRequestRef.current = reqId;
+      try {
+        const latestDetailResponse = await orderService.getById(autosaveOrderId);
+        const latestOrderState = String((latestDetailResponse.data as { orderState?: string })?.orderState || '').toUpperCase();
+        if (latestOrderState !== 'DRAFT') {
+          return;
+        }
+        await orderService.update(autosaveOrderId, autosavePayload);
+      } catch (error: unknown) {
+        const message = typeof error === 'string' ? error : 'Không tự lưu được hóa đơn nháp';
+        showToast('error', message);
+      }
+    }, 500);
+  }, [isCreateRoute, location.pathname, createDraftOrderId, buildCreateOrderPayload]);
+
+  if (isCreateRoute) {
     return (
       <>
         {toast && (
@@ -891,71 +1063,12 @@ export default function OrdersPage() {
           key="order-create"
           orderId={createDraftOrderId || undefined}
           defaultTab={createDraft?.activeTab || 'table'}
-          initialData={createDraft ? {
-            selectedTable: createDraft.selectedTable,
-            customerName: createDraft.customerName,
-            billItems: createDraft.billItems.map((item) => ({
-              ...item,
-              timerStatus: item.timerStatus === 'ON'
-                ? 'RUNNING'
-                : item.timerStatus === 'OFF'
-                  ? 'STOPPED'
-                  : item.timerStatus,
-            })),
-            discountMode: createDraft.discountMode,
-            discountValue: Number(createDraft.discountValue || 0),
-            surchargeMode: createDraft.surchargeMode,
-            surchargeValue: Number(createDraft.surchargeValue || 0),
-            paidAmount: createDraft.paidAmount,
-            paymentMethod: createDraft.paymentMethod,
-          } : undefined}
-          onDraftChange={(draft) => {
-            const normalized: CreateOrderDraft = {
-              ...draft,
-              selectedTable: draft.selectedTable,
-              billItems: draft.billItems,
-            };
-            setCreateDraft(normalized);
-
-            const autosavePayload = buildCreateOrderPayload({
-              table: normalized.selectedTable,
-              customerName: normalized.customerName,
-              billItems: normalized.billItems,
-              totalAmount: Math.max(0, normalized.billItems.reduce((sum, item) => sum + Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)), 0)),
-              discountAmount: 0,
-              discountMode: normalized.discountMode,
-              discountValue: Number(normalized.discountValue || 0),
-              surchargeAmount: 0,
-              surchargeMode: normalized.surchargeMode,
-              surchargeValue: Number(normalized.surchargeValue || 0),
-              paidAmount: Math.max(0, Math.trunc(Number(normalized.paidAmount || 0))),
-              paymentMethod: normalized.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
-              orderState: 'DRAFT',
-            });
-            if (!createDraftOrderId) return;
-
-            if (draftAutosaveTimeoutRef.current) {
-              clearTimeout(draftAutosaveTimeoutRef.current);
-            }
-            draftAutosaveTimeoutRef.current = setTimeout(async () => {
-              const reqId = latestDraftAutosaveRequestRef.current + 1;
-              latestDraftAutosaveRequestRef.current = reqId;
-              try {
-                await orderService.update(createDraftOrderId, autosavePayload);
-              } catch (error: unknown) {
-                const message =
-                  typeof error === 'string'
-                    ? error
-                    : (error as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message
-                      || (error as { message?: string })?.message
-                      || 'Không tự lưu được hóa đơn nháp';
-                showToast('error', message);
-              }
-            }, 500);
-          }}
+          initialData={createInitialData}
+          onDraftChange={handleCreateDraftChange}
           onBack={async () => {
-            await loadOrders();
-            setView('list');
+            clearDraftAutosaveTimeout();
+            navigate('/orders');
+            loadOrders().catch(() => undefined);
           }}
           onSaveOrder={saveOrder}
           onToggleTimeLineTimer={async (lineId, action) => {
@@ -1019,7 +1132,20 @@ export default function OrdersPage() {
     );
   }
 
-  if (view === 'edit' && editingOrder) {
+  if (isEditRoute && !editingOrder) {
+    return (
+      <section className="orders-page">
+        {toast && (
+          <div className="orders-toast-container" aria-live="polite" aria-atomic="true">
+            <div className={`orders-toast orders-toast-${toast.type}`}>{toast.message}</div>
+          </div>
+        )}
+        <div className="orders-empty-row">Đang tải hóa đơn...</div>
+      </section>
+    );
+  }
+
+  if (isEditRoute && editingOrder) {
     return (
       <>
         {toast && (
@@ -1047,7 +1173,7 @@ export default function OrdersPage() {
             billItems: editingOrder.billItems,
           }}
           onBack={() => {
-            setView('list');
+            navigate('/orders');
             setEditingOrder(null);
             setEditingDraftBillItems([]);
           }}
@@ -1082,7 +1208,7 @@ export default function OrdersPage() {
             };
             await orderService.update(editingOrder.id, updatePayload);
             await loadOrders();
-            setView('list');
+            navigate('/orders');
             setEditingOrder(null);
             setEditingDraftBillItems([]);
             showToast('success', 'Cập nhật hóa đơn thành công');
@@ -1152,6 +1278,54 @@ export default function OrdersPage() {
     );
   }
 
+  const handleCreateNewOrder = async () => {
+    if (!branchId) {
+      showToast('error', 'Vui lòng chọn chi nhánh trước khi tạo hóa đơn');
+      return;
+    }
+    if (isCreatingDraftRef.current) return;
+    isCreatingDraftRef.current = true;
+    try {
+      const created = await orderService.create({
+        customerName: '',
+        totalAmount: 0,
+        discountAmount: 0,
+        discountMode: 'amount',
+        discountValue: 0,
+        surchargeAmount: 0,
+        surchargeMode: 'percent',
+        surchargeValue: 5,
+        paidAmount: 0,
+        paymentMethod: 'CASH',
+        orderState: 'DRAFT',
+        billItems: [],
+        branchId,
+      });
+      const newDraftId = created.data?.id;
+      if (!newDraftId) throw new Error('Không nhận được mã hóa đơn nháp');
+      setCreateDraft({
+        activeTab: 'table',
+        selectedTable: null,
+        customerName: '',
+        billItems: [],
+        discountMode: 'amount',
+        discountValue: '0',
+        surchargeMode: 'percent',
+        surchargeValue: '5',
+        paidAmount: 0,
+        paymentMethod: 'CASH',
+      });
+      setCreateDraftOrderId(newDraftId);
+      await loadOrders();
+      navigate('/orders/new');
+    } catch (error: unknown) {
+      const message = typeof error === 'string' ? error : 'Không tạo được hóa đơn nháp';
+      showToast('error', message);
+    } finally {
+      isCreatingDraftRef.current = false;
+    }
+  };
+
   return (
     <section className="orders-page">
       {toast && (
@@ -1162,61 +1336,7 @@ export default function OrdersPage() {
       <div className="orders-toolbar">
         <h2>Danh sách hóa đơn</h2>
         <div className="orders-toolbar-actions">
-          <button
-            className="orders-primary-btn"
-            onClick={async () => {
-              if (!branchId) {
-                showToast('error', 'Vui lòng chọn chi nhánh trước khi tạo hóa đơn');
-                return;
-              }
-              if (isCreatingDraftRef.current) return;
-              isCreatingDraftRef.current = true;
-              try {
-                const created = await orderService.create({
-                  customerName: '',
-                  totalAmount: 0,
-                  discountAmount: 0,
-                  discountMode: 'amount',
-                  discountValue: 0,
-                  surchargeAmount: 0,
-                  surchargeMode: 'percent',
-                  surchargeValue: 5,
-                  paidAmount: 0,
-                  paymentMethod: 'CASH',
-                  orderState: 'DRAFT',
-                  billItems: [],
-                  branchId,
-                });
-                const newDraftId = created.data?.id;
-                if (!newDraftId) throw new Error('Không nhận được mã hóa đơn nháp');
-                setCreateDraft({
-                  activeTab: 'table',
-                  selectedTable: null,
-                  customerName: '',
-                  billItems: [],
-                  discountMode: 'amount',
-                  discountValue: '0',
-                  surchargeMode: 'percent',
-                  surchargeValue: '5',
-                  paidAmount: 0,
-                  paymentMethod: 'CASH',
-                });
-                setCreateDraftOrderId(newDraftId);
-                await loadOrders();
-                setView('create');
-              } catch (error: unknown) {
-                const message =
-                  typeof error === 'string'
-                    ? error
-                    : (error as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message
-                      || (error as { message?: string })?.message
-                      || 'Không tạo được hóa đơn nháp';
-                showToast('error', message);
-              } finally {
-                isCreatingDraftRef.current = false;
-              }
-            }}
-          >
+          <button className="primary-btn" onClick={handleCreateNewOrder}>
             Thêm mới hóa đơn
           </button>
           <div className="orders-toolbar-secondary-actions">
@@ -1300,9 +1420,9 @@ export default function OrdersPage() {
           </label>
 
           <label className="orders-filter-col-from-date">
-            Từ ngày
+            Từ ngày giờ
             <input
-              type="date"
+              type="datetime-local"
               value={startDate}
               onChange={(event) => {
                 setStartDate(event.target.value);
@@ -1312,9 +1432,10 @@ export default function OrdersPage() {
           </label>
 
           <label className="orders-filter-col-to-date">
-            Đến ngày
+            Đến ngày giờ
             <input
-              type="date"
+              type="datetime-local"
+              lang="vi"
               value={endDate}
               onChange={(event) => {
                 setEndDate(event.target.value);
@@ -1821,11 +1942,14 @@ export default function OrdersPage() {
                             <span className="orders-status-tag is-paid">Thành công</span>
                           </td>
                           <td>
-                            {buildLogDetails(log).length === 0
-                              ? '-'
-                              : buildLogDetails(log).map((line, lineIdx) => (
-                                <div key={`${log.id}-detail-${lineIdx}`}>{line}</div>
-                              ))}
+                            {(() => {
+                              const details = buildLogDetails(log);
+                              return details.length === 0
+                                ? '-'
+                                : details.map((line, lineIdx) => (
+                                    <div key={`${log.id}-detail-${lineIdx}`}>{line}</div>
+                                  ));
+                            })()}
                           </td>
                         </tr>
                       ))}
@@ -1848,7 +1972,7 @@ export default function OrdersPage() {
             </p>
             <p>Thao tác này sẽ xóa hẳn dữ liệu và không thể hoàn tác.</p>
             <div className="orders-confirm-actions">
-              <button type="button" className="orders-ghost-btn" onClick={() => setDeleteConfirmOrder(null)}>
+              <button type="button" className="ghost-btn" onClick={() => setDeleteConfirmOrder(null)}>
                 Hủy
               </button>
               <button type="button" className="danger-btn" onClick={confirmHardDeleteOrder}>
@@ -1868,7 +1992,7 @@ export default function OrdersPage() {
             </p>
             <p>Thao tác này có thể ảnh hưởng dữ liệu báo cáo và không thể hoàn tác.</p>
             <div className="orders-confirm-actions">
-              <button type="button" className="orders-ghost-btn" onClick={() => setShowBulkDeleteConfirm(false)}>
+              <button type="button" className="ghost-btn" onClick={() => setShowBulkDeleteConfirm(false)}>
                 Hủy
               </button>
               <button type="button" className="danger-btn" onClick={confirmBulkHardDeleteOrders}>
@@ -1881,63 +2005,3 @@ export default function OrdersPage() {
     </section>
   );
 }
-  const normalizeOrderState = (row: { orderState?: OrderState; paidAmount?: number; finalAmount?: number; totalAmount?: number }): OrderState => {
-    const apiState = row.orderState;
-    if (apiState) return apiState;
-    const paidAmount = Math.trunc(Number(row.paidAmount || 0));
-    const payableAmount = Math.trunc(Number(row.finalAmount ?? row.totalAmount ?? 0));
-    if (paidAmount >= payableAmount && payableAmount > 0) return 'PAID';
-    if (paidAmount < payableAmount) return 'PARTIAL';
-    return 'PARTIAL';
-  };
-
-  const mapOrderRow = (row: OrderRowApi): OrderRow => ({
-    ...row,
-    orderState: normalizeOrderState(row),
-  });
-  const mapOrderDetailToEditingState = (data: OrderDetail): EditingOrderState => {
-    const selectedTable = data?.entityType === 'ROOM'
-      ? {
-          entityType: 'ROOM' as const,
-          id: data.roomId || '',
-          name: data.roomName || 'Phòng',
-          areaId: 'room-area',
-          areaName: data.areaName || '-',
-          roomId: data.roomId,
-          roomName: data.roomName,
-        }
-      : {
-          entityType: 'TABLE' as const,
-          id: data.tableId || '',
-          name: data.tableName || 'Bàn',
-          areaId: 'table-area',
-          areaName: data.areaName || '-',
-          roomId: data.roomId,
-          roomName: data.roomName,
-        };
-
-    return {
-      id: data.id,
-      code: data.code,
-      selectedTable,
-      customerName: data.customerName || '',
-      discountAmount: Number(data.discountAmount || 0),
-      discountMode: data.discountMode || 'amount',
-      discountValue: Number(data.discountValue ?? data.discountAmount ?? 0),
-      surchargeAmount: Number(data.surchargeAmount || 0),
-      surchargeMode: data.surchargeMode || 'amount',
-      surchargeValue: Number(data.surchargeValue ?? data.surchargeAmount ?? 0),
-      paidAmount: Math.trunc(Number(data.paidAmount || 0)),
-      paymentMethod: data.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
-      updatedAt: data.updatedAt,
-      billItems: Array.isArray(data.items)
-        ? data.items.map((item) => {
-            return {
-              ...item,
-              orderItemId: item.lineId,
-              lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? 0))),
-            };
-          })
-        : [],
-    };
-  };

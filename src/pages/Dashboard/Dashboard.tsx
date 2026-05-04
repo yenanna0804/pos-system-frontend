@@ -17,15 +17,14 @@ export default function Dashboard() {
   const location = useLocation();
   const [branches, setBranches] = useState<Branch[]>([]);
 
-  const routeToTab: Record<string, TabKey> = {
-    '/dashboard': 'overview',
-    '/product': 'products',
-    '/tables': 'tables',
-    '/orders': 'orders',
-    '/printers': 'printers',
-  };
-
-  const activeTab = routeToTab[location.pathname] || 'overview';
+  const activeTab: TabKey = (() => {
+    if (location.pathname === '/dashboard') return 'overview';
+    if (location.pathname.startsWith('/product')) return 'products';
+    if (location.pathname.startsWith('/tables')) return 'tables';
+    if (location.pathname.startsWith('/orders')) return 'orders';
+    if (location.pathname.startsWith('/printers')) return 'printers';
+    return 'overview';
+  })();
   const isAdmin = user?.role === 'ADMIN';
 
   useEffect(() => {

@@ -49,6 +49,22 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/orders/new"
+        element={
+          <PrivateRoute>
+            <Dashboard />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/orders/:id/edit"
+        element={
+          <PrivateRoute>
+            <Dashboard />
+          </PrivateRoute>
+        }
+      />
+      <Route
         path="/printers"
         element={
           <PrivateRoute>

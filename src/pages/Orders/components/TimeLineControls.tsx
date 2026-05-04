@@ -32,7 +32,7 @@ export default function TimeLineControls({
     return (
       <button
         type="button"
-        className="orders-ghost-btn"
+        className="ghost-btn"
         disabled={!onToggleTimeLineTimer || isLoading}
         onClick={() => onToggleTimeLineTimer?.(lineId, 'stop')}
       >
@@ -53,7 +53,7 @@ export default function TimeLineControls({
     return (
       <button
         type="button"
-        className="orders-ghost-btn"
+        className="ghost-btn"
         disabled={isDisabled}
         onClick={() => onToggleTimeLineTimer?.(lineId, 'start')}
         title={isUnsynced ? 'Dòng mới sẽ được tự động đồng bộ khi bấm bắt đầu' : undefined}

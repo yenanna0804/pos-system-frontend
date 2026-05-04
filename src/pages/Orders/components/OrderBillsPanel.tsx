@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { BillItem, DuplicateHandling, SelectableTable } from '../types';
 import { getLineAmount, toAmountNumber, toPercentNumber } from '../hooks/useOrderPricing';
 import TimeLineControls from './TimeLineControls';
+import './OrdersBillPanel.css';
 
 type AdjustmentMode = 'percent' | 'amount';
 type PaymentMethod = 'CASH' | 'BANKING';
@@ -91,7 +92,13 @@ export default function OrderBillsPanel({
   const allSelected = billItems.length > 0 && selectedLineIds.length === billItems.length;
 
   useEffect(() => {
-    setSelectedLineIds((prev) => prev.filter((lineId) => billItems.some((item) => item.lineId === lineId)));
+    setSelectedLineIds((prev) => {
+      const next = prev.filter((lineId) => billItems.some((item) => item.lineId === lineId));
+      if (next.length === prev.length && next.every((lineId, index) => lineId === prev[index])) {
+        return prev;
+      }
+      return next;
+    });
   }, [billItems]);
 
   const subtotal = billItems.reduce((sum, item) => sum + getLineAmount(item), 0);
@@ -119,7 +126,7 @@ export default function OrderBillsPanel({
 
         <div className="orders-bills-top-actions">
           <div className="orders-bill-actions">
-            <button type="button" className="orders-ghost-btn" disabled={billItems.length === 0} onClick={onPrintInvoice}>
+            <button type="button" className="ghost-btn" disabled={billItems.length === 0} onClick={onPrintInvoice}>
               <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                 <path d="M6 2h12a1 1 0 0 1 1 1v4H5V3a1 1 0 0 1 1-1Z" />
                 <path d="M5 14h14v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7Zm3 1v5h8v-5H8Z" />
@@ -129,7 +136,7 @@ export default function OrderBillsPanel({
             </button>
             <button
               type="button"
-              className="orders-ghost-btn"
+              className="ghost-btn"
               disabled={billItems.length === 0}
               onClick={() => onPrintOrder(selectedLineIds)}
             >
@@ -142,7 +149,7 @@ export default function OrderBillsPanel({
             </button>
             <button
               type="button"
-              className="orders-primary-btn"
+              className="primary-btn"
               onClick={() => onSaveOrder(Number(customerPaidInput) || 0, paymentMethod)}
               disabled={disableSave}
             >

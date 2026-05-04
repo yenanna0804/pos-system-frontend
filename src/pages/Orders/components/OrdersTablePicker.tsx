@@ -177,7 +177,7 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
 
         <button
           type="button"
-          className="orders-ghost-btn orders-filter-reset-btn"
+          className="ghost-btn orders-filter-reset-btn"
           onClick={resetListFilters}
           title="Đặt lại bộ lọc"
           aria-label="Đặt lại bộ lọc"
