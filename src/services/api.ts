@@ -196,4 +196,31 @@ export const orderService = {
   history: (id: string) => api.get(`/orders/${id}/logs`),
 };
 
+export type SalesEndOfDayReportParams = {
+  branchId?: string;
+  startDate?: string;
+  endDate?: string;
+  search?: string;
+  orderStates?: string;
+  areaId?: string;
+  roomId?: string;
+  tableId?: string;
+  paymentMethod?: 'CASH' | 'BANKING';
+};
+
+export type ProductReportParams = {
+  branchId?: string;
+  startDate?: string;
+  endDate?: string;
+  categoryId?: string;
+  search?: string;
+  type?: 'SINGLE' | 'COMBO' | 'TIME';
+  stockStatus?: 'all' | 'in_stock' | 'out_of_stock';
+};
+
+export const reportService = {
+  salesEndOfDay: (params: SalesEndOfDayReportParams) => api.get('/reports/sales/end-of-day', { params }),
+  products: (params: ProductReportParams) => api.get('/reports/products', { params }),
+};
+
 export default api;

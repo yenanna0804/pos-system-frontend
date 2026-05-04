@@ -1,5 +1,8 @@
+import { formatDateTimeVN } from './formatters';
+
 export type Receipt80mmItem = {
   name: string;
+  unit?: string;
   quantity: number;
   unitPrice: number;
   lineTotal: number;
@@ -61,7 +64,12 @@ const wrapByWidth = (ctx: CanvasRenderingContext2D, text: string, maxWidth: numb
 
 const buildReceiptCanvas = (data: Receipt80mmData) => {
   const normalizedTitle = (data.title || '').trim().toUpperCase();
-  const isOrderPrint = normalizedTitle === 'PHIẾU ORDER' || normalizedTitle === 'PHIEU ORDER' || normalizedTitle === 'ORDER';
+  const isOrderPrint =
+    normalizedTitle === 'CHẾ BIẾN' ||
+    normalizedTitle === 'CHE BIEN' ||
+    normalizedTitle === 'PHIẾU ORDER' ||
+    normalizedTitle === 'PHIEU ORDER' ||
+    normalizedTitle === 'ORDER';
   const width = 576;
   const marginX = 16;
   const contentWidth = width - marginX * 2;
@@ -132,7 +140,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     y += lineHeight;
   };
 
-  drawLabelValue('Ngày', data.datetime || new Date().toLocaleString('vi-VN'));
+  drawLabelValue('Ngày', data.datetime || formatDateTimeVN(new Date().toISOString()));
   drawLabelValue('Vị trí', data.location || '-');
   drawLabelValue('SL khách', `${data.guestCount ?? '-'}`);
   drawLabelValue('Thu ngân', data.cashier || '-');

@@ -313,3 +313,83 @@ body {
 .orders-icon-btn:not(:disabled):active {
   transform: translateY(1px);
 }
+
+/* ── TooltipInfoButton ─────────────────────────────── */
+.ui-tooltip-info-btn {
+  align-items: center;
+  background: #dbeafe;
+  border: none;
+  border-radius: 50%;
+  color: #1d4ed8;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  height: 16px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  transition: background 0.15s;
+  vertical-align: middle;
+  width: 16px;
+}
+
+.ui-tooltip-info-btn:hover {
+  background: #bfdbfe;
+}
+
+.ui-tooltip-info-btn-bubble {
+  pointer-events: none;
+}
+
+.ui-tooltip-info-btn-tail {
+  display: none;
+}
+
+/* ── Column header tooltip popover ────────────────── */
+.col-th-wrap {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+  position: relative;
+  white-space: nowrap;
+}
+
+.col-th-tooltip-anchor {
+  position: relative;
+}
+
+.col-th-tooltip-popover {
+  background: #1d2939;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.22);
+  color: #f2f4f7;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.55;
+  max-width: 260px;
+  min-width: 200px;
+  padding: 10px 14px;
+  position: fixed;
+  text-align: left;
+  white-space: normal;
+  z-index: 9999;
+}
+
+.col-th-tooltip-popover strong {
+  color: #fff;
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.col-th-tooltip-popover::before {
+  border: 5px solid transparent;
+  border-bottom-color: #1d2939;
+  content: '';
+  position: absolute;
+  right: 4px;
+  top: -10px;
+}

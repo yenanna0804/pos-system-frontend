@@ -4,7 +4,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { areaService, diningTableService, orderService, roomService } from '../../services/api';
 import { DeleteActionIcon, EditActionIcon } from '../../components/ActionIcons';
 import FilterResetButton from '../../components/FilterResetButton';
-import { printUsingConfiguredRoute } from '../../utils/printerRouting';
+import { printUsingConfiguredRoute, resolveTemplateKeyForPrintFamily } from '../../utils/printerRouting';
+import { formatDateTimeVN } from '../../utils/formatters';
 import type { Receipt80mmData } from '../../utils/receipt80mmGenerator';
 import NewOrderPage from './NewOrderPage';
 import { orderFeatureFlags } from './orderFeatureFlags';
@@ -179,10 +180,25 @@ const formatUnitPriceDisplay = (price: number, pricingType?: 'FIXED' | 'TIME', r
   return `${normalizedPrice} / ${minutes} phút`;
 };
 
+const toDateTimeInputValue = (value: Date) => {
+  const y = value.getFullYear();
+  const m = String(value.getMonth() + 1).padStart(2, '0');
+  const d = String(value.getDate()).padStart(2, '0');
+  const h = String(value.getHours()).padStart(2, '0');
+  const min = String(value.getMinutes()).padStart(2, '0');
+  return `${y}-${m}-${d}T${h}:${min}`;
+};
+
+const splitDateTimeParts = (value: string) => {
+  const [datePart, timePart] = value.split('T');
+  const [hourPart = '00', minutePart = '00'] = (timePart || '00:00').split(':');
+  return { datePart, timePart: `${hourPart}:${minutePart}` };
+};
+
 const buildOrderA4Content = (order: OrderDetail) => {
   const lines: string[] = [];
   lines.push(`Mã hóa đơn: ${order.code}`);
-  lines.push(`Thời gian: ${new Date(order.createdAt).toLocaleString('vi-VN')}`);
+  lines.push(`Thời gian: ${formatDateTimeVN(order.createdAt)}`);
   lines.push(`Khách hàng: ${order.customerName || '-'}`);
   lines.push(`Khu vực/Vị trí: ${order.locationLabel || '-'}`);
   lines.push('');
@@ -218,7 +234,7 @@ const buildOrder80mmData = (order: OrderDetail): Receipt80mmData => {
   return {
     title: 'Hoa don',
     orderCode: order.code,
-    datetime: new Date(order.createdAt).toLocaleString('vi-VN'),
+    datetime: formatDateTimeVN(order.createdAt),
     customerName: order.customerName || '-',
     location: order.locationLabel || '-',
     items: order.items.map((item) => ({
@@ -233,6 +249,32 @@ const buildOrder80mmData = (order: OrderDetail): Receipt80mmData => {
     surcharge: Math.max(0, Math.trunc(surchargeTotal)),
     total: Math.max(0, Math.trunc(Number(order.finalAmount ?? order.totalAmount ?? 0))),
   };
+};
+
+const buildOrderSlip80mmData = (order: OrderDetail): Receipt80mmData => ({
+  ...buildOrder80mmData(order),
+  title: 'PHIẾU ORDER',
+});
+
+const buildOrderSlipA4Content = (order: OrderDetail) => {
+  const lines: string[] = [];
+  lines.push('PHIẾU ORDER');
+  lines.push('');
+  lines.push(`Mã đơn: ${order.code}`);
+  lines.push(`Thời gian: ${formatDateTimeVN(order.createdAt)}`);
+  lines.push(`Vị trí: ${order.locationLabel || '-'}`);
+  lines.push('');
+  lines.push('Danh sách món:');
+  order.items.forEach((item, index) => {
+    lines.push(`${index + 1}. ${item.productName}`);
+    lines.push(`   SL: ${Math.trunc(Number(item.quantity || 0))}`);
+    if (item.note?.trim()) {
+      lines.push(`   Ghi chú: ${item.note.trim()}`);
+    }
+  });
+  lines.push('');
+  lines.push('Vui lòng kiểm tra kỹ trước khi chế biến.');
+  return lines.join('\n');
 };
 
 const normalizeOrderState = (row: { orderState?: OrderState; paidAmount?: number; finalAmount?: number; totalAmount?: number }): OrderState => {
@@ -314,8 +356,12 @@ export default function OrdersPage() {
   const [areaFilter, setAreaFilter] = useState('');
   const [roomFilter, setRoomFilter] = useState('');
   const [tableFilter, setTableFilter] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const initialStart = toDateTimeInputValue(new Date(new Date().setHours(0, 0, 0, 0)));
+  const initialEnd = toDateTimeInputValue(new Date(new Date().setHours(23, 59, 0, 0)));
+  const [startDate, setStartDate] = useState(splitDateTimeParts(initialStart).datePart);
+  const [startTime, setStartTime] = useState(splitDateTimeParts(initialStart).timePart);
+  const [endDate, setEndDate] = useState(splitDateTimeParts(initialEnd).datePart);
+  const [endTime, setEndTime] = useState(splitDateTimeParts(initialEnd).timePart);
   const [areas, setAreas] = useState<AreaOption[]>([]);
   const [rooms, setRooms] = useState<RoomOption[]>([]);
   const [tables, setTables] = useState<TableOption[]>([]);
@@ -332,6 +378,7 @@ export default function OrdersPage() {
   const [detailOrder, setDetailOrder] = useState<OrderDetail | null>(null);
   const [detailBreakdownType, setDetailBreakdownType] = useState<'discount' | 'surcharge' | 'subtotal' | null>(null);
   const statusDropdownRef = useRef<HTMLDivElement | null>(null);
+  const [activeTimePicker, setActiveTimePicker] = useState<'start' | 'end' | null>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<OrderRow | null>(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
@@ -367,8 +414,12 @@ export default function OrdersPage() {
     setAreaFilter('');
     setRoomFilter('');
     setTableFilter('');
-    setStartDate('');
-    setEndDate('');
+    const resetStart = splitDateTimeParts(toDateTimeInputValue(new Date(new Date().setHours(0, 0, 0, 0))));
+    const resetEnd = splitDateTimeParts(toDateTimeInputValue(new Date(new Date().setHours(23, 59, 0, 0))));
+    setStartDate(resetStart.datePart);
+    setStartTime(resetStart.timePart);
+    setEndDate(resetEnd.datePart);
+    setEndTime(resetEnd.timePart);
     setPage(1);
   };
 
@@ -385,8 +436,8 @@ export default function OrdersPage() {
     areaId: areaFilter || undefined,
     roomId: roomFilter || undefined,
     tableId: tableFilter || undefined,
-    startDate: startDate || undefined,
-    endDate: endDate ? `${endDate}:59` : undefined,
+    startDate: startDate && startTime ? `${startDate}T${startTime}:00` : undefined,
+    endDate: endDate && endTime ? `${endDate}T${endTime}:59` : undefined,
   });
 
   const loadOrders = async () => {
@@ -549,7 +600,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     loadOrders().catch((error) => showToast('error', typeof error === 'string' ? error : 'Không tải được danh sách hóa đơn'));
-  }, [branchId, page, debouncedSearch, areaFilter, roomFilter, tableFilter, startDate, endDate, statusFilters.join(','), paymentMethodFilter]);
+  }, [branchId, page, debouncedSearch, areaFilter, roomFilter, tableFilter, startDate, startTime, endDate, endTime, statusFilters.join(','), paymentMethodFilter]);
 
   useEffect(() => {
     if (searchTimeoutRef.current) {
@@ -573,10 +624,27 @@ export default function OrdersPage() {
       if (!statusDropdownRef.current.contains(event.target as Node)) {
         setShowStatusDropdown(false);
       }
+      if (!(event.target as HTMLElement).closest('.orders-time-picker')) {
+        setActiveTimePicker(null);
+      }
     };
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
+
+  const hourOptions = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  const minuteOptions = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
+
+  const setTimeToNow = (target: 'start' | 'end') => {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    if (target === 'start') {
+      setStartTime(`${hh}:${mm}`);
+      return;
+    }
+    setEndTime(`${hh}:${mm}`);
+  };
 
   const saveOrder = async (payload: {
     table: { entityType: 'TABLE' | 'ROOM'; id: string; name: string; areaName: string; roomName?: string | null; roomId?: string | null } | null;
@@ -691,10 +759,31 @@ export default function OrdersPage() {
     try {
       const detailRes = await orderService.getById(order.id);
       const detail = detailRes.data as OrderDetail;
-      await printUsingConfiguredRoute(`Hóa đơn ${detail.code}`, buildOrderA4Content(detail), { receipt80mmData: buildOrder80mmData(detail) });
+      await printUsingConfiguredRoute(`Hóa đơn ${detail.code}`, buildOrderA4Content(detail), {
+        templateKey: resolveTemplateKeyForPrintFamily('invoice'),
+        receipt80mmData: buildOrder80mmData(detail),
+      });
       showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {
       showToast('error', typeof error === 'string' ? error : 'Không thể in hóa đơn');
+    }
+  };
+
+  const onPrintOrderSlip = async (order: OrderRow) => {
+    if (order.orderState === 'DELETED') {
+      showToast('error', 'Không thể in phiếu order đã xóa');
+      return;
+    }
+    try {
+      const detailRes = await orderService.getById(order.id);
+      const detail = detailRes.data as OrderDetail;
+      await printUsingConfiguredRoute(`Phiếu order ${detail.code}`, buildOrderSlipA4Content(detail), {
+        templateKey: resolveTemplateKeyForPrintFamily('order_slip'),
+        receipt80mmData: buildOrderSlip80mmData(detail),
+      });
+      showToast('success', 'Đã gửi lệnh in phiếu order');
+    } catch (error) {
+      showToast('error', typeof error === 'string' ? error : 'Không thể in phiếu order');
     }
   };
 
@@ -950,11 +1039,29 @@ export default function OrdersPage() {
     }
     try {
       await printUsingConfiguredRoute(`Hóa đơn ${detailOrder.code}`, buildOrderA4Content(detailOrder), {
+        templateKey: resolveTemplateKeyForPrintFamily('invoice'),
         receipt80mmData: buildOrder80mmData(detailOrder),
       });
       showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {
       showToast('error', typeof error === 'string' ? error : 'Không thể in hóa đơn');
+    }
+  };
+
+  const onPrintOrderSlipDetail = async () => {
+    if (!detailOrder) return;
+    if (detailOrder.orderState === 'DELETED') {
+      showToast('error', 'Không thể in phiếu order đã xóa');
+      return;
+    }
+    try {
+      await printUsingConfiguredRoute(`Phiếu order ${detailOrder.code}`, buildOrderSlipA4Content(detailOrder), {
+        templateKey: resolveTemplateKeyForPrintFamily('order_slip'),
+        receipt80mmData: buildOrderSlip80mmData(detailOrder),
+      });
+      showToast('success', 'Đã gửi lệnh in phiếu order');
+    } catch (error) {
+      showToast('error', typeof error === 'string' ? error : 'Không thể in phiếu order');
     }
   };
 
@@ -1421,27 +1528,110 @@ export default function OrdersPage() {
 
           <label className="orders-filter-col-from-date">
             Từ ngày giờ
-            <input
-              type="datetime-local"
-              value={startDate}
-              onChange={(event) => {
-                setStartDate(event.target.value);
-                setPage(1);
-              }}
-            />
+            <div className="orders-datetime-custom">
+              <input
+                type="date"
+                lang="vi-VN"
+                value={startDate}
+                onChange={(event) => {
+                  setStartDate(event.target.value);
+                  setPage(1);
+                }}
+              />
+              <div className="orders-time-picker">
+                <button
+                  type="button"
+                  className="orders-time-trigger"
+                  onClick={() => setActiveTimePicker(activeTimePicker === 'start' ? null : 'start')}
+                >
+                  {startTime}
+                </button>
+                {activeTimePicker === 'start' && (
+                  <div className="orders-time-popover">
+                    <div className="orders-time-columns">
+                      <select
+                        className="orders-time-column"
+                        value={startTime.split(':')[0] || '00'}
+                        size={7}
+                        onChange={(e) => setStartTime(`${e.target.value}:${startTime.split(':')[1] || '00'}`)}
+                      >
+                        {hourOptions.map((hour) => (
+                          <option key={hour} value={hour}>{hour}</option>
+                        ))}
+                      </select>
+                      <select
+                        className="orders-time-column"
+                        value={startTime.split(':')[1] || '00'}
+                        size={7}
+                        onChange={(e) => setStartTime(`${startTime.split(':')[0] || '00'}:${e.target.value}`)}
+                      >
+                        {minuteOptions.map((minute) => (
+                          <option key={minute} value={minute}>{minute}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="orders-time-actions">
+                      <button type="button" onClick={() => setTimeToNow('start')}>Now</button>
+                      <button type="button" className="is-primary" onClick={() => setActiveTimePicker(null)}>OK</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </label>
 
           <label className="orders-filter-col-to-date">
             Đến ngày giờ
-            <input
-              type="datetime-local"
-              lang="vi"
-              value={endDate}
-              onChange={(event) => {
-                setEndDate(event.target.value);
-                setPage(1);
-              }}
-            />
+            <div className="orders-datetime-custom">
+              <input
+                type="date"
+                lang="vi-VN"
+                value={endDate}
+                onChange={(event) => {
+                  setEndDate(event.target.value);
+                  setPage(1);
+                }}
+              />
+              <div className="orders-time-picker">
+                <button
+                  type="button"
+                  className="orders-time-trigger"
+                  onClick={() => setActiveTimePicker(activeTimePicker === 'end' ? null : 'end')}
+                >
+                  {endTime}
+                </button>
+                {activeTimePicker === 'end' && (
+                  <div className="orders-time-popover">
+                    <div className="orders-time-columns">
+                      <select
+                        className="orders-time-column"
+                        value={endTime.split(':')[0] || '00'}
+                        size={7}
+                        onChange={(e) => setEndTime(`${e.target.value}:${endTime.split(':')[1] || '00'}`)}
+                      >
+                        {hourOptions.map((hour) => (
+                          <option key={hour} value={hour}>{hour}</option>
+                        ))}
+                      </select>
+                      <select
+                        className="orders-time-column"
+                        value={endTime.split(':')[1] || '00'}
+                        size={7}
+                        onChange={(e) => setEndTime(`${endTime.split(':')[0] || '00'}:${e.target.value}`)}
+                      >
+                        {minuteOptions.map((minute) => (
+                          <option key={minute} value={minute}>{minute}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="orders-time-actions">
+                      <button type="button" onClick={() => setTimeToNow('end')}>Now</button>
+                      <button type="button" className="is-primary" onClick={() => setActiveTimePicker(null)}>OK</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </label>
 
         </div>
@@ -1581,7 +1771,7 @@ export default function OrdersPage() {
                       {order.code}
                     </button>
                   </td>
-                  <td>{new Date(order.createdAt).toLocaleString('vi-VN')}</td>
+                  <td>{formatDateTimeVN(order.createdAt)}</td>
                   <td className="orders-col-room-table">{order.tableName}</td>
                   <td className="num-col orders-col-amount">{Math.trunc(Number(order.finalAmount ?? order.totalAmount)).toLocaleString('vi-VN')}</td>
                   <td className="num-col orders-col-paid">{Math.trunc(Number(order.paidAmount || 0)).toLocaleString('vi-VN')}</td>
@@ -1605,8 +1795,8 @@ export default function OrdersPage() {
                       <button
                         type="button"
                         className="orders-icon-btn"
-                        title="In"
-                        aria-label="In"
+                        title="In hóa đơn"
+                        aria-label="In hóa đơn"
                         onClick={() => onPrintOrder(order)}
                         disabled={order.orderState === 'DELETED'}
                       >
@@ -1614,6 +1804,18 @@ export default function OrdersPage() {
                           <path d="M6 2h12a1 1 0 0 1 1 1v4H5V3a1 1 0 0 1 1-1Z" />
                           <path d="M5 14h14v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7Zm3 1v5h8v-5H8Z" />
                           <path d="M3 8h18a2 2 0 0 1 2 2v5h-4v-2H5v2H1v-5a2 2 0 0 1 2-2Zm16 2a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="orders-icon-btn"
+                        title="In phiếu order"
+                        aria-label="In phiếu order"
+                        onClick={() => onPrintOrderSlip(order)}
+                        disabled={order.orderState === 'DELETED'}
+                      >
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                          <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
                         </svg>
                       </button>
                       <button
@@ -1707,6 +1909,18 @@ export default function OrdersPage() {
                     <path d="M3 8h18a2 2 0 0 1 2 2v5h-4v-2H5v2H1v-5a2 2 0 0 1 2-2Zm16 2a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z" />
                   </svg>
                 </button>
+                <button
+                  type="button"
+                  className="orders-icon-btn"
+                  onClick={onPrintOrderSlipDetail}
+                  aria-label="In phiếu order"
+                  title="In phiếu order"
+                  disabled={!detailOrder || detailOrder.orderState === 'DELETED'}
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                  </svg>
+                </button>
                 <button type="button" className="orders-icon-btn" onClick={closeOrderDetail} aria-label="Đóng">
                   x
                 </button>
@@ -1729,7 +1943,7 @@ export default function OrdersPage() {
                   <div className="orders-detail-grid">
                     <div>
                       <span className="orders-detail-label">Thời gian tạo</span>
-                      <div>{new Date(detailOrder.createdAt).toLocaleString('vi-VN')}</div>
+                      <div>{formatDateTimeVN(detailOrder.createdAt)}</div>
                     </div>
                     <div>
                       <span className="orders-detail-label">Vị trí phục vụ</span>
@@ -1826,8 +2040,8 @@ export default function OrdersPage() {
                             <td>{idx + 1}</td>
                             <td>{item.productName || '-'}</td>
                             <td>{item.unit || '-'}</td>
-                            <td>{item.startAt ? new Date(item.startAt).toLocaleString('vi-VN') : '-'}</td>
-                            <td>{item.stopAt ? new Date(item.stopAt).toLocaleString('vi-VN') : '-'}</td>
+                            <td>{item.startAt ? formatDateTimeVN(item.startAt) : '-'}</td>
+                            <td>{item.stopAt ? formatDateTimeVN(item.stopAt) : '-'}</td>
                             <td className="num-col">{Math.max(0, Math.trunc(Number(item.usedMinutes || 0))).toLocaleString('vi-VN')}</td>
                             <td className="num-col">{Number(item.quantity || 0).toLocaleString('vi-VN')}</td>
                             <td className="num-col">{formatUnitPriceDisplay(Number(item.baseUnitPrice ?? item.unitPrice ?? 0), item.pricingTypeSnapshot, item.timeRateMinutesSnapshot)}</td>
@@ -1936,7 +2150,7 @@ export default function OrdersPage() {
                         <tr key={log.id}>
                           <td>{(safeHistoryPage - 1) * historyPageSize + idx + 1}</td>
                           <td>{actionLabel(log.action)}</td>
-                          <td>{new Date(log.createdAt).toLocaleString('vi-VN')}</td>
+                          <td>{formatDateTimeVN(log.createdAt)}</td>
                           <td>{log.createdByName || '-'}</td>
                           <td>
                             <span className="orders-status-tag is-paid">Thành công</span>

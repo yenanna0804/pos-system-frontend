@@ -5,7 +5,7 @@ import { buildReceipt80mmBitmapDataUrl, DEFAULT_RECEIPT_80MM_DATA } from '../../
 import './PrintersPage.css';
 
 type PrinterRole = 'default' | 'backup' | null;
-type TemplateKey = 'receipt_80mm' | 'invoice_a4';
+type TemplateKey = 'receipt_80mm' | 'invoice_a4' | 'order_slip_80mm' | 'order_slip_a4';
 type ConnectionMode = 'bridge' | 'usb';
 
 type PrinterRow = {
@@ -31,6 +31,10 @@ type TemplateRow = {
   content: string;
 };
 
+type TemplateTabKey = 'invoice' | 'order';
+type InvoiceTemplateKey = 'receipt_80mm' | 'invoice_a4';
+type OrderTemplateKey = 'order_slip_80mm' | 'order_slip_a4';
+
 type UsbDeviceLike = {
   serialNumber?: string;
   productName?: string;
@@ -47,6 +51,22 @@ type UsbNavigatorLike = Navigator & {
 
 
 const STORAGE_KEY = 'pos_printer_settings_v1';
+
+const ORDER_SLIP_A4_SAMPLE = `PHIẾU ORDER
+
+Mã đơn: HD-20260504-001
+Thời gian: 04/05/2026, 14:30
+Vị trí: Tầng 1 / Bàn 3
+
+Danh sách món:
+1. Gà rán *cay nồng đặc biệt
+   SL: 1
+2. Bia Budweiser
+   SL: 3
+3. Khoai tây chiên
+   SL: 2
+
+Vui lòng kiểm tra kỹ trước khi chế biến.`;
 
 const RECEIPT_SAMPLE_80MM = `Mẫu 80mm hiện được render bằng bitmap code-driven.
 
@@ -79,9 +99,23 @@ Giảm giá: 15.000
 Tổng thanh toán: 250.000`;
 
 const initialTemplates: TemplateRow[] = [
-  { key: 'receipt_80mm', name: 'Mẫu in giấy 80mm', content: RECEIPT_SAMPLE_80MM },
-  { key: 'invoice_a4', name: 'Mẫu in giấy A4', content: TEMPLATE_A4_SAMPLE },
+  { key: 'receipt_80mm', name: 'Hoá đơn 80mm', content: RECEIPT_SAMPLE_80MM },
+  { key: 'invoice_a4', name: 'Hoá đơn A4', content: TEMPLATE_A4_SAMPLE },
+  { key: 'order_slip_80mm', name: 'Phiếu order 80mm', content: RECEIPT_SAMPLE_80MM },
+  { key: 'order_slip_a4', name: 'Phiếu order A4', content: ORDER_SLIP_A4_SAMPLE },
 ];
+
+const getTemplateTabKey = (templateKey: TemplateKey): TemplateTabKey => (
+  templateKey === 'order_slip_80mm' || templateKey === 'order_slip_a4' ? 'order' : 'invoice'
+);
+
+const getLegacyInvoiceDefaultTemplateKey = (templateKey?: TemplateKey): InvoiceTemplateKey => (
+  templateKey === 'invoice_a4' || templateKey === 'order_slip_a4' ? 'invoice_a4' : 'receipt_80mm'
+);
+
+const getLegacyOrderDefaultTemplateKey = (templateKey?: TemplateKey): OrderTemplateKey => (
+  templateKey === 'invoice_a4' || templateKey === 'order_slip_a4' ? 'order_slip_a4' : 'order_slip_80mm'
+);
 
 const formatPrinterLabel = (device: UsbDeviceLike) => {
   if (device.productName?.trim()) return device.productName;
@@ -104,18 +138,21 @@ export default function PrintersPage() {
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
   const [defaultPrinterId, setDefaultPrinterId] = useState('');
   const [backupPrinterId, setBackupPrinterId] = useState('');
-  const [defaultTemplateKey, setDefaultTemplateKey] = useState<TemplateKey>('receipt_80mm');
+  const [invoiceDefaultTemplateKey, setInvoiceDefaultTemplateKey] = useState<InvoiceTemplateKey>('receipt_80mm');
+  const [orderDefaultTemplateKey, setOrderDefaultTemplateKey] = useState<OrderTemplateKey>('order_slip_80mm');
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>('bridge');
   const [bridgeEnabled, setBridgeEnabled] = useState(true);
   const [bridgeUrl, setBridgeUrl] = useState('ws://127.0.0.1:12212/printer');
   const [receiptType, setReceiptType] = useState('RECEIPT');
   const [invoiceType, setInvoiceType] = useState('INVOICE');
+  const [orderType, setOrderType] = useState('ORDER');
   const [bridgeStatus, setBridgeStatus] = useState<'idle' | 'checking' | 'connected' | 'error'>('idle');
   const [bridgeStatusText, setBridgeStatusText] = useState('Chua kiem tra ket noi Bridge');
   const [bridgePrinters, setBridgePrinters] = useState<BridgeSystemPrinter[]>([]);
   const [bridgeMappings, setBridgeMappings] = useState<BridgePrinterMapping[]>([]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewTemplateKey, setPreviewTemplateKey] = useState<TemplateKey>('receipt_80mm');
+  const [activeTemplateTab, setActiveTemplateTab] = useState<TemplateTabKey>('invoice');
   const usbNavigator = navigator as UsbNavigatorLike;
 
   const hasWebUsb = useMemo(() => canUseWebUsb(), []);
@@ -128,20 +165,28 @@ export default function PrintersPage() {
         defaultPrinterId?: string;
         backupPrinterId?: string;
         defaultTemplateKey?: TemplateKey;
+        invoiceDefaultTemplateKey?: InvoiceTemplateKey;
+        orderDefaultTemplateKey?: OrderTemplateKey;
         connectionMode?: ConnectionMode;
         bridgeEnabled?: boolean;
         bridgeUrl?: string;
         receiptType?: string;
         invoiceType?: string;
+        orderType?: string;
       };
       if (parsed.defaultPrinterId) setDefaultPrinterId(parsed.defaultPrinterId);
       if (parsed.backupPrinterId) setBackupPrinterId(parsed.backupPrinterId);
-      if (parsed.defaultTemplateKey) setDefaultTemplateKey(parsed.defaultTemplateKey);
+      const nextInvoiceDefaultTemplateKey = parsed.invoiceDefaultTemplateKey || getLegacyInvoiceDefaultTemplateKey(parsed.defaultTemplateKey);
+      const nextOrderDefaultTemplateKey = parsed.orderDefaultTemplateKey || getLegacyOrderDefaultTemplateKey(parsed.defaultTemplateKey);
+      setInvoiceDefaultTemplateKey(nextInvoiceDefaultTemplateKey);
+      setOrderDefaultTemplateKey(nextOrderDefaultTemplateKey);
+      if (parsed.defaultTemplateKey) setActiveTemplateTab(getTemplateTabKey(parsed.defaultTemplateKey));
       if (parsed.connectionMode === 'bridge' || parsed.connectionMode === 'usb') setConnectionMode(parsed.connectionMode);
       if (typeof parsed.bridgeEnabled === 'boolean') setBridgeEnabled(parsed.bridgeEnabled);
       if (typeof parsed.bridgeUrl === 'string' && parsed.bridgeUrl.trim()) setBridgeUrl(parsed.bridgeUrl);
       if (typeof parsed.receiptType === 'string' && parsed.receiptType.trim()) setReceiptType(parsed.receiptType);
       if (typeof parsed.invoiceType === 'string' && parsed.invoiceType.trim()) setInvoiceType(parsed.invoiceType);
+      if (typeof parsed.orderType === 'string' && parsed.orderType.trim()) setOrderType(parsed.orderType);
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     }
@@ -153,15 +198,17 @@ export default function PrintersPage() {
       JSON.stringify({
         defaultPrinterId,
         backupPrinterId,
-        defaultTemplateKey,
+        invoiceDefaultTemplateKey,
+        orderDefaultTemplateKey,
         connectionMode,
         bridgeEnabled,
         bridgeUrl,
         receiptType,
         invoiceType,
+        orderType,
       }),
     );
-  }, [backupPrinterId, bridgeEnabled, bridgeUrl, connectionMode, defaultPrinterId, defaultTemplateKey, invoiceType, receiptType]);
+  }, [backupPrinterId, bridgeEnabled, bridgeUrl, connectionMode, defaultPrinterId, invoiceDefaultTemplateKey, invoiceType, orderDefaultTemplateKey, orderType, receiptType]);
 
   useEffect(() => {
     if (!defaultPrinterId || !backupPrinterId) return;
@@ -315,7 +362,7 @@ export default function PrintersPage() {
     const mappedTypes = bridgeMappings
       .map((item) => item.type?.trim())
       .filter((item): item is string => Boolean(item));
-    const baseTypes = ['VIRTUAL', 'INVOICE', 'RECEIPT'];
+    const baseTypes = ['VIRTUAL', 'INVOICE', 'RECEIPT', 'ORDER'];
     return Array.from(new Set([...baseTypes, ...mappedTypes]));
   }, [bridgeMappings]);
 
@@ -323,8 +370,15 @@ export default function PrintersPage() {
     return printers.filter((printer) => printer.id === defaultPrinterId || printer.id === backupPrinterId);
   }, [backupPrinterId, defaultPrinterId, printers]);
 
+  const activeDefaultTemplateKey = activeTemplateTab === 'invoice' ? invoiceDefaultTemplateKey : orderDefaultTemplateKey;
+
+  const templatesByTab = useMemo(() => ({
+    invoice: initialTemplates.filter((template) => template.key === 'receipt_80mm' || template.key === 'invoice_a4'),
+    order: initialTemplates.filter((template) => template.key === 'order_slip_80mm' || template.key === 'order_slip_a4'),
+  }), []);
+
   const onTestPrint = async () => {
-    setPreviewTemplateKey(defaultTemplateKey);
+    setPreviewTemplateKey(activeDefaultTemplateKey);
     setError('');
     setIsPreviewOpen(true);
   };
@@ -333,8 +387,18 @@ export default function PrintersPage() {
     const selectedTemplate = initialTemplates.find((item) => item.key === previewTemplateKey) || initialTemplates[0];
     if (!selectedTemplate) return;
 
+    const receipt80mmData =
+      selectedTemplate.key === 'order_slip_80mm'
+        ? { ...DEFAULT_RECEIPT_80MM_DATA, title: 'PHIẾU ORDER' }
+        : selectedTemplate.key === 'receipt_80mm'
+          ? DEFAULT_RECEIPT_80MM_DATA
+          : undefined;
+
     try {
-      await printUsingConfiguredRoute(selectedTemplate.name, selectedTemplate.content);
+      await printUsingConfiguredRoute(selectedTemplate.name, selectedTemplate.content, {
+        templateKey: selectedTemplate.key,
+        ...(receipt80mmData ? { receipt80mmData } : {}),
+      });
       setError('');
       setIsPreviewOpen(false);
     } catch (printError: any) {
@@ -343,10 +407,11 @@ export default function PrintersPage() {
   };
 
   const previewTemplate = initialTemplates.find((item) => item.key === previewTemplateKey) || initialTemplates[0];
-  const receiptPreviewImage = useMemo(
-    () => (previewTemplate?.key === 'receipt_80mm' ? buildReceipt80mmBitmapDataUrl(DEFAULT_RECEIPT_80MM_DATA) : ''),
-    [previewTemplate?.key],
-  );
+  const receiptPreviewImage = useMemo(() => {
+    if (previewTemplate?.key === 'receipt_80mm') return buildReceipt80mmBitmapDataUrl(DEFAULT_RECEIPT_80MM_DATA);
+    if (previewTemplate?.key === 'order_slip_80mm') return buildReceipt80mmBitmapDataUrl({ ...DEFAULT_RECEIPT_80MM_DATA, title: 'PHIẾU ORDER' });
+    return '';
+  }, [previewTemplate?.key]);
 
   return (
     <section className="printers-page">
@@ -418,13 +483,18 @@ export default function PrintersPage() {
 
             </div>
 
-            <div className={`printers-preview-paper ${previewTemplate?.key === 'receipt_80mm' ? 'is-80mm' : 'is-a4'}`}>
-              {previewTemplate?.key === 'receipt_80mm' ? (
-                <img src={receiptPreviewImage} alt="80mm bitmap preview" style={{ width: '100%', display: 'block' }} />
-              ) : (
-                <pre>{previewTemplate?.content || ''}</pre>
-              )}
-            </div>
+            {(() => {
+              const is80mm = previewTemplate?.key === 'receipt_80mm' || previewTemplate?.key === 'order_slip_80mm';
+              return (
+                <div className={`printers-preview-paper ${is80mm ? 'is-80mm' : 'is-a4'}`}>
+                  {is80mm ? (
+                    <img src={receiptPreviewImage} alt="80mm bitmap preview" style={{ width: '100%', display: 'block' }} />
+                  ) : (
+                    <pre>{previewTemplate?.content || ''}</pre>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="modal-actions">
               <button type="button" className="ghost-btn" onClick={() => setIsPreviewOpen(false)}>
@@ -476,6 +546,19 @@ export default function PrintersPage() {
                 <select
                   value={receiptType}
                   onChange={(event) => setReceiptType(event.target.value)}
+                >
+                  {bridgeTypeOptions.map((typeOption) => (
+                    <option key={typeOption} value={typeOption}>
+                      {typeOption}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Máy in cho Phiếu order
+                <select
+                  value={orderType}
+                  onChange={(event) => setOrderType(event.target.value)}
                 >
                   {bridgeTypeOptions.map((typeOption) => (
                     <option key={typeOption} value={typeOption}>
@@ -590,23 +673,54 @@ export default function PrintersPage() {
 
         <div className="template-panel">
           <h3>Danh sách mẫu in</h3>
+          <div className="template-tabs" role="tablist" aria-label="Nhóm mẫu in">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTemplateTab === 'invoice'}
+              className={`template-tab ${activeTemplateTab === 'invoice' ? 'is-active' : ''}`}
+              onClick={() => setActiveTemplateTab('invoice')}
+            >
+              In Hóa đơn
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTemplateTab === 'order'}
+              className={`template-tab ${activeTemplateTab === 'order' ? 'is-active' : ''}`}
+              onClick={() => setActiveTemplateTab('order')}
+            >
+              In Order
+            </button>
+          </div>
           <div className="template-list">
-            {initialTemplates.map((template) => (
-              <article key={template.key} className={`template-card ${defaultTemplateKey === template.key ? 'is-active' : ''}`}>
+            {templatesByTab[activeTemplateTab].map((template) => (
+              <article key={template.key} className={`template-card ${activeDefaultTemplateKey === template.key ? 'is-active' : ''}`}>
                 <div className="template-head">
                   <strong>{template.name}</strong>
                   <label>
                     <input
                       type="checkbox"
-                      checked={defaultTemplateKey === template.key}
-                      onChange={() => setDefaultTemplateKey(template.key)}
+                      checked={activeDefaultTemplateKey === template.key}
+                      onChange={() => {
+                        if (template.key === 'receipt_80mm' || template.key === 'invoice_a4') {
+                          setInvoiceDefaultTemplateKey(template.key);
+                        } else {
+                          setOrderDefaultTemplateKey(template.key);
+                        }
+                        setActiveTemplateTab(getTemplateTabKey(template.key));
+                      }}
                     />
                     Đặt in mặc định
                   </label>
                 </div>
-                {template.key === 'receipt_80mm' ? (
+                {template.key === 'receipt_80mm' || template.key === 'order_slip_80mm' ? (
                   <img
-                    src={buildReceipt80mmBitmapDataUrl(DEFAULT_RECEIPT_80MM_DATA)}
+                    src={buildReceipt80mmBitmapDataUrl(
+                      template.key === 'order_slip_80mm'
+                        ? { ...DEFAULT_RECEIPT_80MM_DATA, title: 'PHIẾU ORDER' }
+                        : DEFAULT_RECEIPT_80MM_DATA,
+                    )}
                     alt="80mm render preview"
                     style={{ width: '100%', display: 'block', background: '#fff' }}
                   />

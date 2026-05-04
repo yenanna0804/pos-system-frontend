@@ -4,7 +4,8 @@ import OrderBillsPanel from './components/OrderBillsPanel';
 import OrdersProductPicker from './components/OrdersProductPicker';
 import OrdersTablePicker from './components/OrdersTablePicker';
 import type { BillItem, DuplicateHandling, SelectableTable } from './types';
-import { printUsingConfiguredRoute } from '../../utils/printerRouting';
+import { printUsingConfiguredRoute, resolveTemplateKeyForPrintFamily } from '../../utils/printerRouting';
+import { formatDateTimeVN } from '../../utils/formatters';
 import type { Receipt80mmData } from '../../utils/receipt80mmGenerator';
 import { useOrderEditor } from './hooks/useOrderEditor';
 import { toAmountNumber, toPercentNumber, useOrderPricing } from './hooks/useOrderPricing';
@@ -224,7 +225,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
 
     const lines: string[] = [];
     lines.push(`Mã hóa đơn: ${orderCode || 'Tạm thời (chưa lưu)'}`);
-    lines.push(`Thời gian: ${new Date().toLocaleString('vi-VN')}`);
+    lines.push(`Thời gian: ${formatDateTimeVN(new Date().toISOString())}`);
     lines.push(`Loại phiếu in: ${label}`);
     lines.push(`Khách hàng: ${customerName || '-'}`);
     lines.push(`Khu vực/Vị trí: ${location}`);
@@ -255,7 +256,10 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
   const onPrintInvoice = async () => {
     if (billItems.length === 0) return;
     const receiptData = buildReceipt80mmData(billItems, 'Hóa đơn');
-    await printUsingConfiguredRoute('Hóa đơn tạm', buildPrintableContent(billItems, 'Hóa đơn'), { receipt80mmData: receiptData });
+    await printUsingConfiguredRoute('Hóa đơn tạm', buildPrintableContent(billItems, 'Hóa đơn'), {
+      templateKey: resolveTemplateKeyForPrintFamily('invoice'),
+      receipt80mmData: receiptData,
+    });
   };
 
   const onPrintOrder = async (selectedLineIds: string[]) => {
@@ -263,7 +267,10 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     const itemsToPrint = selectedItems.length > 0 ? selectedItems : billItems;
     if (itemsToPrint.length === 0) return;
     const receiptData = buildReceipt80mmData(itemsToPrint, 'Order');
-    await printUsingConfiguredRoute('Order tạm', buildPrintableContent(itemsToPrint, 'Order'), { receipt80mmData: receiptData });
+    await printUsingConfiguredRoute('Order tạm', buildPrintableContent(itemsToPrint, 'Order'), {
+      templateKey: resolveTemplateKeyForPrintFamily('order_slip'),
+      receipt80mmData: receiptData,
+    });
   };
 
   const buildReceipt80mmData = (items: BillItem[], label: string): Receipt80mmData => {
@@ -279,7 +286,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     return {
       title: label === 'Order' ? 'PHIẾU ORDER' : 'PHIẾU THANH TOÁN',
       orderCode: orderCode || 'TAM',
-      datetime: new Date().toLocaleString('vi-VN'),
+      datetime: formatDateTimeVN(new Date().toISOString()),
       customerName: customerName || '-',
       location,
       items: items.map((item) => ({

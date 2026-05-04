@@ -6,6 +6,7 @@ import ProductsPage from '../Products/ProductsPage';
 import TablesPage from '../Tables/TablesPage';
 import OrdersPage from '../Orders/OrdersPage';
 import PrintersPage from '../Printers/PrintersPage';
+import ReportsPage from '../Reports/ReportsPage';
 import './Dashboard.css';
 
 type TabKey = 'overview' | 'products' | 'tables' | 'orders' | 'printers';
@@ -111,46 +112,8 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="dashboard-content">
-        {activeTab === 'overview' && (
-          <>
-            <h2>Báo cáo tổng quan</h2>
-
-            <div className="stats-grid">
-              <div className="stat-card">
-                <div className="stat-icon revenue">₫</div>
-                <div className="stat-info">
-                  <span className="stat-label">Doanh thu hôm nay</span>
-                  <span className="stat-value">0 đ</span>
-                </div>
-              </div>
-
-              <div className="stat-card">
-                <div className="stat-icon orders">#</div>
-                <div className="stat-info">
-                  <span className="stat-label">Đơn hàng hôm nay</span>
-                  <span className="stat-value">0</span>
-                </div>
-              </div>
-
-              <div className="stat-card">
-                <div className="stat-icon tables">T</div>
-                <div className="stat-info">
-                  <span className="stat-label">Bàn đang sử dụng</span>
-                  <span className="stat-value">0 / 0</span>
-                </div>
-              </div>
-
-              <div className="stat-card">
-                <div className="stat-icon products">P</div>
-                <div className="stat-info">
-                  <span className="stat-label">Sản phẩm đã bán</span>
-                  <span className="stat-value">0</span>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
+      <main className="dashboard-content" style={{ padding: '14px' }}>
+        {activeTab === 'overview' && <ReportsPage />}
 
         {activeTab === 'products' && <ProductsPage />}
 

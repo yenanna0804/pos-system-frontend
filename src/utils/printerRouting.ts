@@ -5,15 +5,18 @@ import {
   type Receipt80mmData,
 } from './receipt80mmGenerator';
 
-type TemplateKey = 'receipt_80mm' | 'invoice_a4';
+type TemplateKey = 'receipt_80mm' | 'invoice_a4' | 'order_slip_80mm' | 'order_slip_a4';
 type ConnectionMode = 'bridge' | 'usb';
 
 type PrinterSettings = {
   defaultTemplateKey?: TemplateKey;
+  invoiceDefaultTemplateKey?: 'receipt_80mm' | 'invoice_a4';
+  orderDefaultTemplateKey?: 'order_slip_80mm' | 'order_slip_a4';
   bridgeEnabled?: boolean;
   bridgeUrl?: string;
   receiptType?: string;
   invoiceType?: string;
+  orderType?: string;
   connectionMode?: ConnectionMode;
   defaultPrinterId?: string;
   backupPrinterId?: string;
@@ -21,7 +24,10 @@ type PrinterSettings = {
 
 type PrintRouteOptions = {
   receipt80mmData?: Receipt80mmData;
+  templateKey?: TemplateKey;
 };
+
+type PrintFamily = 'invoice' | 'order_slip';
 
 type UsbDeviceLike = {
   serialNumber?: string;
@@ -93,6 +99,19 @@ const loadSettings = (): PrinterSettings => {
   }
 };
 
+export const resolveTemplateKeyForPrintFamily = (family: PrintFamily): TemplateKey => {
+  const settings = loadSettings();
+  if (family === 'order_slip') {
+    if (settings.orderDefaultTemplateKey) return settings.orderDefaultTemplateKey;
+    const prefersA4 = settings.defaultTemplateKey === 'invoice_a4' || settings.defaultTemplateKey === 'order_slip_a4';
+    return prefersA4 ? 'order_slip_a4' : 'order_slip_80mm';
+  }
+
+  if (settings.invoiceDefaultTemplateKey) return settings.invoiceDefaultTemplateKey;
+  const prefersA4 = settings.defaultTemplateKey === 'invoice_a4' || settings.defaultTemplateKey === 'order_slip_a4';
+  return prefersA4 ? 'invoice_a4' : 'receipt_80mm';
+};
+
 const getDeviceKey = (device: UsbDeviceLike) => {
   if (device.serialNumber?.trim()) return device.serialNumber;
   return `${device.vendorId ?? 'na'}-${device.productId ?? 'na'}-${device.productName ?? 'unknown'}`;
@@ -123,7 +142,7 @@ const buildCanvasFromText = (content: string, templateKey: TemplateKey) => {
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, width, height);
   ctx.fillStyle = '#000000';
-  ctx.font = `${fontSize}px 'Courier New', monospace`;
+  ctx.font = `${fontSize}px 'Times New Roman', serif`;
   ctx.textBaseline = 'top';
 
   lines.forEach((line, index) => {
@@ -229,7 +248,8 @@ const printViaBridge = async (
   options?: PrintRouteOptions,
 ) => {
   const bridgeUrl = settings.bridgeUrl?.trim() || 'ws://127.0.0.1:12212/printer';
-  if (templateKey === 'invoice_a4') {
+
+  const submitInvoiceA4 = async () => {
     const invoiceType = settings.invoiceType?.trim() || 'INVOICE';
     const canvas = buildCanvasFromText(_content, 'invoice_a4');
     const imageBase64 = canvas.toDataURL('image/png').split(',')[1] || '';
@@ -240,16 +260,73 @@ const printViaBridge = async (
       url: `${title || 'invoice'}.png`,
       file_content: imageBase64,
     });
+  };
+
+  const submitReceipt80mm = async () => {
+    const receiptType = settings.receiptType?.trim() || 'RECEIPT';
+    const payload = await buildReceipt80mmEscPosBytes(options?.receipt80mmData || DEFAULT_RECEIPT_80MM_DATA);
+    await submitBridgeJob(bridgeUrl, {
+      id: `receipt-${Date.now()}`,
+      type: receiptType,
+      raw_content: uint8ToBase64(payload),
+    });
+  };
+
+  const submitOrderSlipA4 = async () => {
+    const orderType = settings.orderType?.trim() || 'ORDER';
+    const canvas = buildCanvasFromText(_content, 'invoice_a4');
+    const imageBase64 = canvas.toDataURL('image/png').split(',')[1] || '';
+    if (!imageBase64) throw new Error('Khong tao duoc du lieu anh de in A4 order');
+    await submitBridgeJob(bridgeUrl, {
+      id: `order-a4-${Date.now()}`,
+      type: orderType,
+      url: `${title || 'order'}.png`,
+      file_content: imageBase64,
+    });
+  };
+
+  const submitOrderSlip80mm = async () => {
+    const orderType = settings.orderType?.trim() || 'ORDER';
+    const payload = await buildReceipt80mmEscPosBytes(options?.receipt80mmData || DEFAULT_RECEIPT_80MM_DATA);
+    await submitBridgeJob(bridgeUrl, {
+      id: `order-${Date.now()}`,
+      type: orderType,
+      raw_content: uint8ToBase64(payload),
+    });
+  };
+
+  if (templateKey === 'invoice_a4') {
+    try {
+      await submitInvoiceA4();
+    } catch {
+      await submitReceipt80mm();
+    }
     return;
   }
 
-  const receiptType = settings.receiptType?.trim() || 'RECEIPT';
-  const payload = await buildReceipt80mmEscPosBytes(options?.receipt80mmData || DEFAULT_RECEIPT_80MM_DATA);
-  await submitBridgeJob(bridgeUrl, {
-    id: `receipt-${Date.now()}`,
-    type: receiptType,
-    raw_content: uint8ToBase64(payload),
-  });
+  if (templateKey === 'order_slip_a4') {
+    try {
+      await submitOrderSlipA4();
+    } catch {
+      await submitOrderSlip80mm();
+    }
+    return;
+  }
+
+  if (templateKey === 'order_slip_80mm') {
+    try {
+      await submitOrderSlip80mm();
+    } catch {
+      await submitOrderSlipA4();
+    }
+    return;
+  }
+
+  try {
+    await submitReceipt80mm();
+  } catch {
+    await submitInvoiceA4();
+  }
 };
 
 const sendEscPosPayloadToUsbPrinter = async (device: UsbWritableDeviceLike, payload: Uint8Array) => {
@@ -325,7 +402,7 @@ const printViaUsbByPrinterId = async (printerId: string, _content: string, optio
 };
 
 const printViaUsb = async (title: string, content: string, templateKey: TemplateKey, settings: PrinterSettings, options?: PrintRouteOptions) => {
-  if (templateKey === 'invoice_a4') {
+  if (templateKey === 'invoice_a4' || templateKey === 'order_slip_a4') {
     await printA4PlainText(title, content);
     return;
   }
@@ -345,7 +422,7 @@ const printViaUsb = async (title: string, content: string, templateKey: Template
 export const printUsingConfiguredRoute = async (title: string, content: string, options?: PrintRouteOptions) => {
   await enqueuePrintJob(async () => {
     const settings = loadSettings();
-    const templateKey = settings.defaultTemplateKey || 'receipt_80mm';
+    const templateKey = options?.templateKey || settings.invoiceDefaultTemplateKey || settings.defaultTemplateKey || 'receipt_80mm';
     const connectionMode = settings.connectionMode || 'bridge';
     const bridgeEnabled = settings.bridgeEnabled !== false;
 

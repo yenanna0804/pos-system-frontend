@@ -806,8 +806,70 @@
   grid-column: span 2;
 }
 
-input[type="datetime-local"]::-webkit-datetime-edit-ampm-field {
-  display: none;
+.orders-datetime-custom {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.orders-time-picker {
+  position: relative;
+}
+
+.orders-time-trigger {
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  min-width: 88px;
+  padding: 9px 10px;
+}
+
+.orders-time-popover {
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(16, 24, 40, 0.18);
+  padding: 8px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 50;
+}
+
+.orders-time-columns {
+  display: flex;
+  gap: 8px;
+}
+
+.orders-time-column {
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font-size: 18px;
+  min-width: 78px;
+  padding: 4px;
+}
+
+.orders-time-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.orders-time-actions button {
+  background: transparent;
+  border: none;
+  color: #475467;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 4px 8px;
+}
+
+.orders-time-actions .is-primary {
+  background: #1d4ed8;
+  border-radius: 999px;
+  color: #fff;
 }
 
 .orders-filter-reset-btn {

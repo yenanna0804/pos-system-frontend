@@ -1,5 +1,7 @@
+import type { MouseEvent } from 'react';
+
 type TooltipInfoButtonProps = {
-  onClick: () => void;
+  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
   label: string;
   className?: string;
 };
