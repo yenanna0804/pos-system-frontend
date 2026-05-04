@@ -60,6 +60,8 @@ const wrapByWidth = (ctx: CanvasRenderingContext2D, text: string, maxWidth: numb
 };
 
 const buildReceiptCanvas = (data: Receipt80mmData) => {
+  const normalizedTitle = (data.title || '').trim().toUpperCase();
+  const isOrderPrint = normalizedTitle === 'PHIẾU ORDER' || normalizedTitle === 'PHIEU ORDER' || normalizedTitle === 'ORDER';
   const width = 576;
   const marginX = 16;
   const contentWidth = width - marginX * 2;
@@ -71,8 +73,8 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const tableRight = marginX + contentWidth;
   const colHashWidth = 30;
   const colSlWidth = 34;
-  const colDgWidth = 131;
-  const colTtWidth = 140;
+  const colDgWidth = isOrderPrint ? 0 : 131;
+  const colTtWidth = isOrderPrint ? 0 : 140;
 
   const colHashRight = tableLeft + colHashWidth;
   const colNameRight = tableRight - (colSlWidth + colDgWidth + colTtWidth);
@@ -113,7 +115,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   ctx.textBaseline = 'top';
 
   let y = 10;
-  const title = 'PHIẾU THANH TOÁN';
+  const title = isOrderPrint ? 'PHIẾU ORDER' : 'PHIẾU THANH TOÁN';
   ctx.font = `bold ${titleSize}px 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
   ctx.textAlign = 'center';
   ctx.fillText(title, width / 2, y);
@@ -147,9 +149,11 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   ctx.fillText('Tên món', xName, y);
   ctx.textAlign = 'center';
   ctx.fillText('SL', xSlCenter, y);
-  ctx.textAlign = 'right';
-  ctx.fillText('ĐG', xUnitRight, y);
-  ctx.fillText('TT', xTotalRight, y);
+  if (!isOrderPrint) {
+    ctx.textAlign = 'right';
+    ctx.fillText('ĐG', xUnitRight, y);
+    ctx.fillText('TT', xTotalRight, y);
+  }
   y += lineHeight;
   ctx.fillRect(marginX, y, contentWidth, 2);
   y += 10;
@@ -168,9 +172,11 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
 
     ctx.textAlign = 'center';
     ctx.fillText(String(Math.trunc(item.quantity)), xSlCenter, y);
-    ctx.textAlign = 'right';
-    ctx.fillText(toNumberVi(item.unitPrice), xUnitRight, y);
-    ctx.fillText(toNumberVi(item.lineTotal), xTotalRight, y);
+    if (!isOrderPrint) {
+      ctx.textAlign = 'right';
+      ctx.fillText(toNumberVi(item.unitPrice), xUnitRight, y);
+      ctx.fillText(toNumberVi(item.lineTotal), xTotalRight, y);
+    }
     y += lineHeight;
 
     for (let i = 1; i < nameLines.length; i += 1) {
@@ -196,9 +202,20 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   ctx.fillRect(colHashRight, tableTop, 2, tableBottom - tableTop + 2);
   ctx.fillRect(colNameRight, tableTop, 2, tableBottom - tableTop + 2);
   ctx.fillRect(colSlRight, tableTop, 2, tableBottom - tableTop + 2);
-  ctx.fillRect(colDgRight, tableTop, 2, tableBottom - tableTop + 2);
+  if (!isOrderPrint) {
+    ctx.fillRect(colDgRight, tableTop, 2, tableBottom - tableTop + 2);
+  }
   ctx.fillRect(tableRight, tableTop, 2, tableBottom - tableTop + 2);
   y += 12;
+
+  if (isOrderPrint) {
+    y += 8;
+    ctx.textAlign = 'center';
+    ctx.fillText('Vui lòng kiểm tra kỹ lại nội dung', width / 2, y);
+    y += lineHeight;
+    ctx.fillText('trước khi chế biến', width / 2, y);
+    return canvas;
+  }
 
   const drawSummary = (label: string, value: string) => {
     ctx.textAlign = 'left';

@@ -276,7 +276,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     const useFullTotals = items.length === billItems.length;
 
     return {
-      title: label,
+      title: label === 'Order' ? 'PHIẾU ORDER' : 'PHIẾU THANH TOÁN',
       orderCode: orderCode || 'TAM',
       datetime: new Date().toLocaleString('vi-VN'),
       customerName: customerName || '-',
