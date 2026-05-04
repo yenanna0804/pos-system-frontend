@@ -69,10 +69,10 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
 
   const tableLeft = marginX;
   const tableRight = marginX + contentWidth;
-  const colHashWidth = 52;
-  const colSlWidth = 56;
-  const colDgWidth = 114;
-  const colTtWidth = 122;
+  const colHashWidth = 30;
+  const colSlWidth = 34;
+  const colDgWidth = 131;
+  const colTtWidth = 140;
 
   const colHashRight = tableLeft + colHashWidth;
   const colNameRight = tableRight - (colSlWidth + colDgWidth + colTtWidth);
