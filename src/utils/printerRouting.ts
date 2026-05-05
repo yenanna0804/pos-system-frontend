@@ -16,7 +16,8 @@ type PrinterSettings = {
   bridgeUrl?: string;
   receiptType?: string;
   invoiceType?: string;
-  orderType?: string;
+  orderA4Type?: string;
+  order80mmType?: string;
   connectionMode?: ConnectionMode;
   defaultPrinterId?: string;
   backupPrinterId?: string;
@@ -152,10 +153,50 @@ const buildCanvasFromText = (content: string, templateKey: TemplateKey) => {
   return canvas;
 };
 
+const deriveBridgeHttpBaseUrl = (url: string) => {
+  const trimmed = url.trim();
+  if (!trimmed) return 'http://127.0.0.1:12212';
+  if (trimmed.startsWith('ws://')) return `http://${trimmed.slice(5).replace(/\/printer\/?$/, '')}`;
+  if (trimmed.startsWith('wss://')) return `https://${trimmed.slice(6).replace(/\/printer\/?$/, '')}`;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed.replace(/\/printer\/?$/, '');
+  return 'http://127.0.0.1:12212';
+};
+
+// Pre-flight kiểm tra Bridge có mapping cho `type` chưa.
+// Best-effort: nếu HTTP /config.json không truy cập được (Bridge không mở
+// HTTP endpoint, bị CORS, hoặc Bridge tắt) thì BỎ QUA — vẫn gửi job qua
+// WebSocket để xem WS có chạy không. Chỉ throw khi:
+//   - fetch thành công nhưng mapping thiếu (sai cấu hình rõ ràng)
+const verifyBridgeMapping = async (bridgeUrl: string, type: string): Promise<void> => {
+  const baseUrl = deriveBridgeHttpBaseUrl(bridgeUrl);
+  let configData: { printer?: { mappings?: Array<{ type?: string }> } } | null = null;
+  try {
+    const res = await fetch(`${baseUrl}/config.json`, { method: 'GET' });
+    if (!res.ok) {
+      // eslint-disable-next-line no-console
+      console.warn(`[Bridge] HTTP ${res.status} on /config.json — bỏ qua pre-flight check, vẫn gửi qua WebSocket`);
+      return;
+    }
+    configData = await res.json();
+  } catch (e: any) {
+    // eslint-disable-next-line no-console
+    console.warn(`[Bridge] Không fetch được /config.json (${e?.message || 'unknown'}) — bỏ qua pre-flight check, vẫn gửi qua WebSocket`);
+    return;
+  }
+  const mappings = Array.isArray(configData?.printer?.mappings) ? configData!.printer!.mappings! : [];
+  const found = mappings.some((m) => String(m?.type || '').trim() === type);
+  if (!found) {
+    throw new Error(`Bridge chưa có mapping cho loại "${type}". Mở app Bridge → Settings → Printer Mapping để thêm máy in cho loại này.`);
+  }
+};
+
 const submitBridgeJob = (url: string, payload: Record<string, unknown>) =>
   new Promise<void>((resolve, reject) => {
     const websocket = new WebSocket(url);
     let settled = false;
+    const timeoutId = window.setTimeout(() => {
+      finishError('Bridge không phản hồi trong thời gian chờ');
+    }, 5000);
 
     const cleanup = () => {
       websocket.onopen = null;
@@ -183,42 +224,55 @@ const submitBridgeJob = (url: string, payload: Record<string, unknown>) =>
       reject(new Error(message));
     };
 
-    const timeoutId = window.setTimeout(() => {
-      finishError('Khong ket noi duoc WebApp Hardware Bridge');
-    }, 3500);
-
     websocket.onopen = () => {
       try {
         websocket.send(JSON.stringify(payload));
       } catch {
         window.clearTimeout(timeoutId);
-        finishError('Khong gui duoc lenh in den Bridge');
+        finishError('Không gửi được lệnh in tới Bridge');
       }
     };
 
     websocket.onmessage = (event) => {
+      const raw = String(event.data || '');
+      // eslint-disable-next-line no-console
+      console.debug('[Bridge response]', raw);
+      let response: { success?: boolean; message?: string; error?: string } | null = null;
       try {
-        const response = JSON.parse(String(event.data)) as { success?: boolean; message?: string };
-        if (response.success === false) {
-          window.clearTimeout(timeoutId);
-          finishError(response.message || 'Bridge tu choi lenh in');
-          return;
-        }
+        response = JSON.parse(raw);
       } catch {
+        window.clearTimeout(timeoutId);
+        finishError(`Bridge trả về dữ liệu không hợp lệ: ${raw.slice(0, 120)}`);
+        return;
       }
+
+      if (response?.success === false || response?.error) {
+        window.clearTimeout(timeoutId);
+        finishError(response.message || response.error || 'Bridge từ chối lệnh in');
+        return;
+      }
+
+      if (response?.success === true) {
+        window.clearTimeout(timeoutId);
+        finishOk();
+        return;
+      }
+
+      // eslint-disable-next-line no-console
+      console.warn('[Bridge] phản hồi không có field success/error — vẫn coi là OK:', response);
       window.clearTimeout(timeoutId);
       finishOk();
     };
 
     websocket.onerror = () => {
       window.clearTimeout(timeoutId);
-      finishError('WebSocket den Bridge bi loi');
+      finishError('WebSocket tới Bridge bị lỗi');
     };
 
     websocket.onclose = () => {
       window.clearTimeout(timeoutId);
       if (!settled) {
-        finishError('Bridge da dong ket noi truoc khi in xong');
+        finishError('Bridge đóng kết nối trước khi in xong');
       }
     };
   });
@@ -250,10 +304,11 @@ const printViaBridge = async (
   const bridgeUrl = settings.bridgeUrl?.trim() || 'ws://127.0.0.1:12212/printer';
 
   const submitInvoiceA4 = async () => {
-    const invoiceType = settings.invoiceType?.trim() || 'INVOICE';
+    const invoiceType = settings.invoiceType?.trim() || 'HDA4';
+    await verifyBridgeMapping(bridgeUrl, invoiceType);
     const canvas = buildCanvasFromText(_content, 'invoice_a4');
     const imageBase64 = canvas.toDataURL('image/png').split(',')[1] || '';
-    if (!imageBase64) throw new Error('Khong tao duoc du lieu anh de in A4');
+    if (!imageBase64) throw new Error('Không tạo được dữ liệu ảnh để in A4');
     await submitBridgeJob(bridgeUrl, {
       id: `invoice-${Date.now()}`,
       type: invoiceType,
@@ -263,7 +318,8 @@ const printViaBridge = async (
   };
 
   const submitReceipt80mm = async () => {
-    const receiptType = settings.receiptType?.trim() || 'RECEIPT';
+    const receiptType = settings.receiptType?.trim() || 'HD80';
+    await verifyBridgeMapping(bridgeUrl, receiptType);
     const payload = await buildReceipt80mmEscPosBytes(options?.receipt80mmData || DEFAULT_RECEIPT_80MM_DATA);
     await submitBridgeJob(bridgeUrl, {
       id: `receipt-${Date.now()}`,
@@ -273,60 +329,34 @@ const printViaBridge = async (
   };
 
   const submitOrderSlipA4 = async () => {
-    const orderType = settings.orderType?.trim() || 'ORDER';
+    const type = settings.orderA4Type?.trim() || 'ODA4';
+    await verifyBridgeMapping(bridgeUrl, type);
     const canvas = buildCanvasFromText(_content, 'invoice_a4');
     const imageBase64 = canvas.toDataURL('image/png').split(',')[1] || '';
-    if (!imageBase64) throw new Error('Khong tao duoc du lieu anh de in A4 order');
+    if (!imageBase64) throw new Error('Không tạo được dữ liệu ảnh để in A4 order');
     await submitBridgeJob(bridgeUrl, {
       id: `order-a4-${Date.now()}`,
-      type: orderType,
+      type,
       url: `${title || 'order'}.png`,
       file_content: imageBase64,
     });
   };
 
   const submitOrderSlip80mm = async () => {
-    const orderType = settings.orderType?.trim() || 'ORDER';
+    const type = settings.order80mmType?.trim() || 'OD80';
+    await verifyBridgeMapping(bridgeUrl, type);
     const payload = await buildReceipt80mmEscPosBytes(options?.receipt80mmData || DEFAULT_RECEIPT_80MM_DATA);
     await submitBridgeJob(bridgeUrl, {
       id: `order-${Date.now()}`,
-      type: orderType,
+      type,
       raw_content: uint8ToBase64(payload),
     });
   };
 
-  if (templateKey === 'invoice_a4') {
-    try {
-      await submitInvoiceA4();
-    } catch {
-      await submitReceipt80mm();
-    }
-    return;
-  }
-
-  if (templateKey === 'order_slip_a4') {
-    try {
-      await submitOrderSlipA4();
-    } catch {
-      await submitOrderSlip80mm();
-    }
-    return;
-  }
-
-  if (templateKey === 'order_slip_80mm') {
-    try {
-      await submitOrderSlip80mm();
-    } catch {
-      await submitOrderSlipA4();
-    }
-    return;
-  }
-
-  try {
-    await submitReceipt80mm();
-  } catch {
-    await submitInvoiceA4();
-  }
+  if (templateKey === 'invoice_a4') return submitInvoiceA4();
+  if (templateKey === 'order_slip_a4') return submitOrderSlipA4();
+  if (templateKey === 'order_slip_80mm') return submitOrderSlip80mm();
+  return submitReceipt80mm();
 };
 
 const sendEscPosPayloadToUsbPrinter = async (device: UsbWritableDeviceLike, payload: Uint8Array) => {

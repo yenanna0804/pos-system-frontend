@@ -346,3 +346,82 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Phương thức in (segmented pills) ─────────────────── */
+.printers-method-section {
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 0 16px;
+  padding: 16px;
+}
+
+.printers-method-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.printers-method-header strong {
+  color: #101828;
+  font-size: 15px;
+}
+
+.printers-method-hint {
+  color: #667085;
+  font-size: 13px;
+}
+
+.printers-method-pills {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.printers-method-pill {
+  background: #fff;
+  border: 1.5px solid #d0d5dd;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.printers-method-pill:hover {
+  border-color: #93c5fd;
+}
+
+.printers-method-pill.is-active {
+  background: #eff6ff;
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.15);
+}
+
+.printers-method-pill-title {
+  color: #1d2939;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.printers-method-pill.is-active .printers-method-pill-title {
+  color: #1d4ed8;
+}
+
+.printers-method-pill-desc {
+  color: #475467;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+@media (max-width: 680px) {
+  .printers-method-pills {
+    grid-template-columns: 1fr;
+  }
+}

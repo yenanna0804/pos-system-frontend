@@ -88,6 +88,7 @@ export default function OrderBillsPanel({
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
   const [customerPaidInput, setCustomerPaidInput] = useState(String(Math.max(0, Math.trunc(initialPaidAmount ?? totalAmount))));
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initialPaymentMethod ?? 'CASH');
+  const [autoFillPaid, setAutoFillPaid] = useState(true);
   const totalLimit = Math.max(0, Math.trunc(totalAmount));
   const allSelected = billItems.length > 0 && selectedLineIds.length === billItems.length;
 
@@ -100,6 +101,15 @@ export default function OrderBillsPanel({
       return next;
     });
   }, [billItems]);
+
+  useEffect(() => {
+    if (!autoFillPaid) return;
+    setCustomerPaidInput(String(totalLimit));
+  }, [autoFillPaid, totalLimit]);
+
+  useEffect(() => {
+    setPaymentMethod(initialPaymentMethod ?? 'CASH');
+  }, [initialPaymentMethod]);
 
   const subtotal = billItems.reduce((sum, item) => sum + getLineAmount(item), 0);
   const discountRaw = discountMode === 'amount' ? toAmountNumber(discountValue) : toPercentNumber(discountValue);
@@ -294,7 +304,22 @@ export default function OrderBillsPanel({
               }}
               inputMode="numeric"
               placeholder="0"
+              disabled={autoFillPaid}
             />
+            <label className="orders-auto-fill-paid-option">
+              <input
+                type="checkbox"
+                checked={autoFillPaid}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  setAutoFillPaid(checked);
+                  if (checked) {
+                    setCustomerPaidInput(String(totalLimit));
+                  }
+                }}
+              />
+              <span>Tự động điền</span>
+            </label>
           </div>
         </div>
 

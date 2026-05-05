@@ -143,9 +143,10 @@ export default function PrintersPage() {
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>('bridge');
   const [bridgeEnabled, setBridgeEnabled] = useState(true);
   const [bridgeUrl, setBridgeUrl] = useState('ws://127.0.0.1:12212/printer');
-  const [receiptType, setReceiptType] = useState('RECEIPT');
-  const [invoiceType, setInvoiceType] = useState('INVOICE');
-  const [orderType, setOrderType] = useState('ORDER');
+  const [receiptType, setReceiptType] = useState('HD80');
+  const [invoiceType, setInvoiceType] = useState('HDA4');
+  const [orderA4Type, setOrderA4Type] = useState('ODA4');
+  const [order80mmType, setOrder80mmType] = useState('OD80');
   const [bridgeStatus, setBridgeStatus] = useState<'idle' | 'checking' | 'connected' | 'error'>('idle');
   const [bridgeStatusText, setBridgeStatusText] = useState('Chua kiem tra ket noi Bridge');
   const [bridgePrinters, setBridgePrinters] = useState<BridgeSystemPrinter[]>([]);
@@ -172,7 +173,8 @@ export default function PrintersPage() {
         bridgeUrl?: string;
         receiptType?: string;
         invoiceType?: string;
-        orderType?: string;
+        orderA4Type?: string;
+        order80mmType?: string;
       };
       if (parsed.defaultPrinterId) setDefaultPrinterId(parsed.defaultPrinterId);
       if (parsed.backupPrinterId) setBackupPrinterId(parsed.backupPrinterId);
@@ -186,7 +188,8 @@ export default function PrintersPage() {
       if (typeof parsed.bridgeUrl === 'string' && parsed.bridgeUrl.trim()) setBridgeUrl(parsed.bridgeUrl);
       if (typeof parsed.receiptType === 'string' && parsed.receiptType.trim()) setReceiptType(parsed.receiptType);
       if (typeof parsed.invoiceType === 'string' && parsed.invoiceType.trim()) setInvoiceType(parsed.invoiceType);
-      if (typeof parsed.orderType === 'string' && parsed.orderType.trim()) setOrderType(parsed.orderType);
+      if (typeof parsed.orderA4Type === 'string' && parsed.orderA4Type.trim()) setOrderA4Type(parsed.orderA4Type);
+      if (typeof parsed.order80mmType === 'string' && parsed.order80mmType.trim()) setOrder80mmType(parsed.order80mmType);
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     }
@@ -205,10 +208,11 @@ export default function PrintersPage() {
         bridgeUrl,
         receiptType,
         invoiceType,
-        orderType,
+        orderA4Type,
+        order80mmType,
       }),
     );
-  }, [backupPrinterId, bridgeEnabled, bridgeUrl, connectionMode, defaultPrinterId, invoiceDefaultTemplateKey, invoiceType, orderDefaultTemplateKey, orderType, receiptType]);
+  }, [backupPrinterId, bridgeEnabled, bridgeUrl, connectionMode, defaultPrinterId, invoiceDefaultTemplateKey, invoiceType, orderDefaultTemplateKey, orderA4Type, order80mmType, receiptType]);
 
   useEffect(() => {
     if (!defaultPrinterId || !backupPrinterId) return;
@@ -362,7 +366,7 @@ export default function PrintersPage() {
     const mappedTypes = bridgeMappings
       .map((item) => item.type?.trim())
       .filter((item): item is string => Boolean(item));
-    const baseTypes = ['VIRTUAL', 'INVOICE', 'RECEIPT', 'ORDER'];
+    const baseTypes = ['VIRTUAL', 'HDA4', 'HD80', 'ODA4', 'OD80'];
     return Array.from(new Set([...baseTypes, ...mappedTypes]));
   }, [bridgeMappings]);
 
@@ -418,20 +422,6 @@ export default function PrintersPage() {
       <div className="printers-toolbar">
         <h2>Thiết lập máy in</h2>
         <div className="printers-toolbar-actions">
-          <button
-            type="button"
-            className={connectionMode === 'bridge' ? 'primary-btn' : 'ghost-btn'}
-            onClick={() => setConnectionMode('bridge')}
-          >
-            WebApp Bridge
-          </button>
-          <button
-            type="button"
-            className={connectionMode === 'usb' ? 'primary-btn' : 'ghost-btn'}
-            onClick={() => setConnectionMode('usb')}
-          >
-            WebUSB
-          </button>
           <button className="ghost-btn printers-test-print-btn" onClick={() => onTestPrint().catch(() => undefined)}>
             <PrintActionIcon />
             In thử
@@ -446,6 +436,35 @@ export default function PrintersPage() {
               </button>
             </>
           )}
+        </div>
+      </div>
+
+      <div className="printers-method-section">
+        <div className="printers-method-header">
+          <strong>Phương thức in</strong>
+          <span className="printers-method-hint">Chọn 1 phương thức để toàn hệ thống dùng khi in hóa đơn / phiếu order</span>
+        </div>
+        <div className="printers-method-pills" role="radiogroup" aria-label="Phương thức in">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={connectionMode === 'bridge'}
+            className={`printers-method-pill${connectionMode === 'bridge' ? ' is-active' : ''}`}
+            onClick={() => setConnectionMode('bridge')}
+          >
+            <span className="printers-method-pill-title">In qua WebApp Hardware Bridge</span>
+            <span className="printers-method-pill-desc">Gửi lệnh in qua app cầu nối chạy nền trên máy. Hỗ trợ in cả 80mm và A4 qua máy in đã cấu hình trong Bridge.</span>
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={connectionMode === 'usb'}
+            className={`printers-method-pill${connectionMode === 'usb' ? ' is-active' : ''}`}
+            onClick={() => setConnectionMode('usb')}
+          >
+            <span className="printers-method-pill-title">In trực tiếp qua USB (WebUSB)</span>
+            <span className="printers-method-pill-desc">Trình duyệt nói chuyện trực tiếp với máy in 80mm. Mẫu A4 sẽ mở hộp thoại in của trình duyệt để bạn chọn máy in.</span>
+          </button>
         </div>
       </div>
 
@@ -555,10 +574,23 @@ export default function PrintersPage() {
                 </select>
               </label>
               <label>
-                Máy in cho Phiếu order
+                Máy in cho Phiếu order A4
                 <select
-                  value={orderType}
-                  onChange={(event) => setOrderType(event.target.value)}
+                  value={orderA4Type}
+                  onChange={(event) => setOrderA4Type(event.target.value)}
+                >
+                  {bridgeTypeOptions.map((typeOption) => (
+                    <option key={typeOption} value={typeOption}>
+                      {typeOption}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Máy in cho Phiếu order 80mm
+                <select
+                  value={order80mmType}
+                  onChange={(event) => setOrder80mmType(event.target.value)}
                 >
                   {bridgeTypeOptions.map((typeOption) => (
                     <option key={typeOption} value={typeOption}>

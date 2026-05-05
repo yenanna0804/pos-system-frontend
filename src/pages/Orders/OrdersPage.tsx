@@ -195,6 +195,27 @@ const splitDateTimeParts = (value: string) => {
   return { datePart, timePart: `${hourPart}:${minutePart}` };
 };
 
+const toDisplayDate = (isoDate: string) => {
+  const match = String(isoDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return '';
+  const [, y, m, d] = match;
+  return `${d}/${m}/${y}`;
+};
+
+const toIsoDateFromDisplay = (displayDate: string) => {
+  const normalized = String(displayDate || '').trim();
+  const match = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+  const [, dRaw, mRaw, yRaw] = match;
+  const d = Number(dRaw);
+  const m = Number(mRaw);
+  const y = Number(yRaw);
+  if (!d || !m || !y) return null;
+  const test = new Date(y, m - 1, d);
+  if (test.getFullYear() !== y || test.getMonth() + 1 !== m || test.getDate() !== d) return null;
+  return `${yRaw}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+};
+
 const buildOrderA4Content = (order: OrderDetail) => {
   const lines: string[] = [];
   lines.push(`Mã hóa đơn: ${order.code}`);
@@ -362,6 +383,8 @@ export default function OrdersPage() {
   const [startTime, setStartTime] = useState(splitDateTimeParts(initialStart).timePart);
   const [endDate, setEndDate] = useState(splitDateTimeParts(initialEnd).datePart);
   const [endTime, setEndTime] = useState(splitDateTimeParts(initialEnd).timePart);
+  const [startDateInput, setStartDateInput] = useState(toDisplayDate(splitDateTimeParts(initialStart).datePart));
+  const [endDateInput, setEndDateInput] = useState(toDisplayDate(splitDateTimeParts(initialEnd).datePart));
   const [areas, setAreas] = useState<AreaOption[]>([]);
   const [rooms, setRooms] = useState<RoomOption[]>([]);
   const [tables, setTables] = useState<TableOption[]>([]);
@@ -404,6 +427,32 @@ export default function OrdersPage() {
   const showToast = (type: 'error' | 'success', message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 2800);
+  };
+
+  const commitStartDateInput = () => {
+    const iso = toIsoDateFromDisplay(startDateInput);
+    if (!iso) {
+      setStartDateInput(toDisplayDate(startDate));
+      return;
+    }
+    setStartDateInput(toDisplayDate(iso));
+    if (iso !== startDate) {
+      setStartDate(iso);
+      setPage(1);
+    }
+  };
+
+  const commitEndDateInput = () => {
+    const iso = toIsoDateFromDisplay(endDateInput);
+    if (!iso) {
+      setEndDateInput(toDisplayDate(endDate));
+      return;
+    }
+    setEndDateInput(toDisplayDate(iso));
+    if (iso !== endDate) {
+      setEndDate(iso);
+      setPage(1);
+    }
   };
 
   const resetListFilters = () => {
@@ -470,6 +519,14 @@ export default function OrdersPage() {
     };
     loadOptions().catch(() => undefined);
   }, [branchId]);
+
+  useEffect(() => {
+    setStartDateInput(toDisplayDate(startDate));
+  }, [startDate]);
+
+  useEffect(() => {
+    setEndDateInput(toDisplayDate(endDate));
+  }, [endDate]);
 
   useEffect(() => {
     const loadCreateDraftFromServer = async () => {
@@ -765,7 +822,7 @@ export default function OrdersPage() {
       });
       showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {
-      showToast('error', typeof error === 'string' ? error : 'Không thể in hóa đơn');
+      showToast('error', typeof error === 'string' ? error : ((error as any)?.message || 'Không thể in hóa đơn'));
     }
   };
 
@@ -783,7 +840,7 @@ export default function OrdersPage() {
       });
       showToast('success', 'Đã gửi lệnh in phiếu order');
     } catch (error) {
-      showToast('error', typeof error === 'string' ? error : 'Không thể in phiếu order');
+      showToast('error', typeof error === 'string' ? error : ((error as any)?.message || 'Không thể in phiếu order'));
     }
   };
 
@@ -1044,7 +1101,7 @@ export default function OrdersPage() {
       });
       showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {
-      showToast('error', typeof error === 'string' ? error : 'Không thể in hóa đơn');
+      showToast('error', typeof error === 'string' ? error : ((error as any)?.message || 'Không thể in hóa đơn'));
     }
   };
 
@@ -1061,7 +1118,7 @@ export default function OrdersPage() {
       });
       showToast('success', 'Đã gửi lệnh in phiếu order');
     } catch (error) {
-      showToast('error', typeof error === 'string' ? error : 'Không thể in phiếu order');
+      showToast('error', typeof error === 'string' ? error : ((error as any)?.message || 'Không thể in phiếu order'));
     }
   };
 
@@ -1530,12 +1587,17 @@ export default function OrdersPage() {
             Từ ngày giờ
             <div className="orders-datetime-custom">
               <input
-                type="date"
-                lang="vi-VN"
-                value={startDate}
-                onChange={(event) => {
-                  setStartDate(event.target.value);
-                  setPage(1);
+                type="text"
+                inputMode="numeric"
+                placeholder="dd/mm/yyyy"
+                value={startDateInput}
+                onChange={(event) => setStartDateInput(event.target.value)}
+                onBlur={commitStartDateInput}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commitStartDateInput();
+                  }
                 }}
               />
               <div className="orders-time-picker">
@@ -1584,12 +1646,17 @@ export default function OrdersPage() {
             Đến ngày giờ
             <div className="orders-datetime-custom">
               <input
-                type="date"
-                lang="vi-VN"
-                value={endDate}
-                onChange={(event) => {
-                  setEndDate(event.target.value);
-                  setPage(1);
+                type="text"
+                inputMode="numeric"
+                placeholder="dd/mm/yyyy"
+                value={endDateInput}
+                onChange={(event) => setEndDateInput(event.target.value)}
+                onBlur={commitEndDateInput}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commitEndDateInput();
+                  }
                 }}
               />
               <div className="orders-time-picker">

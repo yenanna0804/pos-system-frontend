@@ -493,6 +493,31 @@
   outline: none;
 }
 
+.orders-customer-paid-input:disabled {
+  background: #f2f4f7;
+  color: #667085;
+  cursor: not-allowed;
+}
+
+.orders-auto-fill-paid-option {
+  align-items: center;
+  color: #344054;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.orders-auto-fill-paid-option input {
+  accent-color: var(--ui-primary);
+  cursor: pointer;
+  height: 16px;
+  margin: 0;
+  width: 16px;
+}
+
 .orders-bill-toolbar-row {
   align-items: center;
   display: flex;
@@ -629,6 +654,10 @@
     align-self: flex-start;
     flex-wrap: wrap;
     gap: 10px 14px;
+  }
+
+  .orders-auto-fill-paid-option {
+    align-self: flex-start;
   }
 
   .orders-customer-main {
