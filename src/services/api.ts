@@ -30,6 +30,8 @@ export const authService = {
   login: (username: string, password: string, branchId: string) =>
     api.post('/auth/login', { username, password, branchId }),
   loginContext: (username: string) => api.post('/auth/login-context', { username }),
+  changePassword: (payload: { currentPassword: string; newPassword: string; confirmNewPassword: string }) =>
+    api.post('/auth/change-password', payload),
 };
 
 export const branchService = {

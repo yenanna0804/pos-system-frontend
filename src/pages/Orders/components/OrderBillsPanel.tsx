@@ -150,7 +150,7 @@ export default function OrderBillsPanel({
   const openPriceEditor = (item: BillItem) => {
     setEditingPriceLineId(item.lineId);
     setPriceEditMode('amount');
-    setPriceEditInput(String(Math.max(0, Math.trunc(Number(item.unitPrice || 0)))));
+    setPriceEditInput('0');
   };
 
   const closePriceEditor = () => {

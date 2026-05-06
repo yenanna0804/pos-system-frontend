@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { branchService } from '../../services/api';
+import { authService, branchService } from '../../services/api';
 import ProductsPage from '../Products/ProductsPage';
 import TablesPage from '../Tables/TablesPage';
 import OrdersPage from '../Orders/OrdersPage';
@@ -17,6 +17,16 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
 
   const activeTab: TabKey = (() => {
     if (location.pathname === '/dashboard') return 'overview';
@@ -57,6 +67,67 @@ export default function Dashboard() {
     logout();
     navigate('/');
   };
+
+  const resetChangePasswordForm = () => {
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmNewPassword(false);
+    setPasswordError('');
+    setPasswordSuccess('');
+  };
+
+  const openChangePassword = () => {
+    resetChangePasswordForm();
+    setIsChangePasswordOpen(true);
+  };
+
+  const closeChangePassword = () => {
+    setIsChangePasswordOpen(false);
+    resetChangePasswordForm();
+  };
+
+  const handleSubmitChangePassword = async () => {
+    setPasswordError('');
+    setPasswordSuccess('');
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      setPasswordError('Vui lòng nhập đầy đủ thông tin');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError('Xác nhận mật khẩu mới không khớp');
+      return;
+    }
+    setIsChangingPassword(true);
+    try {
+      await authService.changePassword({ currentPassword, newPassword, confirmNewPassword });
+      setPasswordSuccess('Đổi mật khẩu thành công');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setTimeout(() => {
+        setIsChangePasswordOpen(false);
+        setPasswordSuccess('');
+      }, 900);
+    } catch (error) {
+      setPasswordError(typeof error === 'string' ? error : 'Không thể đổi mật khẩu');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const EyeButton = ({ shown, onClick }: { shown: boolean; onClick: () => void }) => (
+    <button
+      type="button"
+      className="password-eye-btn"
+      onClick={onClick}
+      aria-label={shown ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+    >
+      {shown ? '🙈' : '👁'}
+    </button>
+  );
 
   return (
     <div className="dashboard">
@@ -106,11 +177,73 @@ export default function Dashboard() {
           </label>
           {branches.length === 0 && <span className="branch-name">Chi nhánh: {selectedBranchName}</span>}
           <span className="user-name">Xin chào, {user?.fullName || user?.username}</span>
+          <button onClick={openChangePassword} className="logout-btn" type="button">
+            Đổi mật khẩu
+          </button>
           <button onClick={handleLogout} className="logout-btn">
             Đăng xuất
           </button>
         </div>
       </header>
+
+      {isChangePasswordOpen && (
+        <div className="dashboard-modal-overlay" onClick={closeChangePassword}>
+          <div className="dashboard-modal" onClick={(event) => event.stopPropagation()}>
+            <h3>Đổi mật khẩu</h3>
+
+            <label className="dashboard-password-field">
+              <span>Mật khẩu hiện tại</span>
+              <div className="dashboard-password-input-wrap">
+                <input
+                  type={showCurrentPassword ? 'text' : 'password'}
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  autoComplete="current-password"
+                />
+                <EyeButton shown={showCurrentPassword} onClick={() => setShowCurrentPassword((prev) => !prev)} />
+              </div>
+            </label>
+
+            <label className="dashboard-password-field">
+              <span>Mật khẩu mới</span>
+              <div className="dashboard-password-input-wrap">
+                <input
+                  type={showNewPassword ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  autoComplete="new-password"
+                />
+                <EyeButton shown={showNewPassword} onClick={() => setShowNewPassword((prev) => !prev)} />
+              </div>
+            </label>
+
+            <label className="dashboard-password-field">
+              <span>Xác nhận mật khẩu mới</span>
+              <div className="dashboard-password-input-wrap">
+                <input
+                  type={showConfirmNewPassword ? 'text' : 'password'}
+                  value={confirmNewPassword}
+                  onChange={(event) => setConfirmNewPassword(event.target.value)}
+                  autoComplete="new-password"
+                />
+                <EyeButton shown={showConfirmNewPassword} onClick={() => setShowConfirmNewPassword((prev) => !prev)} />
+              </div>
+            </label>
+
+            {passwordError && <p className="dashboard-password-error">{passwordError}</p>}
+            {passwordSuccess && <p className="dashboard-password-success">{passwordSuccess}</p>}
+
+            <div className="dashboard-modal-actions">
+              <button type="button" className="ghost-btn" onClick={closeChangePassword} disabled={isChangingPassword}>
+                Hủy
+              </button>
+              <button type="button" className="primary-btn" onClick={handleSubmitChangePassword} disabled={isChangingPassword}>
+                {isChangingPassword ? 'Đang lưu...' : 'Lưu'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="dashboard-content" style={{ padding: '14px' }}>
         {activeTab === 'overview' && <ReportsPage />}
