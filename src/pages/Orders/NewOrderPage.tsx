@@ -471,7 +471,9 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
               prev.map((item) => {
                 if (item.lineId !== lineId) return item;
                 if (item.pricingTypeSnapshot === 'TIME') return item;
-                return { ...item, quantity: item.quantity + 1 };
+                const nextQuantity = item.quantity + 1;
+                const unitPrice = Math.max(0, Math.trunc(Number(item.unitPrice || 0)));
+                return { ...item, quantity: nextQuantity, lineTotal: nextQuantity * unitPrice };
               }),
             )
           }
@@ -481,7 +483,9 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
                 .map((item) => {
                   if (item.lineId !== lineId) return item;
                   if (item.pricingTypeSnapshot === 'TIME') return item;
-                  return { ...item, quantity: Math.max(0, item.quantity - 1) };
+                  const nextQuantity = Math.max(0, item.quantity - 1);
+                  const unitPrice = Math.max(0, Math.trunc(Number(item.unitPrice || 0)));
+                  return { ...item, quantity: nextQuantity, lineTotal: nextQuantity * unitPrice };
                 })
                 .filter((item) => item.quantity > 0),
             )
@@ -492,7 +496,9 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
                 .map((item) => {
                   if (item.lineId !== lineId) return item;
                   if (item.pricingTypeSnapshot === 'TIME') return item;
-                  return { ...item, quantity: Math.max(0, Math.round(quantity)) };
+                  const nextQuantity = Math.max(0, Math.round(quantity));
+                  const unitPrice = Math.max(0, Math.trunc(Number(item.unitPrice || 0)));
+                  return { ...item, quantity: nextQuantity, lineTotal: nextQuantity * unitPrice };
                 })
                 .filter((item) => item.quantity > 0),
             )
@@ -507,7 +513,8 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
                 if (item.lineId !== lineId) return item;
                 const nextUnitPrice = Math.max(0, Math.trunc(unitPrice));
                 if (item.pricingTypeSnapshot !== 'TIME') {
-                  return { ...item, unitPrice: nextUnitPrice };
+                  const nextQuantity = Math.max(0, Math.trunc(Number(item.quantity || 0)));
+                  return { ...item, unitPrice: nextUnitPrice, lineTotal: nextUnitPrice * nextQuantity };
                 }
                 const usedMinutes = Math.max(0, Math.trunc(Number(item.usedMinutes || 0)));
                 const rateMinutes = Math.max(1, Math.trunc(Number(item.timeRateMinutesSnapshot || 1)));

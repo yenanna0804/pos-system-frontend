@@ -1,5 +1,3 @@
-import { formatDateTimeVN } from '../../../utils/formatters';
-
 type Props = {
   lineId: string;
   startAt?: string | null;
@@ -65,8 +63,5 @@ export default function TimeLineControls({
   const usedMinutes = Math.max(0, elapsedMinutes);
   const hh = Math.floor(usedMinutes / 60);
   const mm = usedMinutes % 60;
-  const startText = startAt ? formatDateTimeVN(startAt) : '';
-  const stopText = stopAt ? formatDateTimeVN(stopAt) : '';
-  const rangeText = startText && stopText ? ` (${startText} - ${stopText})` : '';
-  return <span className="orders-bill-subline">Đã sử dụng {`${hh}h${String(mm).padStart(2, '0')}p`}{rangeText}</span>;
+  return <span className="orders-bill-subline">Đã sử dụng {`${hh}h${String(mm).padStart(2, '0')}p`}</span>;
 }

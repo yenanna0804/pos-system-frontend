@@ -7,6 +7,7 @@ import './OrdersBillPanel.css';
 
 type AdjustmentMode = 'percent' | 'amount';
 type PaymentMethod = 'CASH' | 'BANKING';
+type PriceEditMode = 'amount' | 'percent';
 
 type Props = {
   selectedTable: SelectableTable | null;
@@ -96,15 +97,17 @@ export default function OrderBillsPanel({
   disableSave,
 }: Props) {
   const [editingNoteLineId, setEditingNoteLineId] = useState<string | null>(null);
-  const [editingPriceLineId, setEditingPriceLineId] = useState<string | null>(null);
   const [editingQtyLineId, setEditingQtyLineId] = useState<string | null>(null);
+  const [editingPriceLineId, setEditingPriceLineId] = useState<string | null>(null);
+  const [priceEditMode, setPriceEditMode] = useState<PriceEditMode>('amount');
+  const [priceEditInput, setPriceEditInput] = useState('');
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
   const [customerPaidInput, setCustomerPaidInput] = useState(String(Math.max(0, Math.trunc(initialPaidAmount ?? totalAmount))));
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initialPaymentMethod ?? 'CASH');
   const [autoFillPaid, setAutoFillPaid] = useState(false);
   const [editingTimeField, setEditingTimeField] = useState<{ lineId: string; field: 'startAt' | 'stopAt'; currentValue: Date } | null>(null);
+  const [timeEditError, setTimeEditError] = useState<string | null>(null);
   const totalLimit = Math.max(0, Math.trunc(totalAmount));
-  const allSelected = billItems.length > 0 && selectedLineIds.length === billItems.length;
 
   useEffect(() => {
     setSelectedLineIds((prev) => {
@@ -136,27 +139,118 @@ export default function OrderBillsPanel({
   const surchargeAmount = surchargeMode === 'percent'
     ? toMoney((subtotalAfterDiscount * Math.max(0, surchargeRaw)) / 100)
     : toMoney(surchargeRaw);
+  const editingPriceItem = editingPriceLineId ? billItems.find((item) => item.lineId === editingPriceLineId) || null : null;
+  const oldUnitPrice = Math.max(0, Math.trunc(Number(editingPriceItem?.baseUnitPrice ?? editingPriceItem?.unitPrice ?? 0)));
+  const parsedAmountValue = Math.max(0, Math.trunc(Number(priceEditInput.replace(/\D/g, '')) || 0));
+  const parsedPercentValue = Math.max(0, Number(priceEditInput.replace(',', '.')) || 0);
+  const nextUnitPricePreview = priceEditMode === 'amount'
+    ? Math.max(0, oldUnitPrice - parsedAmountValue)
+    : Math.max(0, Math.floor(oldUnitPrice - ((oldUnitPrice * Math.min(100, parsedPercentValue)) / 100)));
+
+  const openPriceEditor = (item: BillItem) => {
+    setEditingPriceLineId(item.lineId);
+    setPriceEditMode('amount');
+    setPriceEditInput(String(Math.max(0, Math.trunc(Number(item.unitPrice || 0)))));
+  };
+
+  const closePriceEditor = () => {
+    setEditingPriceLineId(null);
+    setPriceEditMode('amount');
+    setPriceEditInput('');
+  };
+
+  const savePriceEditor = () => {
+    if (!editingPriceItem) return;
+    onUpdateUnitPrice(editingPriceItem.lineId, nextUnitPricePreview);
+    closePriceEditor();
+  };
 
   return (
     <aside className="orders-bills-panel">
       {editingTimeField && onUpdateTimeLineTimestamp && (
         <DateTimePicker
           value={editingTimeField.currentValue}
+          errorMessage={timeEditError}
           onChange={async (newDate) => {
             const item = billItems.find((b) => b.lineId === editingTimeField.lineId);
             if (!item) return;
             const newIso = newDate.toISOString();
             if (editingTimeField.field === 'stopAt' && item.startAt) {
-              if (newDate.getTime() <= new Date(item.startAt).getTime()) return;
+              if (newDate.getTime() <= new Date(item.startAt).getTime()) {
+                setTimeEditError('Giờ ra không được sớm hơn giờ vào');
+                return;
+              }
             }
             if (editingTimeField.field === 'startAt' && item.stopAt) {
-              if (newDate.getTime() >= new Date(item.stopAt).getTime()) return;
+              if (newDate.getTime() >= new Date(item.stopAt).getTime()) {
+                setTimeEditError('Giờ ra không được sớm hơn giờ vào');
+                return;
+              }
             }
+            setTimeEditError(null);
             await onUpdateTimeLineTimestamp(editingTimeField.lineId, editingTimeField.field, newIso);
             setEditingTimeField(null);
           }}
-          onClose={() => setEditingTimeField(null)}
+          onClose={() => {
+            setTimeEditError(null);
+            setEditingTimeField(null);
+          }}
         />
+      )}
+      {editingPriceItem && (
+        <div className="orders-price-modal-overlay" onClick={closePriceEditor}>
+          <div className="orders-price-modal" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="orders-price-modal-close" onClick={closePriceEditor} aria-label="Đóng popup chỉnh đơn giá">X</button>
+            <h3>Chỉnh đơn giá</h3>
+            <div className="orders-price-modal-product">{editingPriceItem.productName}</div>
+            <div className="orders-price-modal-mode-switch">
+              <button
+                type="button"
+                className={`orders-price-modal-mode-btn ${priceEditMode === 'amount' ? 'active' : ''}`}
+                onClick={() => {
+                  setPriceEditMode('amount');
+                  setPriceEditInput('0');
+                }}
+              >
+                đ
+              </button>
+              <button
+                type="button"
+                className={`orders-price-modal-mode-btn ${priceEditMode === 'percent' ? 'active' : ''}`}
+                onClick={() => {
+                  setPriceEditMode('percent');
+                  setPriceEditInput('0');
+                }}
+              >
+                %
+              </button>
+            </div>
+            <input
+              className="orders-price-modal-input"
+              autoFocus
+              value={priceEditMode === 'amount' ? formatThousands(priceEditInput) : priceEditInput}
+              onFocus={(event) => event.target.select()}
+              onChange={(event) => {
+                if (priceEditMode === 'amount') {
+                  setPriceEditInput(event.target.value.replace(/\D/g, ''));
+                  return;
+                }
+                const sanitized = event.target.value.replace(/[^\d.,]/g, '').replace(',', '.');
+                setPriceEditInput(sanitized);
+              }}
+              inputMode={priceEditMode === 'amount' ? 'numeric' : 'decimal'}
+              placeholder={priceEditMode === 'amount' ? 'Nhập số tiền giảm' : 'Nhập % giảm'}
+            />
+            <div className="orders-price-modal-preview">
+              <div>Giá mới: <strong>{Math.trunc(nextUnitPricePreview).toLocaleString('vi-VN')}</strong></div>
+              <div>Giá cũ: <span>{Math.trunc(oldUnitPrice).toLocaleString('vi-VN')}</span></div>
+            </div>
+            <div className="orders-price-modal-actions">
+              <button type="button" className="ghost-btn" onClick={closePriceEditor}>Hủy</button>
+              <button type="button" className="primary-btn" onClick={savePriceEditor}>Lưu</button>
+            </div>
+          </div>
+        </div>
       )}
       <div className="orders-bills-topbar">
         <div className="orders-table-pill">
@@ -367,26 +461,6 @@ export default function OrderBillsPanel({
         </div>
 
         <div className={`orders-bill-lines ${billItems.length >= 4 ? 'orders-bill-lines-force-scroll' : ''}`}>
-        {billItems.length > 0 && (
-          <div className="orders-bill-quick-select">
-            <label>
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={(event) => {
-                  if (event.target.checked) {
-                    setSelectedLineIds(billItems.map((item) => item.lineId));
-                    return;
-                  }
-                  setSelectedLineIds([]);
-                }}
-                aria-label="Chọn tất cả dòng món"
-              />
-              <span>Chọn nhanh tất cả</span>
-            </label>
-            <small>Đã chọn: {selectedLineIds.length}</small>
-          </div>
-        )}
         {billItems.length === 0 ? (
           <div className="orders-empty-row">Chưa có món trong hóa đơn</div>
         ) : (
@@ -427,6 +501,7 @@ export default function OrderBillsPanel({
                           className="orders-time-value"
                           onClick={() => {
                             if (!item.startAt || !onUpdateTimeLineTimestamp) return;
+                            setTimeEditError(null);
                             setEditingTimeField({ lineId: item.lineId, field: 'startAt', currentValue: new Date(item.startAt) });
                           }}
                         >
@@ -439,6 +514,7 @@ export default function OrderBillsPanel({
                           className="orders-time-value"
                           onClick={() => {
                             if (!item.stopAt || !onUpdateTimeLineTimestamp) return;
+                            setTimeEditError(null);
                             setEditingTimeField({ lineId: item.lineId, field: 'stopAt', currentValue: new Date(item.stopAt) });
                           }}
                         >
@@ -521,33 +597,27 @@ export default function OrderBillsPanel({
                   />
                 )}
 
-                {editingPriceLineId === item.lineId ? (
-                  <input
-                    autoFocus
-                    className="orders-price-inline-input"
-                    value={Math.trunc(item.unitPrice).toLocaleString('vi-VN')}
-                    inputMode="numeric"
-                    onFocus={(event) => event.target.select()}
-                    onChange={(event) => {
-                      const digits = event.target.value.replace(/\D/g, '');
-                      onUpdateUnitPrice(item.lineId, digits ? Number(digits) : 0);
-                    }}
-                    onBlur={() => setEditingPriceLineId(null)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === 'Escape') {
-                        setEditingPriceLineId(null);
-                      }
-                    }}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="orders-bill-price orders-price-trigger"
-                    onClick={() => setEditingPriceLineId(item.lineId)}
-                  >
-                    {Math.trunc(item.unitPrice).toLocaleString('vi-VN')}
-                  </button>
-                )}
+                {(() => {
+                  const basePrice = Math.max(0, Math.trunc(Number(item.baseUnitPrice ?? item.unitPrice ?? 0)));
+                  const currentPrice = Math.max(0, Math.trunc(Number(item.unitPrice || 0)));
+                  const showPriceDiff = basePrice !== currentPrice;
+                  return (
+                    <button
+                      type="button"
+                      className="orders-bill-price orders-price-trigger"
+                      onClick={() => openPriceEditor(item)}
+                    >
+                      {showPriceDiff ? (
+                        <span className="orders-price-stack">
+                          <span className="orders-price-new">{currentPrice.toLocaleString('vi-VN')}</span>
+                          <span className="orders-price-old">{basePrice.toLocaleString('vi-VN')}</span>
+                        </span>
+                      ) : (
+                        currentPrice.toLocaleString('vi-VN')
+                      )}
+                    </button>
+                  );
+                })()}
                 <div className="orders-bill-amount">{Math.trunc(getLineAmount(item)).toLocaleString('vi-VN')}</div>
                 <button type="button" className="orders-remove-line-btn" onClick={() => onRemoveLine(item.lineId)}>
                   x

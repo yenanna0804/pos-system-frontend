@@ -307,9 +307,30 @@
   border: 0;
   color: #101828;
   cursor: pointer;
-  display: inline-block;
+  display: inline-flex;
+  justify-content: flex-end;
   padding: 0;
   width: 100%;
+}
+
+.orders-price-stack {
+  align-items: flex-end;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.orders-price-new {
+  color: #101828;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.orders-price-old {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: line-through;
 }
 
 .orders-price-inline-input {
@@ -321,6 +342,118 @@
   padding: 0 8px;
   text-align: right;
   width: 100%;
+}
+
+.orders-price-modal-overlay {
+  align-items: center;
+  background: rgba(16, 24, 40, 0.45);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 1200;
+}
+
+.orders-price-modal {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(16, 24, 40, 0.22);
+  max-width: 380px;
+  padding: 16px;
+  position: relative;
+  width: 100%;
+}
+
+.orders-price-modal-close {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  color: #667085;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 700;
+  height: 28px;
+  justify-content: center;
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  width: 28px;
+}
+
+.orders-price-modal-close:hover {
+  background: #f2f4f7;
+  color: #1d2939;
+}
+
+.orders-price-modal h3 {
+  color: #101828;
+  font-size: 16px;
+  margin: 0 0 4px;
+}
+
+.orders-price-modal-product {
+  color: #475467;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.orders-price-modal-mode-switch {
+  border: 1px solid #b8c2d0;
+  border-radius: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.orders-price-modal-mode-btn {
+  background: #fff;
+  border: 0;
+  color: #475467;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  height: 36px;
+}
+
+.orders-price-modal-mode-btn.active {
+  background: #eaf3ff;
+  color: #1677ff;
+}
+
+.orders-price-modal-input {
+  border: 1px solid #b8c2d0;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  height: 40px;
+  margin-bottom: 10px;
+  padding: 0 12px;
+  width: 100%;
+}
+
+.orders-price-modal-preview {
+  background: #f8fafc;
+  border-radius: 10px;
+  color: #344054;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+
+.orders-price-modal-preview span {
+  color: #667085;
+  text-decoration: line-through;
+}
+
+.orders-price-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .orders-bill-subline {

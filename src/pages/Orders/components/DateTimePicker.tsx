@@ -5,6 +5,7 @@ type Props = {
   value: Date;
   onChange: (date: Date) => void;
   onClose: () => void;
+  errorMessage?: string | null;
 };
 
 const MONTH_NAMES = [
@@ -63,6 +64,15 @@ function ClockIcon() {
   );
 }
 
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 6L6 18" />
+      <path d="M6 6l12 12" />
+    </svg>
+  );
+}
+
 function getDaysInMonth(date: Date) {
   const year = date.getFullYear();
   const month = date.getMonth();
@@ -79,7 +89,7 @@ function isSameDay(d1: Date, d2: Date) {
   return d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
 }
 
-export default function DateTimePicker({ value, onChange, onClose }: Props) {
+export default function DateTimePicker({ value, onChange, onClose, errorMessage = null }: Props) {
   const [selectedDate, setSelectedDate] = useState(value);
   const [selectedTime, setSelectedTime] = useState({ hour: value.getHours(), minute: value.getMinutes() });
   const [editingField, setEditingField] = useState<'hour' | 'minute' | null>(null);
@@ -149,6 +159,11 @@ export default function DateTimePicker({ value, onChange, onClose }: Props) {
   return (
     <div className="dtp-overlay">
       <div className="dtp-container" ref={containerRef}>
+        <div className="dtp-topbar">
+          <button type="button" className="dtp-close-btn" onClick={onClose} aria-label="Đóng popup chọn ngày giờ">
+            <CloseIcon />
+          </button>
+        </div>
         <div className="dtp-tabs">
           <button type="button" className={`dtp-tab${activeTab === 'date' ? ' active' : ''}`} onClick={() => setActiveTab('date')}>
             <CalendarIcon /> Ngày
@@ -260,6 +275,8 @@ export default function DateTimePicker({ value, onChange, onClose }: Props) {
             </div>
           </div>
         )}
+
+        {errorMessage ? <div className="dtp-error-message">{errorMessage}</div> : null}
 
         <div className="dtp-footer">
           <button type="button" className="dtp-today-btn" onClick={handleToday}>Hôm nay</button>

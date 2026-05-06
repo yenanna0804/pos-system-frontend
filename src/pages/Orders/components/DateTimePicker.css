@@ -19,6 +19,35 @@
   width: 100%;
 }
 
+.dtp-topbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 8px 0;
+}
+
+.dtp-close-btn {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  color: var(--ui-text-muted, #667085);
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.dtp-close-btn:hover {
+  background: var(--ui-bg-subtle, #f8fafc);
+  color: var(--ui-text-primary, #1d2939);
+}
+
+.dtp-close-btn svg {
+  height: 16px;
+  width: 16px;
+}
+
 /* Tabs */
 .dtp-tabs {
   border-bottom: 1px solid var(--ui-border-soft, #e6e9ef);
@@ -266,6 +295,13 @@
 .dtp-quick-btn:hover {
   background: var(--ui-primary-soft, #eaf3ff);
   color: var(--ui-primary, #1677ff);
+}
+
+.dtp-error-message {
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 14px 10px;
 }
 
 /* Footer */
