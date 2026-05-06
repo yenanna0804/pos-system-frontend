@@ -209,7 +209,13 @@
 
 .orders-bill-line small {
   color: var(--ui-text-muted);
+  display: block;
   font-size: 12px;
+}
+
+.orders-time-value {
+  color: var(--ui-primary, #2563eb);
+  text-decoration: underline;
 }
 
 .orders-note-trigger {

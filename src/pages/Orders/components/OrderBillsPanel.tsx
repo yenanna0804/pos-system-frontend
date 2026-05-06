@@ -88,7 +88,7 @@ export default function OrderBillsPanel({
   const [selectedLineIds, setSelectedLineIds] = useState<string[]>([]);
   const [customerPaidInput, setCustomerPaidInput] = useState(String(Math.max(0, Math.trunc(initialPaidAmount ?? totalAmount))));
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initialPaymentMethod ?? 'CASH');
-  const [autoFillPaid, setAutoFillPaid] = useState(true);
+  const [autoFillPaid, setAutoFillPaid] = useState(false);
   const totalLimit = Math.max(0, Math.trunc(totalAmount));
   const allSelected = billItems.length > 0 && selectedLineIds.length === billItems.length;
 
@@ -384,9 +384,17 @@ export default function OrderBillsPanel({
                   </h4>
                   {item.pricingTypeSnapshot !== 'TIME' && <small>{item.unit ? `Đơn vị: ${item.unit}` : 'Đơn vị: -'}</small>}
                   {item.pricingTypeSnapshot === 'TIME' && (
-                    <small>
-                      Block: {Math.max(1, Math.trunc(Number(item.timeRateMinutesSnapshot || 0)))} phút
-                    </small>
+                    <>
+                      <small>
+                        Block: {Math.max(1, Math.trunc(Number(item.timeRateMinutesSnapshot || 0)))} phút
+                      </small>
+                      <small>
+                        Giờ vào: <span className="orders-time-value">{item.startAt ? new Date(item.startAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                      </small>
+                      <small>
+                        Giờ ra: <span className="orders-time-value">{item.stopAt ? new Date(item.stopAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                      </small>
+                    </>
                   )}
                   <button type="button" className="orders-note-trigger" onClick={() => setEditingNoteLineId(item.lineId)}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
