@@ -183,7 +183,19 @@
 .sales-datetime-custom {
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sales-datetime-trigger {
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  color: #101828;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 9px 10px;
+  text-align: left;
+  width: 100%;
 }
 
 .sales-time-picker {

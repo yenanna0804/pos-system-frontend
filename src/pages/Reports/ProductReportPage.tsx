@@ -4,6 +4,7 @@ import { categoryService, reportService } from '../../services/api';
 import FilterResetButton from '../../components/FilterResetButton';
 import TooltipInfoButton from '../../components/TooltipInfoButton';
 import { formatDateTimeVN } from '../../utils/formatters';
+import DateTimePicker from '../Orders/components/DateTimePicker';
 import '../Orders/OrdersPage.css';
 import './SalesEndOfDayPage.css';
 
@@ -47,6 +48,11 @@ const splitParts = (v: string) => {
   return { datePart, timePart: `${h}:${m}` };
 };
 
+const toDateFromParts = (datePart: string, timePart: string) => {
+  const parsed = new Date(`${datePart}T${timePart}:00`);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+};
+
 export default function ProductReportPage() {
   const { branchId } = useAuth();
   const now = useMemo(() => new Date(), []);
@@ -57,7 +63,7 @@ export default function ProductReportPage() {
   const [startTime, setStartTime] = useState(initStart.timePart);
   const [endDate, setEndDate] = useState(initEnd.datePart);
   const [endTime, setEndTime] = useState(initEnd.timePart);
-  const [activeTimePicker, setActiveTimePicker] = useState<'start' | 'end' | null>(null);
+  const [activeDateTimePicker, setActiveDateTimePicker] = useState<'start' | 'end' | null>(null);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
   const [rows, setRows] = useState<ProductRow[]>([]);
@@ -65,9 +71,6 @@ export default function ProductReportPage() {
   const [openTooltip, setOpenTooltip] = useState<{ key: string; top: number; left: number } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const hourOptions = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-  const minuteOptions = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
 
   useEffect(() => {
     categoryService.list().then((res) => {
@@ -77,7 +80,6 @@ export default function ProductReportPage() {
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement).closest('.sales-time-picker')) setActiveTimePicker(null);
       if (!(e.target as HTMLElement).closest('.col-th-tooltip-anchor')) setOpenTooltip(null);
     };
     window.addEventListener('mousedown', handler);
@@ -116,13 +118,6 @@ export default function ProductReportPage() {
     setStartDate(s.datePart); setStartTime(s.timePart);
     setEndDate(e.datePart); setEndTime(e.timePart);
     setCategoryFilter('');
-  };
-
-  const setTimeToNow = (target: 'start' | 'end') => {
-    const n = new Date();
-    const hh = String(n.getHours()).padStart(2, '0');
-    const mm = String(n.getMinutes()).padStart(2, '0');
-    if (target === 'start') setStartTime(`${hh}:${mm}`); else setEndTime(`${hh}:${mm}`);
   };
 
   const toggleExpand = (productId: string) =>
@@ -191,52 +186,18 @@ export default function ProductReportPage() {
           <label className="orders-filter-col-from-date">
             Từ ngày giờ
             <div className="sales-datetime-custom">
-              <input type="date" lang="vi-VN" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-              <div className="sales-time-picker">
-                <button type="button" className="sales-time-trigger" onClick={() => setActiveTimePicker(activeTimePicker === 'start' ? null : 'start')}>{startTime}</button>
-                {activeTimePicker === 'start' && (
-                  <div className="sales-time-popover">
-                    <div className="sales-time-columns">
-                      <select className="sales-time-column" value={startTime.split(':')[0] || '00'} size={7} onChange={(e) => setStartTime(`${e.target.value}:${startTime.split(':')[1] || '00'}`)}>
-                        {hourOptions.map((h) => <option key={h} value={h}>{h}</option>)}
-                      </select>
-                      <select className="sales-time-column" value={startTime.split(':')[1] || '00'} size={7} onChange={(e) => setStartTime(`${startTime.split(':')[0] || '00'}:${e.target.value}`)}>
-                        {minuteOptions.map((m) => <option key={m} value={m}>{m}</option>)}
-                      </select>
-                    </div>
-                    <div className="sales-time-actions">
-                      <button type="button" onClick={() => setTimeToNow('start')}>Now</button>
-                      <button type="button" className="is-primary" onClick={() => setActiveTimePicker(null)}>OK</button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <button type="button" className="sales-datetime-trigger" onClick={() => setActiveDateTimePicker('start')}>
+                {formatDateTimeVN(toDateFromParts(startDate, startTime).toISOString())}
+              </button>
             </div>
           </label>
 
           <label className="orders-filter-col-to-date">
             Đến ngày giờ
             <div className="sales-datetime-custom">
-              <input type="date" lang="vi-VN" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-              <div className="sales-time-picker">
-                <button type="button" className="sales-time-trigger" onClick={() => setActiveTimePicker(activeTimePicker === 'end' ? null : 'end')}>{endTime}</button>
-                {activeTimePicker === 'end' && (
-                  <div className="sales-time-popover">
-                    <div className="sales-time-columns">
-                      <select className="sales-time-column" value={endTime.split(':')[0] || '00'} size={7} onChange={(e) => setEndTime(`${e.target.value}:${endTime.split(':')[1] || '00'}`)}>
-                        {hourOptions.map((h) => <option key={h} value={h}>{h}</option>)}
-                      </select>
-                      <select className="sales-time-column" value={endTime.split(':')[1] || '00'} size={7} onChange={(e) => setEndTime(`${endTime.split(':')[0] || '00'}:${e.target.value}`)}>
-                        {minuteOptions.map((m) => <option key={m} value={m}>{m}</option>)}
-                      </select>
-                    </div>
-                    <div className="sales-time-actions">
-                      <button type="button" onClick={() => setTimeToNow('end')}>Now</button>
-                      <button type="button" className="is-primary" onClick={() => setActiveTimePicker(null)}>OK</button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <button type="button" className="sales-datetime-trigger" onClick={() => setActiveDateTimePicker('end')}>
+                {formatDateTimeVN(toDateFromParts(endDate, endTime).toISOString())}
+              </button>
             </div>
           </label>
 
@@ -248,6 +209,32 @@ export default function ProductReportPage() {
             </select>
           </label>
         </div>
+
+        {activeDateTimePicker === 'start' && (
+          <DateTimePicker
+            value={toDateFromParts(startDate, startTime)}
+            onChange={(newDate) => {
+              const next = splitParts(toDateTimeInputValue(newDate));
+              setStartDate(next.datePart);
+              setStartTime(next.timePart);
+              setActiveDateTimePicker(null);
+            }}
+            onClose={() => setActiveDateTimePicker(null)}
+          />
+        )}
+
+        {activeDateTimePicker === 'end' && (
+          <DateTimePicker
+            value={toDateFromParts(endDate, endTime)}
+            onChange={(newDate) => {
+              const next = splitParts(toDateTimeInputValue(newDate));
+              setEndDate(next.datePart);
+              setEndTime(next.timePart);
+              setActiveDateTimePicker(null);
+            }}
+            onClose={() => setActiveDateTimePicker(null)}
+          />
+        )}
       </div>
 
       {error && <div className="sales-report-error">{error}</div>}

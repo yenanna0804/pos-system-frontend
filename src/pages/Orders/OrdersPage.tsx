@@ -8,6 +8,7 @@ import { printUsingConfiguredRoute, resolveTemplateKeyForPrintFamily } from '../
 import { formatDateTimeVN } from '../../utils/formatters';
 import type { Receipt80mmData } from '../../utils/receipt80mmGenerator';
 import NewOrderPage from './NewOrderPage';
+import DateTimePicker from './components/DateTimePicker';
 import { orderFeatureFlags } from './orderFeatureFlags';
 import type { BillItem } from './types';
 import './OrdersPage.css';
@@ -195,25 +196,9 @@ const splitDateTimeParts = (value: string) => {
   return { datePart, timePart: `${hourPart}:${minutePart}` };
 };
 
-const toDisplayDate = (isoDate: string) => {
-  const match = String(isoDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return '';
-  const [, y, m, d] = match;
-  return `${d}/${m}/${y}`;
-};
-
-const toIsoDateFromDisplay = (displayDate: string) => {
-  const normalized = String(displayDate || '').trim();
-  const match = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!match) return null;
-  const [, dRaw, mRaw, yRaw] = match;
-  const d = Number(dRaw);
-  const m = Number(mRaw);
-  const y = Number(yRaw);
-  if (!d || !m || !y) return null;
-  const test = new Date(y, m - 1, d);
-  if (test.getFullYear() !== y || test.getMonth() + 1 !== m || test.getDate() !== d) return null;
-  return `${yRaw}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+const toDateFromParts = (datePart: string, timePart: string) => {
+  const parsed = new Date(`${datePart}T${timePart}:00`);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 };
 
 const buildOrderA4Content = (order: OrderDetail) => {
@@ -384,8 +369,7 @@ export default function OrdersPage() {
   const [startTime, setStartTime] = useState(splitDateTimeParts(initialStart).timePart);
   const [endDate, setEndDate] = useState(splitDateTimeParts(initialEnd).datePart);
   const [endTime, setEndTime] = useState(splitDateTimeParts(initialEnd).timePart);
-  const [startDateInput, setStartDateInput] = useState(toDisplayDate(splitDateTimeParts(initialStart).datePart));
-  const [endDateInput, setEndDateInput] = useState(toDisplayDate(splitDateTimeParts(initialEnd).datePart));
+  const [activeDateTimePicker, setActiveDateTimePicker] = useState<'start' | 'end' | null>(null);
   const [areas, setAreas] = useState<AreaOption[]>([]);
   const [rooms, setRooms] = useState<RoomOption[]>([]);
   const [tables, setTables] = useState<TableOption[]>([]);
@@ -402,7 +386,6 @@ export default function OrdersPage() {
   const [detailOrder, setDetailOrder] = useState<OrderDetail | null>(null);
   const [detailBreakdownType, setDetailBreakdownType] = useState<'discount' | 'surcharge' | 'subtotal' | null>(null);
   const statusDropdownRef = useRef<HTMLDivElement | null>(null);
-  const [activeTimePicker, setActiveTimePicker] = useState<'start' | 'end' | null>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<OrderRow | null>(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
@@ -430,32 +413,6 @@ export default function OrdersPage() {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ type, message });
     toastTimerRef.current = setTimeout(() => setToast(null), 2800);
-  };
-
-  const commitStartDateInput = () => {
-    const iso = toIsoDateFromDisplay(startDateInput);
-    if (!iso) {
-      setStartDateInput(toDisplayDate(startDate));
-      return;
-    }
-    setStartDateInput(toDisplayDate(iso));
-    if (iso !== startDate) {
-      setStartDate(iso);
-      setPage(1);
-    }
-  };
-
-  const commitEndDateInput = () => {
-    const iso = toIsoDateFromDisplay(endDateInput);
-    if (!iso) {
-      setEndDateInput(toDisplayDate(endDate));
-      return;
-    }
-    setEndDateInput(toDisplayDate(iso));
-    if (iso !== endDate) {
-      setEndDate(iso);
-      setPage(1);
-    }
   };
 
   const resetListFilters = () => {
@@ -522,14 +479,6 @@ export default function OrdersPage() {
     };
     loadOptions().catch(() => undefined);
   }, [branchId]);
-
-  useEffect(() => {
-    setStartDateInput(toDisplayDate(startDate));
-  }, [startDate]);
-
-  useEffect(() => {
-    setEndDateInput(toDisplayDate(endDate));
-  }, [endDate]);
 
   useEffect(() => {
     const loadCreateDraftFromServer = async () => {
@@ -684,27 +633,10 @@ export default function OrdersPage() {
       if (!statusDropdownRef.current.contains(event.target as Node)) {
         setShowStatusDropdown(false);
       }
-      if (!(event.target as HTMLElement).closest('.orders-time-picker')) {
-        setActiveTimePicker(null);
-      }
     };
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
-
-  const hourOptions = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-  const minuteOptions = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
-
-  const setTimeToNow = (target: 'start' | 'end') => {
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
-    if (target === 'start') {
-      setStartTime(`${hh}:${mm}`);
-      return;
-    }
-    setEndTime(`${hh}:${mm}`);
-  };
 
   const saveOrder = async (payload: {
     table: { entityType: 'TABLE' | 'ROOM'; id: string; name: string; areaName: string; roomName?: string | null; roomId?: string | null } | null;
@@ -1659,122 +1591,50 @@ export default function OrdersPage() {
           <label className="orders-filter-col-from-date">
             Từ ngày giờ
             <div className="orders-datetime-custom">
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="dd/mm/yyyy"
-                value={startDateInput}
-                onChange={(event) => setStartDateInput(event.target.value)}
-                onBlur={commitStartDateInput}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    commitStartDateInput();
-                  }
-                }}
-              />
-              <div className="orders-time-picker">
-                <button
-                  type="button"
-                  className="orders-time-trigger"
-                  onClick={() => setActiveTimePicker(activeTimePicker === 'start' ? null : 'start')}
-                >
-                  {startTime}
-                </button>
-                {activeTimePicker === 'start' && (
-                  <div className="orders-time-popover">
-                    <div className="orders-time-columns">
-                      <select
-                        className="orders-time-column"
-                        value={startTime.split(':')[0] || '00'}
-                        size={7}
-                        onChange={(e) => setStartTime(`${e.target.value}:${startTime.split(':')[1] || '00'}`)}
-                      >
-                        {hourOptions.map((hour) => (
-                          <option key={hour} value={hour}>{hour}</option>
-                        ))}
-                      </select>
-                      <select
-                        className="orders-time-column"
-                        value={startTime.split(':')[1] || '00'}
-                        size={7}
-                        onChange={(e) => setStartTime(`${startTime.split(':')[0] || '00'}:${e.target.value}`)}
-                      >
-                        {minuteOptions.map((minute) => (
-                          <option key={minute} value={minute}>{minute}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="orders-time-actions">
-                      <button type="button" onClick={() => setTimeToNow('start')}>Now</button>
-                      <button type="button" className="is-primary" onClick={() => setActiveTimePicker(null)}>OK</button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <button type="button" className="orders-datetime-trigger" onClick={() => setActiveDateTimePicker('start')}>
+                {formatDateTimeVN(toDateFromParts(startDate, startTime).toISOString())}
+              </button>
             </div>
           </label>
 
           <label className="orders-filter-col-to-date">
             Đến ngày giờ
             <div className="orders-datetime-custom">
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="dd/mm/yyyy"
-                value={endDateInput}
-                onChange={(event) => setEndDateInput(event.target.value)}
-                onBlur={commitEndDateInput}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    commitEndDateInput();
-                  }
-                }}
-              />
-              <div className="orders-time-picker">
-                <button
-                  type="button"
-                  className="orders-time-trigger"
-                  onClick={() => setActiveTimePicker(activeTimePicker === 'end' ? null : 'end')}
-                >
-                  {endTime}
-                </button>
-                {activeTimePicker === 'end' && (
-                  <div className="orders-time-popover">
-                    <div className="orders-time-columns">
-                      <select
-                        className="orders-time-column"
-                        value={endTime.split(':')[0] || '00'}
-                        size={7}
-                        onChange={(e) => setEndTime(`${e.target.value}:${endTime.split(':')[1] || '00'}`)}
-                      >
-                        {hourOptions.map((hour) => (
-                          <option key={hour} value={hour}>{hour}</option>
-                        ))}
-                      </select>
-                      <select
-                        className="orders-time-column"
-                        value={endTime.split(':')[1] || '00'}
-                        size={7}
-                        onChange={(e) => setEndTime(`${endTime.split(':')[0] || '00'}:${e.target.value}`)}
-                      >
-                        {minuteOptions.map((minute) => (
-                          <option key={minute} value={minute}>{minute}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="orders-time-actions">
-                      <button type="button" onClick={() => setTimeToNow('end')}>Now</button>
-                      <button type="button" className="is-primary" onClick={() => setActiveTimePicker(null)}>OK</button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <button type="button" className="orders-datetime-trigger" onClick={() => setActiveDateTimePicker('end')}>
+                {formatDateTimeVN(toDateFromParts(endDate, endTime).toISOString())}
+              </button>
             </div>
           </label>
 
         </div>
+
+        {activeDateTimePicker === 'start' && (
+          <DateTimePicker
+            value={toDateFromParts(startDate, startTime)}
+            onChange={(newDate) => {
+              const next = splitDateTimeParts(toDateTimeInputValue(newDate));
+              setStartDate(next.datePart);
+              setStartTime(next.timePart);
+              setPage(1);
+              setActiveDateTimePicker(null);
+            }}
+            onClose={() => setActiveDateTimePicker(null)}
+          />
+        )}
+
+        {activeDateTimePicker === 'end' && (
+          <DateTimePicker
+            value={toDateFromParts(endDate, endTime)}
+            onChange={(newDate) => {
+              const next = splitDateTimeParts(toDateTimeInputValue(newDate));
+              setEndDate(next.datePart);
+              setEndTime(next.timePart);
+              setPage(1);
+              setActiveDateTimePicker(null);
+            }}
+            onClose={() => setActiveDateTimePicker(null)}
+          />
+        )}
 
         <div className="orders-picker-filters orders-picker-filters-second-row">
           <label className="orders-filter-col-area">
