@@ -57,6 +57,7 @@ type Props = {
     };
   }) => Promise<void>;
   onToggleTimeLineTimer?: (lineId: string, action: 'start' | 'stop') => Promise<{ usedMinutes: number; lineTotal: number; timerStatus: 'RUNNING' | 'STOPPED'; startAt?: string | null; stopAt?: string | null }>;
+  onUpdateTimeLineTimestamp?: (lineId: string, field: 'startAt' | 'stopAt', isoValue: string) => Promise<void>;
   onBillItemsChange?: (items: BillItem[]) => void;
   onDraftChange?: (draft: {
     activeTab: 'table' | 'product';
@@ -72,7 +73,7 @@ type Props = {
   }) => void;
 };
 
-export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', orderCode, orderId, initialData, defaultTab = 'table', onToggleTimeLineTimer, onBillItemsChange, onDraftChange }: Props) {
+export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', orderCode, orderId, initialData, defaultTab = 'table', onToggleTimeLineTimer, onUpdateTimeLineTimestamp, onBillItemsChange, onDraftChange }: Props) {
   const { branchId } = useAuth();
   const [activeTab, setActiveTab] = useState<'table' | 'product'>(defaultTab);
   const [selectedTable, setSelectedTable] = useState<SelectableTable | null>(initialData?.selectedTable || null);
@@ -170,6 +171,42 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     ],
   );
 
+  const updateTimestampRef = useRef(onUpdateTimeLineTimestamp);
+  updateTimestampRef.current = onUpdateTimeLineTimestamp;
+
+  const handleUpdateTimeLineTimestamp = useMemo(() => {
+    if (!onUpdateTimeLineTimestamp) return undefined;
+    return async (lineId: string, field: 'startAt' | 'stopAt', isoValue: string) => {
+      setBillItems((prev) => prev.map((item) => {
+        if (item.lineId !== lineId) return item;
+        const nextItem: BillItem = { ...item, [field]: isoValue };
+        if (nextItem.pricingTypeSnapshot !== 'TIME') return nextItem;
+
+        const startIso = nextItem.startAt || null;
+        const stopIso = nextItem.stopAt || null;
+        const startMs = startIso ? Date.parse(startIso) : NaN;
+        const stopMs = stopIso ? Date.parse(stopIso) : NaN;
+
+        if (!Number.isFinite(startMs) || !Number.isFinite(stopMs) || stopMs <= startMs) {
+          return nextItem;
+        }
+
+        const usedMinutes = Math.max(0, Math.ceil((stopMs - startMs) / 60000));
+        const unitPrice = Math.max(0, Math.trunc(Number(nextItem.unitPrice || 0)));
+        const rateMinutes = Math.max(1, Math.trunc(Number(nextItem.timeRateMinutesSnapshot || 1)));
+        const lineTotal = Math.floor((unitPrice * usedMinutes) / rateMinutes);
+
+        return {
+          ...nextItem,
+          usedMinutes,
+          lineTotal,
+        };
+      }));
+      await updateTimestampRef.current?.(lineId, field, isoValue);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setBillItems]);
+
   const executeSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING') => {
     if (billItems.length === 0) return;
 
@@ -224,8 +261,8 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
       : '-';
 
     const lines: string[] = [];
-    lines.push(`Mã hóa đơn: ${orderCode || 'Tạm thời (chưa lưu)'}`);
     lines.push(`Thời gian: ${formatDateTimeVN(new Date().toISOString())}`);
+    lines.push(`Mã HĐ: ${orderCode || 'Tạm thời (chưa lưu)'}`);
     lines.push(`Loại phiếu in: ${label}`);
     lines.push(`Khách hàng: ${customerName || '-'}`);
     lines.push(`Khu vực/Vị trí: ${location}`);
@@ -235,7 +272,12 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     items.forEach((item, index) => {
       const lineTotal = item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0);
       lines.push(`${index + 1}. ${item.productName}`);
-      lines.push(`   SL: ${formatNumberVi(Number(item.quantity || 0))} | Đơn giá: ${formatNumberVi(Number(item.unitPrice || 0))} | Thành tiền: ${formatNumberVi(lineTotal)}`);
+      const quantityLabel = formatNumberVi(Number(item.quantity || 0));
+      if (label === 'Order') {
+        lines.push(`   SL: ${quantityLabel} | ĐVT: ${item.unit || '-'}`);
+      } else {
+        lines.push(`   SL: ${quantityLabel} | Đơn giá: ${formatNumberVi(Number(item.unitPrice || 0))} | Thành tiền: ${formatNumberVi(lineTotal)}`);
+      }
       if (item.note?.trim()) {
         lines.push(`   Ghi chú: ${item.note.trim()}`);
       }
@@ -284,13 +326,14 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     const useFullTotals = items.length === billItems.length;
 
     return {
-      title: label === 'Order' ? 'PHIẾU ORDER' : 'PHIẾU THANH TOÁN',
+      title: label === 'Order' ? 'PHIẾU ORDER' : 'PHIẾU TẠM TÍNH',
       orderCode: orderCode || 'TAM',
       datetime: formatDateTimeVN(new Date().toISOString()),
       customerName: customerName || '-',
       location,
       items: items.map((item) => ({
         name: item.productName,
+        unit: item.unit || '-',
         quantity: Math.max(0, Math.trunc(Number(item.quantity || 0))),
         unitPrice: Math.max(0, Math.trunc(Number(item.unitPrice || 0))),
         lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)))),
@@ -474,6 +517,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
             )
           }
           onToggleTimeLineTimer={onToggleTimer}
+          onUpdateTimeLineTimestamp={handleUpdateTimeLineTimestamp}
           timerLoadingLineIds={timerLoadingLineIds}
           timerErrorLineIds={timerErrorLineIds}
           timerUnsyncedLineIds={timerUnsyncedLineIds}

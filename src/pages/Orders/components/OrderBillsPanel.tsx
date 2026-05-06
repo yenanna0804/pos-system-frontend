@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { BillItem, DuplicateHandling, SelectableTable } from '../types';
 import { getLineAmount, toAmountNumber, toPercentNumber } from '../hooks/useOrderPricing';
 import TimeLineControls from './TimeLineControls';
+import DateTimePicker from './DateTimePicker';
 import './OrdersBillPanel.css';
 
 type AdjustmentMode = 'percent' | 'amount';
@@ -21,6 +22,7 @@ type Props = {
   onUpdateNote: (lineId: string, note: string) => void;
   onUpdateUnitPrice: (lineId: string, unitPrice: number) => void;
   onToggleTimeLineTimer?: (lineId: string, action: 'start' | 'stop') => Promise<void>;
+  onUpdateTimeLineTimestamp?: (lineId: string, field: 'startAt' | 'stopAt', isoValue: string) => Promise<void>;
   timerLoadingLineIds?: string[];
   timerErrorLineIds?: string[];
   timerUnsyncedLineIds?: string[];
@@ -39,6 +41,16 @@ type Props = {
   onPrintInvoice: () => void;
   onPrintOrder: (selectedLineIds: string[]) => void;
   disableSave: boolean;
+};
+
+const formatDateTimeDisplay = (iso: string) => {
+  const d = new Date(iso);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 };
 
 const formatThousands = (value: string) => {
@@ -63,6 +75,7 @@ export default function OrderBillsPanel({
   onUpdateNote,
   onUpdateUnitPrice,
   onToggleTimeLineTimer,
+  onUpdateTimeLineTimestamp,
   timerLoadingLineIds = [],
   timerErrorLineIds = [],
   timerUnsyncedLineIds = [],
@@ -89,6 +102,7 @@ export default function OrderBillsPanel({
   const [customerPaidInput, setCustomerPaidInput] = useState(String(Math.max(0, Math.trunc(initialPaidAmount ?? totalAmount))));
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initialPaymentMethod ?? 'CASH');
   const [autoFillPaid, setAutoFillPaid] = useState(false);
+  const [editingTimeField, setEditingTimeField] = useState<{ lineId: string; field: 'startAt' | 'stopAt'; currentValue: Date } | null>(null);
   const totalLimit = Math.max(0, Math.trunc(totalAmount));
   const allSelected = billItems.length > 0 && selectedLineIds.length === billItems.length;
 
@@ -125,6 +139,25 @@ export default function OrderBillsPanel({
 
   return (
     <aside className="orders-bills-panel">
+      {editingTimeField && onUpdateTimeLineTimestamp && (
+        <DateTimePicker
+          value={editingTimeField.currentValue}
+          onChange={async (newDate) => {
+            const item = billItems.find((b) => b.lineId === editingTimeField.lineId);
+            if (!item) return;
+            const newIso = newDate.toISOString();
+            if (editingTimeField.field === 'stopAt' && item.startAt) {
+              if (newDate.getTime() <= new Date(item.startAt).getTime()) return;
+            }
+            if (editingTimeField.field === 'startAt' && item.stopAt) {
+              if (newDate.getTime() >= new Date(item.stopAt).getTime()) return;
+            }
+            await onUpdateTimeLineTimestamp(editingTimeField.lineId, editingTimeField.field, newIso);
+            setEditingTimeField(null);
+          }}
+          onClose={() => setEditingTimeField(null)}
+        />
+      )}
       <div className="orders-bills-topbar">
         <div className="orders-table-pill">
           {selectedTable
@@ -389,10 +422,28 @@ export default function OrderBillsPanel({
                         Block: {Math.max(1, Math.trunc(Number(item.timeRateMinutesSnapshot || 0)))} phút
                       </small>
                       <small>
-                        Giờ vào: <span className="orders-time-value">{item.startAt ? new Date(item.startAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                        Giờ vào:{' '}
+                        <span
+                          className="orders-time-value"
+                          onClick={() => {
+                            if (!item.startAt || !onUpdateTimeLineTimestamp) return;
+                            setEditingTimeField({ lineId: item.lineId, field: 'startAt', currentValue: new Date(item.startAt) });
+                          }}
+                        >
+                          {item.startAt ? formatDateTimeDisplay(item.startAt) : '—'}
+                        </span>
                       </small>
                       <small>
-                        Giờ ra: <span className="orders-time-value">{item.stopAt ? new Date(item.stopAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                        Giờ ra:{' '}
+                        <span
+                          className="orders-time-value"
+                          onClick={() => {
+                            if (!item.stopAt || !onUpdateTimeLineTimestamp) return;
+                            setEditingTimeField({ lineId: item.lineId, field: 'stopAt', currentValue: new Date(item.stopAt) });
+                          }}
+                        >
+                          {item.stopAt ? formatDateTimeDisplay(item.stopAt) : '—'}
+                        </span>
                       </small>
                     </>
                   )}

@@ -215,7 +215,12 @@
 
 .orders-time-value {
   color: var(--ui-primary, #2563eb);
+  cursor: pointer;
   text-decoration: underline;
+}
+
+.orders-time-value:hover {
+  color: var(--ui-primary-dark, #1d4ed8);
 }
 
 .orders-note-trigger {

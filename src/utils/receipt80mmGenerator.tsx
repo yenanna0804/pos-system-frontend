@@ -62,6 +62,18 @@ const wrapByWidth = (ctx: CanvasRenderingContext2D, text: string, maxWidth: numb
   return lines;
 };
 
+const fitTextToWidth = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
+  const normalized = (text || '').trim().replace(/\s+/g, ' ');
+  if (!normalized) return '-';
+  if (ctx.measureText(normalized).width <= maxWidth) return normalized;
+  const ellipsis = '...';
+  let output = normalized;
+  while (output.length > 1 && ctx.measureText(`${output}${ellipsis}`).width > maxWidth) {
+    output = output.slice(0, -1);
+  }
+  return `${output}${ellipsis}`;
+};
+
 const buildReceiptCanvas = (data: Receipt80mmData) => {
   const normalizedTitle = (data.title || '').trim().toUpperCase();
   const isOrderPrint =
@@ -81,17 +93,20 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const tableRight = marginX + contentWidth;
   const colHashWidth = 30;
   const colSlWidth = 34;
+  const colUnitWidth = isOrderPrint ? 94 : 0;
   const colDgWidth = isOrderPrint ? 0 : 131;
   const colTtWidth = isOrderPrint ? 0 : 140;
 
   const colHashRight = tableLeft + colHashWidth;
-  const colNameRight = tableRight - (colSlWidth + colDgWidth + colTtWidth);
+  const colNameRight = tableRight - (colSlWidth + colUnitWidth + colDgWidth + colTtWidth);
   const colSlRight = colNameRight + colSlWidth;
-  const colDgRight = colSlRight + colDgWidth;
+  const colUnitRight = colSlRight + colUnitWidth;
+  const colDgRight = colUnitRight + colDgWidth;
   const colTtRight = tableRight;
 
   const xHashCenter = tableLeft + Math.floor(colHashWidth / 2);
   const xSlCenter = colNameRight + Math.floor(colSlWidth / 2);
+  const xUnitCenter = colSlRight + Math.floor(colUnitWidth / 2);
   const xName = colHashRight + 10;
   const xUnitRight = colDgRight - 10;
   const xTotalRight = colTtRight - 10;
@@ -106,6 +121,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   for (const item of data.items) {
     estimatedRows += wrapByWidth(sampleCtx, item.name, nameColumnWidth).length;
     if (item.note?.trim()) estimatedRows += wrapByWidth(sampleCtx, `*${item.note.trim()}`, nameColumnWidth).length;
+    if (isOrderPrint) estimatedRows += 1;
   }
   const estimatedHeight = 86 + estimatedRows * lineHeight;
   const height = Math.max(320, Math.min(1700, estimatedHeight));
@@ -123,7 +139,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   ctx.textBaseline = 'top';
 
   let y = 10;
-  const title = isOrderPrint ? 'PHIẾU ORDER' : 'PHIẾU THANH TOÁN';
+  const title = isOrderPrint ? 'PHIẾU ORDER' : 'PHIẾU TẠM TÍNH';
   ctx.font = `bold ${titleSize}px 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
   ctx.textAlign = 'center';
   ctx.fillText(title, width / 2, y);
@@ -141,6 +157,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   };
 
   drawLabelValue('Ngày', data.datetime || formatDateTimeVN(new Date().toISOString()));
+  drawLabelValue('Mã HĐ', data.orderCode || '-');
   drawLabelValue('Vị trí', data.location || '-');
   drawLabelValue('SL khách', `${data.guestCount ?? '-'}`);
   drawLabelValue('Thu ngân', data.cashier || '-');
@@ -157,7 +174,9 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   ctx.fillText('Tên món', xName, y);
   ctx.textAlign = 'center';
   ctx.fillText('SL', xSlCenter, y);
-  if (!isOrderPrint) {
+  if (isOrderPrint) {
+    ctx.fillText('ĐVT', xUnitCenter, y);
+  } else {
     ctx.textAlign = 'right';
     ctx.fillText('ĐG', xUnitRight, y);
     ctx.fillText('TT', xTotalRight, y);
@@ -171,27 +190,23 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     const item = data.items[idx];
     const [baseName, inlineNoteRaw] = item.name.split('*');
     const inlineNote = inlineNoteRaw?.trim();
-    const nameLines = wrapByWidth(ctx, (baseName || '').trim(), nameColumnWidth);
+    const itemName = fitTextToWidth(ctx, (baseName || '').trim(), nameColumnWidth);
 
     ctx.textAlign = 'center';
     ctx.fillText(String(idx + 1), xHashCenter, y);
     ctx.textAlign = 'left';
-    ctx.fillText(nameLines[0], xName, y);
+    ctx.fillText(itemName, xName, y);
 
     ctx.textAlign = 'center';
     ctx.fillText(String(Math.trunc(item.quantity)), xSlCenter, y);
-    if (!isOrderPrint) {
+    if (isOrderPrint) {
+      ctx.fillText((item.unit || '-').trim() || '-', xUnitCenter, y);
+    } else {
       ctx.textAlign = 'right';
       ctx.fillText(toNumberVi(item.unitPrice), xUnitRight, y);
       ctx.fillText(toNumberVi(item.lineTotal), xTotalRight, y);
     }
     y += lineHeight;
-
-    for (let i = 1; i < nameLines.length; i += 1) {
-      ctx.textAlign = 'left';
-      ctx.fillText(nameLines[i], xName, y);
-      y += lineHeight;
-    }
 
     const effectiveNote = item.note?.trim() || inlineNote;
     if (effectiveNote) {
@@ -210,7 +225,9 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   ctx.fillRect(colHashRight, tableTop, 2, tableBottom - tableTop + 2);
   ctx.fillRect(colNameRight, tableTop, 2, tableBottom - tableTop + 2);
   ctx.fillRect(colSlRight, tableTop, 2, tableBottom - tableTop + 2);
-  if (!isOrderPrint) {
+  if (isOrderPrint) {
+    ctx.fillRect(colUnitRight, tableTop, 2, tableBottom - tableTop + 2);
+  } else {
     ctx.fillRect(colDgRight, tableTop, 2, tableBottom - tableTop + 2);
   }
   ctx.fillRect(tableRight, tableTop, 2, tableBottom - tableTop + 2);
