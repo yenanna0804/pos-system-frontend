@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { authService, branchService } from '../../services/api';
 import ProductsPage from '../Products/ProductsPage';
 import TablesPage from '../Tables/TablesPage';
@@ -37,6 +38,7 @@ export default function Dashboard() {
     return 'overview';
   })();
   const isAdmin = user?.role === 'ADMIN';
+  const { canAccessReports, canAccessTables, canAccessPrinters } = usePermissions();
 
   useEffect(() => {
     branchService
@@ -133,30 +135,36 @@ export default function Dashboard() {
     <div className="dashboard">
       <header className="dashboard-header">
         <div className="tab-bar">
-          <button
-            className={`tab-btn ${activeTab === 'overview' ? 'tab-active' : ''}`}
-            onClick={() => navigate('/dashboard')}
-          >
-            Báo cáo tổng quan
-          </button>
+          {canAccessReports && (
+            <button
+              className={`tab-btn ${activeTab === 'overview' ? 'tab-active' : ''}`}
+              onClick={() => navigate('/dashboard')}
+            >
+              Báo cáo tổng quan
+            </button>
+          )}
           <button
             className={`tab-btn ${activeTab === 'products' ? 'tab-active' : ''}`}
             onClick={() => navigate('/product')}
           >
             Hàng hóa
           </button>
-          <button className={`tab-btn ${activeTab === 'tables' ? 'tab-active' : ''}`} onClick={() => navigate('/tables')}>
-            Phòng/bàn
-          </button>
+          {canAccessTables && (
+            <button className={`tab-btn ${activeTab === 'tables' ? 'tab-active' : ''}`} onClick={() => navigate('/tables')}>
+              Phòng/bàn
+            </button>
+          )}
           <button className={`tab-btn ${activeTab === 'orders' ? 'tab-active' : ''}`} onClick={() => navigate('/orders')}>
             Hóa đơn
           </button>
-          <button
-            className={`tab-btn ${activeTab === 'printers' ? 'tab-active' : ''}`}
-            onClick={() => navigate('/printers')}
-          >
-            Thiết lập máy in
-          </button>
+          {canAccessPrinters && (
+            <button
+              className={`tab-btn ${activeTab === 'printers' ? 'tab-active' : ''}`}
+              onClick={() => navigate('/printers')}
+            >
+              Thiết lập máy in
+            </button>
+          )}
         </div>
         <div className="header-right">
           <label className="branch-switcher">

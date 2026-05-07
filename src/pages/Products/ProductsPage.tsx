@@ -5,6 +5,7 @@ import { DeleteActionIcon, EditActionIcon } from '../../components/ActionIcons';
 import FormFieldError from '../../components/FormFieldError';
 import FilterResetButton from '../../components/FilterResetButton';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import './ProductsPage.css';
 
 const API_ASSET_ORIGIN = import.meta.env.VITE_API_ASSET_ORIGIN || import.meta.env.VITE_API_PROXY_TARGET || '';
@@ -195,6 +196,7 @@ const buildDefaultBranchConfigs = (rows: Branch[]): BranchConfig[] =>
 
 export default function ProductsPage() {
   const { branchId: authBranchId } = useAuth();
+  const { canCreateProduct, canEditProduct, canDeleteProduct } = usePermissions();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -1078,18 +1080,22 @@ export default function ProductsPage() {
       <div className="products-toolbar">
         <h2>Danh sách hàng hóa</h2>
         <div className="products-toolbar-actions">
-          <button className="primary-btn" onClick={openCreateModal}>
-            Thêm mới hàng hóa
-          </button>
-          <button
-            className="secondary-btn"
-            onClick={() => {
-              loadCategories().catch(() => pushToast('error', 'Không tải được nhóm hàng hóa'));
-              setIsCategoryOpen(true);
-            }}
-          >
-            Quản lý nhóm hàng hóa
-          </button>
+          {canCreateProduct && (
+            <button className="primary-btn" onClick={openCreateModal}>
+              Thêm mới hàng hóa
+            </button>
+          )}
+          {canCreateProduct && (
+            <button
+              className="secondary-btn"
+              onClick={() => {
+                loadCategories().catch(() => pushToast('error', 'Không tải được nhóm hàng hóa'));
+                setIsCategoryOpen(true);
+              }}
+            >
+              Quản lý nhóm hàng hóa
+            </button>
+          )}
         </div>
       </div>
 
@@ -1173,7 +1179,7 @@ export default function ProductsPage() {
           </select>
         </label>
 
-        {selectedProductIds.length > 0 && (
+        {canDeleteProduct && selectedProductIds.length > 0 && (
           <button type="button" className="danger-btn products-bulk-delete-btn" onClick={onBulkDeleteProducts}>
             Xóa ({selectedProductIds.length})
           </button>
@@ -1204,15 +1210,17 @@ export default function ProductsPage() {
         <table className="products-table">
           <thead>
             <tr>
-              <th className="center-col products-col-checkbox">
-                <input
-                  type="checkbox"
-                  checked={allCurrentPageChecked}
-                  disabled={isSelectingAllProducts}
-                  onChange={(event) => onToggleSelectAllProducts(event.target.checked)}
-                  aria-label="Chọn tất cả hàng hóa"
-                />
-              </th>
+              {canDeleteProduct && (
+                <th className="center-col products-col-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={allCurrentPageChecked}
+                    disabled={isSelectingAllProducts}
+                    onChange={(event) => onToggleSelectAllProducts(event.target.checked)}
+                    aria-label="Chọn tất cả hàng hóa"
+                  />
+                </th>
+              )}
               <th className="center-col">STT</th>
               <th>Mã hàng</th>
               <th>Hình ảnh</th>
@@ -1222,7 +1230,7 @@ export default function ProductsPage() {
               <th className="num-col">Giá vốn</th>
               <th className="num-col">Giá bán</th>
               <th className="num-col">Tồn kho</th>
-              <th>Thao tác</th>
+              {(canEditProduct || canDeleteProduct) && <th>Thao tác</th>}
             </tr>
           </thead>
           <tbody>
@@ -1241,22 +1249,24 @@ export default function ProductsPage() {
             ) : (
               products.map((product, index) => (
                 <tr key={product.id}>
-                  <td className="center-col products-col-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={selectedProductIds.includes(product.id)}
-                      onChange={(event) => {
-                        setSelectedProductIds((prev) => {
-                          if (event.target.checked) {
-                            if (prev.includes(product.id)) return prev;
-                            return [...prev, product.id];
-                          }
-                          return prev.filter((id) => id !== product.id);
-                        });
-                      }}
-                      aria-label={`Chọn hàng hóa ${product.sku}`}
-                    />
-                  </td>
+                  {canDeleteProduct && (
+                    <td className="center-col products-col-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={selectedProductIds.includes(product.id)}
+                        onChange={(event) => {
+                          setSelectedProductIds((prev) => {
+                            if (event.target.checked) {
+                              if (prev.includes(product.id)) return prev;
+                              return [...prev, product.id];
+                            }
+                            return prev.filter((id) => id !== product.id);
+                          });
+                        }}
+                        aria-label={`Chọn hàng hóa ${product.sku}`}
+                      />
+                    </td>
+                  )}
                   <td className="center-col">{(page - 1) * pageSize + index + 1}</td>
                   <td>{product.sku}</td>
                   <td>
@@ -1296,16 +1306,22 @@ export default function ProductsPage() {
                       : Math.trunc(Number(product.price || 0)).toLocaleString('vi-VN')}
                   </td>
                   <td className="num-col">{Number(product.stock || 0).toLocaleString('vi-VN')}</td>
-                  <td>
-                    <div className="row-actions">
-                      <button className="ghost-btn icon-action-btn" title="Sửa" aria-label="Sửa" onClick={() => openEditModal(product)}>
-                        <EditActionIcon />
-                      </button>
-                      <button className="danger-btn icon-action-btn" title="Xóa" aria-label="Xóa" onClick={() => onDeleteProduct(product)}>
-                        <DeleteActionIcon />
-                      </button>
-                    </div>
-                  </td>
+                  {(canEditProduct || canDeleteProduct) && (
+                    <td>
+                      <div className="row-actions">
+                        {canEditProduct && (
+                          <button className="ghost-btn icon-action-btn" title="Sửa" aria-label="Sửa" onClick={() => openEditModal(product)}>
+                            <EditActionIcon />
+                          </button>
+                        )}
+                        {canDeleteProduct && (
+                          <button className="danger-btn icon-action-btn" title="Xóa" aria-label="Xóa" onClick={() => onDeleteProduct(product)}>
+                            <DeleteActionIcon />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))
             )}

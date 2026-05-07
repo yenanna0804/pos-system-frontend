@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { areaService, diningTableService, orderService, roomService } from '../../services/api';
 import { DeleteActionIcon, EditActionIcon } from '../../components/ActionIcons';
 import FilterResetButton from '../../components/FilterResetButton';
@@ -346,6 +347,7 @@ const mapOrderDetailToEditingState = (data: OrderDetail): EditingOrderState => {
 
 export default function OrdersPage() {
   const { branchId } = useAuth();
+  const { canDeleteOrder } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
   const editRouteMatch = useMatch('/orders/:id/edit');
@@ -1509,7 +1511,7 @@ export default function OrdersPage() {
             Thêm mới hóa đơn
           </button>
           <div className="orders-toolbar-secondary-actions">
-            {selectedOrderIds.length > 0 && (
+            {canDeleteOrder && selectedOrderIds.length > 0 && (
               <button type="button" className="danger-btn orders-toolbar-bulk-delete-btn" onClick={() => setShowBulkDeleteConfirm(true)}>
                 Xóa ({selectedOrderIds.length})
               </button>
@@ -1720,15 +1722,17 @@ export default function OrdersPage() {
         <table className="orders-list-table">
           <thead>
             <tr>
-              <th className="orders-col-checkbox">
-                <input
-                  type="checkbox"
-                  checked={allSelectableChecked}
-                  disabled={isSelectingAllOrders}
-                  onChange={(event) => toggleSelectAllOrders(event.target.checked)}
-                  aria-label="Chọn tất cả hóa đơn"
-                />
-              </th>
+              {canDeleteOrder && (
+                <th className="orders-col-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={allSelectableChecked}
+                    disabled={isSelectingAllOrders}
+                    onChange={(event) => toggleSelectAllOrders(event.target.checked)}
+                    aria-label="Chọn tất cả hóa đơn"
+                  />
+                </th>
+              )}
               <th className="orders-col-code">Mã hóa đơn</th>
               <th>Thời gian tạo</th>
               <th className="orders-col-room-table">Phòng/Bàn</th>
@@ -1750,22 +1754,24 @@ export default function OrdersPage() {
             ) : (
               orders.map((order) => (
                 <tr key={order.id}>
-                  <td className="orders-col-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={selectedOrderIds.includes(order.id)}
-                      onChange={(event) => {
-                        setSelectedOrderIds((prev) => {
-                          if (event.target.checked) {
-                            if (prev.includes(order.id)) return prev;
-                            return [...prev, order.id];
-                          }
-                          return prev.filter((id) => id !== order.id);
-                        });
-                      }}
-                      aria-label={`Chọn hóa đơn ${order.code}`}
-                    />
-                  </td>
+                  {canDeleteOrder && (
+                    <td className="orders-col-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={selectedOrderIds.includes(order.id)}
+                        onChange={(event) => {
+                          setSelectedOrderIds((prev) => {
+                            if (event.target.checked) {
+                              if (prev.includes(order.id)) return prev;
+                              return [...prev, order.id];
+                            }
+                            return prev.filter((id) => id !== order.id);
+                          });
+                        }}
+                        aria-label={`Chọn hóa đơn ${order.code}`}
+                      />
+                    </td>
+                  )}
                   <td className="orders-col-code">
                     <button type="button" className="orders-code-link" onClick={() => openOrderDetail(order)}>
                       {order.code}
@@ -1818,16 +1824,18 @@ export default function OrdersPage() {
                           <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
                         </svg>
                       </button>
-                      <button
-                        type="button"
-                        className="danger-btn icon-action-btn"
-                        title="Xóa"
-                        aria-label="Xóa"
-                        onClick={() => onDeleteOrder(order)}
-                        disabled={order.orderState === 'DELETED'}
-                      >
-                        <DeleteActionIcon />
-                      </button>
+                      {canDeleteOrder && (
+                        <button
+                          type="button"
+                          className="danger-btn icon-action-btn"
+                          title="Xóa"
+                          aria-label="Xóa"
+                          onClick={() => onDeleteOrder(order)}
+                          disabled={order.orderState === 'DELETED'}
+                        >
+                          <DeleteActionIcon />
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="orders-icon-btn"

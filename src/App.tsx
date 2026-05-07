@@ -10,17 +10,31 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/" />;
 }
 
+function StaffBlockedRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (user?.role === 'STAFF') return <Navigate to="/product" replace />;
+  return <>{children}</>;
+}
+
+function DefaultRedirect() {
+  const { user } = useAuth();
+  const target = user?.role === 'STAFF' ? '/product' : '/dashboard';
+  return <Navigate to={target} replace />;
+}
+
 function AppRoutes() {
   const { isAuthenticated } = useAuth();
 
   return (
     <Routes>
-      <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/" element={isAuthenticated ? <DefaultRedirect /> : <Login />} />
       <Route
         path="/dashboard"
         element={
           <PrivateRoute>
-            <Dashboard />
+            <StaffBlockedRoute>
+              <Dashboard />
+            </StaffBlockedRoute>
           </PrivateRoute>
         }
       />
@@ -36,7 +50,9 @@ function AppRoutes() {
         path="/tables"
         element={
           <PrivateRoute>
-            <Dashboard />
+            <StaffBlockedRoute>
+              <Dashboard />
+            </StaffBlockedRoute>
           </PrivateRoute>
         }
       />
