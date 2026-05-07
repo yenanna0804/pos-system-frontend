@@ -1,11 +1,17 @@
+const VN_OFFSET = '+07:00';
+
+export const toISOWithVNOffset = (datePart: string, timePart: string, endOfMinute = false): string => {
+  const seconds = endOfMinute ? '59' : '00';
+  return `${datePart}T${timePart}:${seconds}${VN_OFFSET}`;
+};
+
 export const formatDateTimeVN = (iso: string | null | undefined): string => {
   if (!iso) return '-';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '-';
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  const hh = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+  return d.toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
 };

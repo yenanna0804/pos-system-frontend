@@ -5,7 +5,7 @@ import { areaService, diningTableService, orderService, roomService } from '../.
 import { DeleteActionIcon, EditActionIcon } from '../../components/ActionIcons';
 import FilterResetButton from '../../components/FilterResetButton';
 import { printUsingConfiguredRoute, resolveTemplateKeyForPrintFamily } from '../../utils/printerRouting';
-import { formatDateTimeVN } from '../../utils/formatters';
+import { formatDateTimeVN, toISOWithVNOffset } from '../../utils/formatters';
 import type { Receipt80mmData } from '../../utils/receipt80mmGenerator';
 import NewOrderPage from './NewOrderPage';
 import DateTimePicker from './components/DateTimePicker';
@@ -445,8 +445,8 @@ export default function OrdersPage() {
     areaId: areaFilter || undefined,
     roomId: roomFilter || undefined,
     tableId: tableFilter || undefined,
-    startDate: startDate && startTime ? `${startDate}T${startTime}:00` : undefined,
-    endDate: endDate && endTime ? `${endDate}T${endTime}:59` : undefined,
+    startDate: startDate && startTime ? toISOWithVNOffset(startDate, startTime) : undefined,
+    endDate: endDate && endTime ? toISOWithVNOffset(endDate, endTime, true) : undefined,
   });
 
   const loadOrders = async () => {

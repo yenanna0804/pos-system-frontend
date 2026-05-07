@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { categoryService, reportService } from '../../services/api';
 import FilterResetButton from '../../components/FilterResetButton';
 import TooltipInfoButton from '../../components/TooltipInfoButton';
-import { formatDateTimeVN } from '../../utils/formatters';
+import { formatDateTimeVN, toISOWithVNOffset } from '../../utils/formatters';
 import DateTimePicker from '../Orders/components/DateTimePicker';
 import '../Orders/OrdersPage.css';
 import './SalesEndOfDayPage.css';
@@ -93,8 +93,8 @@ export default function ProductReportPage() {
     try {
       const res = await reportService.products({
         branchId,
-        startDate: startDate && startTime ? `${startDate}T${startTime}:00` : undefined,
-        endDate: endDate && endTime ? `${endDate}T${endTime}:59` : undefined,
+        startDate: startDate && startTime ? toISOWithVNOffset(startDate, startTime) : undefined,
+        endDate: endDate && endTime ? toISOWithVNOffset(endDate, endTime, true) : undefined,
         categoryId: categoryFilter || undefined,
       });
       const nextRows: ProductRow[] = Array.isArray(res.data?.rows) ? res.data.rows : [];
