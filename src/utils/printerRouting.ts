@@ -26,7 +26,6 @@ type PrinterSettings = {
 type PrintRouteOptions = {
   receipt80mmData?: Receipt80mmData;
   templateKey?: TemplateKey;
-  rawEscPosBytes?: Uint8Array;
 };
 
 type PrintFamily = 'invoice' | 'order_slip';
@@ -321,7 +320,7 @@ const printViaBridge = async (
   const submitReceipt80mm = async () => {
     const receiptType = settings.receiptType?.trim() || 'HD80';
     await verifyBridgeMapping(bridgeUrl, receiptType);
-    const payload = options?.rawEscPosBytes || await buildReceipt80mmEscPosBytes(options?.receipt80mmData || DEFAULT_RECEIPT_80MM_DATA);
+    const payload = await buildReceipt80mmEscPosBytes(options?.receipt80mmData || DEFAULT_RECEIPT_80MM_DATA);
     await submitBridgeJob(bridgeUrl, {
       id: `receipt-${Date.now()}`,
       type: receiptType,
@@ -346,7 +345,7 @@ const printViaBridge = async (
   const submitOrderSlip80mm = async () => {
     const type = settings.order80mmType?.trim() || 'OD80';
     await verifyBridgeMapping(bridgeUrl, type);
-    const payload = options?.rawEscPosBytes || await buildReceipt80mmEscPosBytes(options?.receipt80mmData || DEFAULT_RECEIPT_80MM_DATA);
+    const payload = await buildReceipt80mmEscPosBytes(options?.receipt80mmData || DEFAULT_RECEIPT_80MM_DATA);
     await submitBridgeJob(bridgeUrl, {
       id: `order-${Date.now()}`,
       type,
@@ -428,7 +427,7 @@ const printViaUsbByPrinterId = async (printerId: string, _content: string, optio
   if (!devices) throw new Error('WebUSB chua san sang');
   const device = devices.find((item) => getDeviceKey(item) === printerId) as UsbWritableDeviceLike | undefined;
   if (!device) throw new Error('Khong tim thay may in da cap quyen');
-  const payload = options?.rawEscPosBytes || await buildReceipt80mmEscPosBytes(options?.receipt80mmData || DEFAULT_RECEIPT_80MM_DATA);
+  const payload = await buildReceipt80mmEscPosBytes(options?.receipt80mmData || DEFAULT_RECEIPT_80MM_DATA);
   await sendEscPosPayloadToUsbPrinter(device, payload);
 };
 

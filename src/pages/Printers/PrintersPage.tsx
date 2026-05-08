@@ -105,22 +105,6 @@ const initialTemplates: TemplateRow[] = [
   { key: 'order_slip_a4', name: 'Phiếu order A4', content: ORDER_SLIP_A4_SAMPLE },
 ];
 
-const VIETNAMESE_CP27_TEST_BYTES = Uint8Array.from([
-  0x1b,
-  0x40,
-  0x1b,
-  0x74,
-  0x1b,
-  0xea,
-  0xf3,
-  0x0a,
-  0x0a,
-  0x1d,
-  0x56,
-  0x42,
-  0x00,
-]);
-
 const getTemplateTabKey = (templateKey: TemplateKey): TemplateTabKey => (
   templateKey === 'order_slip_80mm' || templateKey === 'order_slip_a4' ? 'order' : 'invoice'
 );
@@ -426,18 +410,6 @@ export default function PrintersPage() {
     }
   };
 
-  const onTestVietnameseChar = async () => {
-    setError('');
-    try {
-      await printUsingConfiguredRoute('CP27 test', 'ệ', {
-        templateKey: 'receipt_80mm',
-        rawEscPosBytes: VIETNAMESE_CP27_TEST_BYTES,
-      });
-    } catch (printError: any) {
-      setError(`In test ký tự thất bại: ${printError?.message || 'Lỗi không xác định'}`);
-    }
-  };
-
   const previewTemplate = initialTemplates.find((item) => item.key === previewTemplateKey) || initialTemplates[0];
   const receiptPreviewImage = useMemo(() => {
     if (previewTemplate?.key === 'receipt_80mm') return buildReceipt80mmBitmapDataUrl(DEFAULT_RECEIPT_80MM_DATA);
@@ -453,9 +425,6 @@ export default function PrintersPage() {
           <button className="ghost-btn printers-test-print-btn" onClick={() => onTestPrint().catch(() => undefined)}>
             <PrintActionIcon />
             In thử
-          </button>
-          <button className="ghost-btn" onClick={() => onTestVietnameseChar().catch(() => undefined)}>
-            Test (ệ)
           </button>
           {connectionMode === 'usb' && (
             <>
