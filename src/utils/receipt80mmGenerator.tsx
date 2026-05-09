@@ -25,14 +25,14 @@ export type Receipt80mmData = {
 };
 
 export const DEFAULT_RECEIPT_80MM_DATA: Receipt80mmData = {
-  title: 'PHIẾU THANH TOÁN',
+  title: 'PHIẾU TẠM TÍNH',
   datetime: '09/05/2026 21:16:08',
   location: 'Tầng 1 / Bàn 3',
   guestCount: '2',
   cashier: 'abc',
   items: [
     { name: 'Gà rán *cay nồng đặc biệt', quantity: 1, unitPrice: 15000, lineTotal: 15000 },
-    { name: 'Bia budweisser', quantity: 3, unitPrice: 55000, lineTotal: 165000 },
+    { name: 'Bia budweisser combo đặc biệt', quantity: 3, unitPrice: 55000, lineTotal: 165000 },
   ],
   subtotal: 180000,
   discount: 15000,
@@ -60,18 +60,6 @@ const wrapByWidth = (ctx: CanvasRenderingContext2D, text: string, maxWidth: numb
   }
   if (current) lines.push(current);
   return lines;
-};
-
-const fitTextToWidth = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
-  const normalized = (text || '').trim().replace(/\s+/g, ' ');
-  if (!normalized) return '-';
-  if (ctx.measureText(normalized).width <= maxWidth) return normalized;
-  const ellipsis = '...';
-  let output = normalized;
-  while (output.length > 1 && ctx.measureText(`${output}${ellipsis}`).width > maxWidth) {
-    output = output.slice(0, -1);
-  }
-  return `${output}${ellipsis}`;
 };
 
 const buildReceiptCanvas = (data: Receipt80mmData) => {
@@ -190,12 +178,12 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     const item = data.items[idx];
     const [baseName, inlineNoteRaw] = item.name.split('*');
     const inlineNote = inlineNoteRaw?.trim();
-    const itemName = fitTextToWidth(ctx, (baseName || '').trim(), nameColumnWidth);
+    const nameLines = wrapByWidth(ctx, (baseName || '').trim(), nameColumnWidth);
 
     ctx.textAlign = 'center';
     ctx.fillText(String(idx + 1), xHashCenter, y);
     ctx.textAlign = 'left';
-    ctx.fillText(itemName, xName, y);
+    ctx.fillText(nameLines[0] || '-', xName, y);
 
     ctx.textAlign = 'center';
     ctx.fillText(String(Math.trunc(item.quantity)), xSlCenter, y);
@@ -207,6 +195,12 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
       ctx.fillText(toNumberVi(item.lineTotal), xTotalRight, y);
     }
     y += lineHeight;
+
+    for (let nameLineIdx = 1; nameLineIdx < nameLines.length; nameLineIdx += 1) {
+      ctx.textAlign = 'left';
+      ctx.fillText(nameLines[nameLineIdx], xName, y);
+      y += lineHeight;
+    }
 
     const effectiveNote = item.note?.trim() || inlineNote;
     if (effectiveNote) {
