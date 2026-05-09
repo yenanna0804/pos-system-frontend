@@ -269,6 +269,7 @@ const buildOrder80mmData = (order: OrderDetail): Receipt80mmData => {
       unit: item.unit || '-',
       quantity: Math.max(0, Math.trunc(Number(item.quantity || 0))),
       unitPrice: Math.max(0, Math.trunc(Number(item.unitPrice || 0))),
+      discount: Math.max(0, Math.trunc(Number(item.lineDiscountAmount || 0))),
       lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)))),
     })),
     subtotal: Math.max(0, Math.trunc(Number(order.totalAmount || 0))),

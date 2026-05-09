@@ -5,6 +5,7 @@ export type Receipt80mmItem = {
   unit?: string;
   quantity: number;
   unitPrice: number;
+  discount?: number;
   lineTotal: number;
   note?: string;
 };
@@ -37,14 +38,15 @@ export const DEFAULT_RECEIPT_80MM_DATA: Receipt80mmData = {
       note: "\nTổng thời gian: 1h20'\n23:40 -> 01:00 (1h20')",
       quantity: 1,
       unitPrice: 15000,
+      discount: 10,
       lineTotal: 15000,
     },
     {
       name: 'Bia budweisser combo đặc biệt',
       note: "12 x chai, hoa quả, khăn ướt",
-      quantity: 3,
-      unitPrice: 55000,
-      lineTotal: 165000
+      quantity: 10,
+      unitPrice: 10000000,
+      lineTotal: 100000000
     },
   ],
   subtotal: 180000,
@@ -95,22 +97,25 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const colHashWidth = 30;
   const colSlWidth = 34;
   const colUnitWidth = isOrderPrint ? 94 : 0;
-  const colDgWidth = isOrderPrint ? 0 : 90;
-  const colTtWidth = isOrderPrint ? 0 : 95;
+  const colDgWidth = isOrderPrint ? 0 : 96;
+  const colKmWidth = isOrderPrint ? 0 : 46;
+  const colTtWidth = isOrderPrint ? 0 : 96;
 
   const colHashRight = tableLeft + colHashWidth;
-  const colNameRight = tableRight - (colSlWidth + colUnitWidth + colDgWidth + colTtWidth);
+  const colNameRight = tableRight - (colSlWidth + colUnitWidth + colDgWidth + colKmWidth + colTtWidth);
   const colSlRight = colNameRight + colSlWidth;
   const colUnitRight = colSlRight + colUnitWidth;
   const colDgRight = colUnitRight + colDgWidth;
+  const colKmRight = colDgRight + colKmWidth;
   const colTtRight = tableRight;
 
   const xHashCenter = tableLeft + Math.floor(colHashWidth / 2);
   const xSlCenter = colNameRight + Math.floor(colSlWidth / 2);
   const xUnitCenter = colSlRight + Math.floor(colUnitWidth / 2);
+  const xKmCenter = colDgRight + Math.floor(colKmWidth / 2);
   const xName = colHashRight + 10;
-  const xUnitRight = colDgRight - 10;
-  const xTotalRight = colTtRight - 10;
+  const xUnitRight = colDgRight - 4;
+  const xTotalRight = colTtRight - 4;
   const nameColumnWidth = colNameRight - xName - 8;
   const noteX = xName;
   const noteColumnWidth = tableRight - noteX - 8;
@@ -201,6 +206,9 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   } else {
     ctx.textAlign = 'right';
     ctx.fillText('ĐG', xUnitRight, y);
+    ctx.textAlign = 'center';
+    ctx.fillText('%KM', xKmCenter, y);
+    ctx.textAlign = 'right';
     ctx.fillText('TT', xTotalRight, y);
   }
   y += lineHeight;
@@ -224,6 +232,9 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     } else {
       ctx.textAlign = 'right';
       ctx.fillText(toNumberVi(item.unitPrice), xUnitRight, y);
+      ctx.textAlign = 'center';
+      ctx.fillText(toNumberVi(Math.abs(Number(item.discount || 0))), xKmCenter, y);
+      ctx.textAlign = 'right';
       ctx.fillText(toNumberVi(item.lineTotal), xTotalRight, y);
     }
     y += lineHeight;
@@ -291,6 +302,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     drawVerticalWithMergedBands(colUnitRight, mergedRowBands);
   } else {
     drawVerticalWithMergedBands(colDgRight, mergedRowBands);
+    drawVerticalWithMergedBands(colKmRight, mergedRowBands);
   }
   ctx.fillRect(tableRight, tableTop, 2, tableBottom - tableTop + 2);
   y += 12;
