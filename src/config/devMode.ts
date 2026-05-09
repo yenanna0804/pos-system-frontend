@@ -1,4 +1,4 @@
-export const isDevMode = import.meta.env.VITE_DEV_MODE === 'true';
+export const isDevMode = import.meta.env.DEV || import.meta.env.VITE_DEV_MODE === 'true';
 
 export const DEV_BRANCHES = [
   { id: 'branch-hcm', name: 'Chi nhanh HCM' },
