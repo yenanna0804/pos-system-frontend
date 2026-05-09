@@ -153,6 +153,20 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Khong tao duoc canvas bitmap');
 
+  const finalizeCanvasHeight = (usedHeight: number) => {
+    const minFinalHeight = 260;
+    const trimmedHeight = Math.max(minFinalHeight, Math.min(height, Math.ceil(usedHeight)));
+    if (trimmedHeight >= height) return canvas;
+    const trimmedCanvas = document.createElement('canvas');
+    trimmedCanvas.width = width;
+    trimmedCanvas.height = trimmedHeight;
+    const trimmedCtx = trimmedCanvas.getContext('2d');
+    if (!trimmedCtx) return canvas;
+    trimmedCtx.imageSmoothingEnabled = false;
+    trimmedCtx.drawImage(canvas, 0, 0, width, trimmedHeight, 0, 0, width, trimmedHeight);
+    return trimmedCanvas;
+  };
+
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, width, height);
@@ -313,7 +327,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     ctx.fillText('Vui lòng kiểm tra kỹ lại nội dung', width / 2, y);
     y += lineHeight;
     ctx.fillText('trước khi chế biến', width / 2, y);
-    return canvas;
+    return finalizeCanvasHeight(y + lineHeight + 8);
   }
 
   const drawSummary = (label: string, value: string) => {
@@ -340,7 +354,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   y += lineHeight;
   ctx.fillText('trước khi thanh toán', width / 2, y);
 
-  return canvas;
+  return finalizeCanvasHeight(y + lineHeight + 8);
 };
 
 export const buildReceipt80mmBitmapDataUrl = (data?: Receipt80mmData) => {
