@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { areaService, diningTableService, roomService } from '../../../services/api';
+import { PAGE_SIZE } from '../../../config/constants';
 import type { SelectableTable } from '../types';
 
 type Area = {
@@ -40,7 +41,7 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
   const [page, setPage] = useState(1);
   const [error, setError] = useState('');
 
-  const pageSize = 7;
+  const pageSize = PAGE_SIZE;
 
   const loadAll = async () => {
     const [areasRes, roomsRes, tablesRes] = await Promise.all([

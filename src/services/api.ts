@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { STORAGE_KEYS } from '../config/constants';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -10,7 +11,7 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
   if (token) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
@@ -21,8 +22,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    const message = error.response?.data?.message || 'Có lỗi xảy ra';
-    return Promise.reject(message);
+    return Promise.reject({
+      message: error.response?.data?.message || 'Có lỗi xảy ra',
+      statusCode: error.response?.status,
+      reason: error.response?.data?.reason,
+    });
   }
 );
 

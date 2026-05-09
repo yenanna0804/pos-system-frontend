@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { DEV_USER, isDevMode } from '../config/devMode';
+import { STORAGE_KEYS } from '../config/constants';
 
 interface User {
   id: string;
@@ -32,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setActiveBranchId = (id: string) => {
     setBranchId(id);
-    localStorage.setItem('branchId', id);
+    localStorage.setItem(STORAGE_KEYS.BRANCH_ID, id);
   };
 
   useEffect(() => {
@@ -40,26 +41,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (isDevMode) {
         setUser(DEV_USER);
         setBranchId(DEV_USER.branchId);
-        localStorage.setItem('user', JSON.stringify(DEV_USER));
-        localStorage.setItem('token', 'dev-token');
-        localStorage.setItem('branchId', DEV_USER.branchId);
-        localStorage.setItem('tokenExpiry', String(Date.now() + TOKEN_TTL_MS));
+        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(DEV_USER));
+        localStorage.setItem(STORAGE_KEYS.TOKEN, 'dev-token');
+        localStorage.setItem(STORAGE_KEYS.BRANCH_ID, DEV_USER.branchId);
+        localStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, String(Date.now() + TOKEN_TTL_MS));
         setIsInitialized(true);
         return;
       }
 
-      const storedUser = localStorage.getItem('user');
-      const storedToken = localStorage.getItem('token');
-      const storedBranchId = localStorage.getItem('branchId');
-      const tokenExpiryRaw = localStorage.getItem('tokenExpiry');
+      const storedUser = localStorage.getItem(STORAGE_KEYS.USER);
+      const storedToken = localStorage.getItem(STORAGE_KEYS.TOKEN);
+      const storedBranchId = localStorage.getItem(STORAGE_KEYS.BRANCH_ID);
+      const tokenExpiryRaw = localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRY);
 
       if (tokenExpiryRaw) {
         const tokenExpiry = Number(tokenExpiryRaw);
         if (!Number.isFinite(tokenExpiry) || tokenExpiry <= Date.now()) {
-          localStorage.removeItem('user');
-          localStorage.removeItem('token');
-          localStorage.removeItem('branchId');
-          localStorage.removeItem('tokenExpiry');
+          localStorage.removeItem(STORAGE_KEYS.USER);
+          localStorage.removeItem(STORAGE_KEYS.TOKEN);
+          localStorage.removeItem(STORAGE_KEYS.BRANCH_ID);
+          localStorage.removeItem(STORAGE_KEYS.TOKEN_EXPIRY);
           setIsInitialized(true);
           return;
         }
@@ -73,10 +74,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Corrupted localStorage should not block app bootstrap.
       setUser(null);
       setBranchId('');
-      localStorage.removeItem('user');
-      localStorage.removeItem('token');
-      localStorage.removeItem('branchId');
-      localStorage.removeItem('tokenExpiry');
+      localStorage.removeItem(STORAGE_KEYS.USER);
+      localStorage.removeItem(STORAGE_KEYS.TOKEN);
+      localStorage.removeItem(STORAGE_KEYS.BRANCH_ID);
+      localStorage.removeItem(STORAGE_KEYS.TOKEN_EXPIRY);
     } finally {
       setIsInitialized(true);
     }
@@ -84,17 +85,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = (user: User, token: string) => {
     setUser(user);
-    localStorage.setItem('user', JSON.stringify(user));
-    localStorage.setItem('token', token);
-    localStorage.setItem('tokenExpiry', String(Date.now() + TOKEN_TTL_MS));
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+    localStorage.setItem(STORAGE_KEYS.TOKEN, token);
+    localStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, String(Date.now() + TOKEN_TTL_MS));
   };
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
-    localStorage.removeItem('branchId');
-    localStorage.removeItem('tokenExpiry');
+    localStorage.removeItem(STORAGE_KEYS.USER);
+    localStorage.removeItem(STORAGE_KEYS.TOKEN);
+    localStorage.removeItem(STORAGE_KEYS.BRANCH_ID);
+    localStorage.removeItem(STORAGE_KEYS.TOKEN_EXPIRY);
   };
 
   return (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { BillItem, DuplicateHandling, SelectableTable } from '../types';
 import { getLineAmount, toAmountNumber, toPercentNumber } from '../hooks/useOrderPricing';
+import { formatDateTimeVN, formatThousands, toMoney } from '../../../utils/formatters';
 import TimeLineControls from './TimeLineControls';
 import DateTimePicker from './DateTimePicker';
 import './OrdersBillPanel.css';
@@ -44,23 +45,7 @@ type Props = {
   disableSave: boolean;
 };
 
-const formatDateTimeDisplay = (iso: string) => {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '-';
-  return d.toLocaleString('vi-VN', {
-    timeZone: 'Asia/Ho_Chi_Minh',
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  });
-};
-
-const formatThousands = (value: string) => {
-  const digits = value.replace(/\D/g, '');
-  if (!digits) return '';
-  return Number(digits).toLocaleString('vi-VN');
-};
-
-const toMoney = (value: unknown) => Math.max(0, Math.trunc(Number(value) || 0));
+const formatDateTimeDisplay = formatDateTimeVN;
 
 export default function OrderBillsPanel({
   selectedTable,

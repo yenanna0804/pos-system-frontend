@@ -1,15 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { categoryService, productService } from '../../../services/api';
+import { resolveImageUrl } from '../../../utils/formatters';
+import { PAGE_SIZE, SEARCH_DEBOUNCE_MS } from '../../../config/constants';
 import type { ProductOption } from '../types';
-
-const API_ASSET_ORIGIN = import.meta.env.VITE_API_ASSET_ORIGIN || import.meta.env.VITE_API_PROXY_TARGET || '';
-
-const resolveImageUrl = (url?: string) => {
-  if (!url) return '';
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  if (url.startsWith('/')) return API_ASSET_ORIGIN ? `${API_ASSET_ORIGIN}${url}` : url;
-  return url;
-};
 
 type Category = {
   id: string;
@@ -53,7 +46,7 @@ export default function OrdersProductPicker({ branchId, onAddProduct }: Props) {
   const [isListLoading, setIsListLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const pageSize = 7;
+  const pageSize = PAGE_SIZE;
 
   const loadCategories = async () => {
     const categoryRows: Category[] = (await categoryService.list()).data || [];
@@ -106,7 +99,7 @@ export default function OrdersProductPicker({ branchId, onAddProduct }: Props) {
     searchTimeoutRef.current = setTimeout(() => {
       setDebouncedSearch(searchTerm.trim());
       setPage(1);
-    }, 400);
+    }, SEARCH_DEBOUNCE_MS);
 
     return () => {
       if (searchTimeoutRef.current) {

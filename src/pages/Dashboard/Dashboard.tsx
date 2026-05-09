@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { authService, branchService } from '../../services/api';
+import { getErrorMessage } from '../../utils/errorHelpers';
 import ProductsPage from '../Products/ProductsPage';
 import TablesPage from '../Tables/TablesPage';
 import OrdersPage from '../Orders/OrdersPage';
@@ -114,7 +115,7 @@ export default function Dashboard() {
         setPasswordSuccess('');
       }, 900);
     } catch (error) {
-      setPasswordError(typeof error === 'string' ? error : 'Không thể đổi mật khẩu');
+      setPasswordError(getErrorMessage(error));
     } finally {
       setIsChangingPassword(false);
     }

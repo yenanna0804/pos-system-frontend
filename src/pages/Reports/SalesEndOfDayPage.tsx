@@ -3,7 +3,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { areaService, diningTableService, orderService, reportService, roomService } from '../../services/api';
 import FilterResetButton from '../../components/FilterResetButton';
 import TooltipInfoButton from '../../components/TooltipInfoButton';
-import { formatDateTimeVN, toISOWithVNOffset } from '../../utils/formatters';
+import { formatDateTimeVN, formatNumberVi, formatUnitPriceDisplay, ORDER_STATE_CLASS, ORDER_STATE_LABEL, paymentMethodLabel, splitDateTimeParts, toDateFromParts, toDateTimeInputValue, toISOWithVNOffset } from '../../utils/formatters';
+import { getErrorMessage } from '../../utils/errorHelpers';
 import DateTimePicker from '../Orders/components/DateTimePicker';
 import '../Orders/OrdersPage.css';
 import './SalesEndOfDayPage.css';
@@ -78,35 +79,9 @@ type OrderDetail = {
   items: OrderDetailItem[];
 };
 
-const toMoneyText = (value: number) => Math.trunc(Number(value || 0)).toLocaleString('vi-VN');
-const paymentMethodLabel = (method: 'CASH' | 'BANKING' | null) => {
-  if (method === 'CASH') return 'Tiền mặt';
-  if (method === 'BANKING') return 'Chuyển khoản';
-  return '-';
-};
-
-const formatUnitPriceDisplay = (price: number, pricingType?: 'FIXED' | 'TIME', rateMinutes?: number) => {
-  const normalizedPrice = Math.max(0, Math.trunc(Number(price || 0))).toLocaleString('vi-VN');
-  if (pricingType !== 'TIME') return normalizedPrice;
-  const minutes = Math.max(1, Math.trunc(Number(rateMinutes || 0)));
-  return `${normalizedPrice} / ${minutes} phút`;
-};
-
-const orderStateLabel: Record<'DRAFT' | 'PAID' | 'PARTIAL' | 'UNPAID' | 'DELETED', string> = {
-  DRAFT: 'Nháp',
-  PAID: 'Đã thanh toán',
-  DELETED: 'Đã xóa',
-  PARTIAL: 'Nợ',
-  UNPAID: 'Chưa thanh toán',
-};
-
-const orderStateClass: Record<'DRAFT' | 'PAID' | 'PARTIAL' | 'UNPAID' | 'DELETED', string> = {
-  DRAFT: 'orders-status-tag is-draft',
-  PAID: 'orders-status-tag is-paid',
-  DELETED: 'orders-status-tag is-deleted',
-  PARTIAL: 'orders-status-tag is-partial',
-  UNPAID: 'orders-status-tag is-unpaid',
-};
+const toMoneyText = formatNumberVi;
+const orderStateLabel = ORDER_STATE_LABEL;
+const orderStateClass = ORDER_STATE_CLASS;
 
 const toDisplayDate = (isoDate: string) => {
   const raw = String(isoDate || '').trim();
@@ -137,25 +112,6 @@ const formatDateTimeFromParts = (dateText: string, timeText: string) => {
   return `${d} ${t}`.trim();
 };
 
-const toDateTimeInputValue = (value: Date) => {
-  const y = value.getFullYear();
-  const m = String(value.getMonth() + 1).padStart(2, '0');
-  const d = String(value.getDate()).padStart(2, '0');
-  const h = String(value.getHours()).padStart(2, '0');
-  const min = String(value.getMinutes()).padStart(2, '0');
-  return `${y}-${m}-${d}T${h}:${min}`;
-};
-
-const splitDateTimeParts = (value: string) => {
-  const [datePart, timePart] = value.split('T');
-  const [hourPart = '00', minutePart = '00'] = (timePart || '00:00').split(':');
-  return { datePart, timePart: `${hourPart}:${minutePart}` };
-};
-
-const toDateFromParts = (datePart: string, timePart: string) => {
-  const parsed = new Date(`${datePart}T${timePart}:00`);
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-};
 
 export default function SalesEndOfDayPage() {
   const { branchId } = useAuth();

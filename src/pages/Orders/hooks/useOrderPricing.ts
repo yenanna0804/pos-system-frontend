@@ -1,10 +1,9 @@
 import { useMemo } from 'react';
 import type { BillItem } from '../types';
 import { orderFeatureFlags } from '../orderFeatureFlags';
+import { toMoney } from '../../../utils/formatters';
 
 export type AdjustmentMode = 'percent' | 'amount';
-
-const toMoney = (value: unknown) => Math.max(0, Math.trunc(Number(value) || 0));
 
 export const toAmountNumber = (value: string) => {
   const numeric = Number(value.replace(/\D/g, ''));

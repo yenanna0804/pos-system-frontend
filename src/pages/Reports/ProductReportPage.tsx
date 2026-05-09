@@ -2,8 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { categoryService, reportService } from '../../services/api';
 import FilterResetButton from '../../components/FilterResetButton';
-import TooltipInfoButton from '../../components/TooltipInfoButton';
-import { formatDateTimeVN, toISOWithVNOffset } from '../../utils/formatters';
+import { formatDateTimeVN, formatNumberVi, splitDateTimeParts, toDateFromParts, toDateTimeInputValue, toISOWithVNOffset } from '../../utils/formatters';
 import DateTimePicker from '../Orders/components/DateTimePicker';
 import '../Orders/OrdersPage.css';
 import './SalesEndOfDayPage.css';
@@ -35,28 +34,31 @@ type ProductRow = {
   orderDetails: OrderDetail[];
 };
 
-const fmt = (v: number) => Math.trunc(Number(v || 0)).toLocaleString('vi-VN');
+const fmt = formatNumberVi;
+const splitParts = splitDateTimeParts;
 
-const toDateTimeInputValue = (d: Date) => {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+type GroupedProduct = {
+  productId: string;
+  productName: string;
+  unit: string | null;
+  totalQuantity: number;
+  netAmount: number;
 };
 
-const splitParts = (v: string) => {
-  const [datePart, timePart] = v.split('T');
-  const [h = '00', m = '00'] = (timePart || '').split(':');
-  return { datePart, timePart: `${h}:${m}` };
-};
-
-const toDateFromParts = (datePart: string, timePart: string) => {
-  const parsed = new Date(`${datePart}T${timePart}:00`);
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+type GroupedCategory = {
+  categoryId: string;
+  categoryName: string;
+  totalQuantity: number;
+  totalRevenue: number;
+  products: GroupedProduct[];
 };
 
 export default function ProductReportPage() {
   const { branchId } = useAuth();
   const now = useMemo(() => new Date(), []);
-  const initStart = splitParts(toDateTimeInputValue(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0)));
+  const initStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0);
+  initStartDate.setDate(initStartDate.getDate() - 1);
+  const initStart = splitParts(toDateTimeInputValue(initStartDate));
   const initEnd = splitParts(toDateTimeInputValue(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59)));
 
   const [startDate, setStartDate] = useState(initStart.datePart);
@@ -67,8 +69,6 @@ export default function ProductReportPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
   const [rows, setRows] = useState<ProductRow[]>([]);
-  const [expandedIds, setExpandedIds] = useState<string[]>([]);
-  const [openTooltip, setOpenTooltip] = useState<{ key: string; top: number; left: number } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -76,14 +76,6 @@ export default function ProductReportPage() {
     categoryService.list().then((res) => {
       setCategories(Array.isArray(res.data) ? res.data : []);
     }).catch(() => setCategories([]));
-  }, []);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement).closest('.col-th-tooltip-anchor')) setOpenTooltip(null);
-    };
-    window.addEventListener('mousedown', handler);
-    return () => window.removeEventListener('mousedown', handler);
   }, []);
 
   const loadReport = async () => {
@@ -99,7 +91,6 @@ export default function ProductReportPage() {
       });
       const nextRows: ProductRow[] = Array.isArray(res.data?.rows) ? res.data.rows : [];
       setRows(nextRows);
-      setExpandedIds([]);
     } catch {
       setError('Không tải được báo cáo hàng hóa');
     } finally {
@@ -113,34 +104,53 @@ export default function ProductReportPage() {
   }, [branchId, startDate, startTime, endDate, endTime, categoryFilter]);
 
   const resetFilters = () => {
-    const s = splitParts(toDateTimeInputValue(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0)));
+    const resetStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0);
+    resetStartDate.setDate(resetStartDate.getDate() - 1);
+    const s = splitParts(toDateTimeInputValue(resetStartDate));
     const e = splitParts(toDateTimeInputValue(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59)));
     setStartDate(s.datePart); setStartTime(s.timePart);
     setEndDate(e.datePart); setEndTime(e.timePart);
     setCategoryFilter('');
   };
 
-  const toggleExpand = (productId: string) =>
-    setExpandedIds((prev) => prev.includes(productId) ? prev.filter((x) => x !== productId) : [...prev, productId]);
+  const groupedRows = useMemo<GroupedCategory[]>(() => {
+    const grouped = new Map<string, GroupedCategory>();
+    for (const row of rows) {
+      const key = row.categoryId || '__uncategorized__';
+      const categoryName = row.categoryName || 'Chưa phân nhóm';
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          categoryId: key,
+          categoryName,
+          totalQuantity: 0,
+          totalRevenue: 0,
+          products: [],
+        });
+      }
+      const group = grouped.get(key)!;
+      group.totalQuantity += Number(row.totalQuantity || 0);
+      group.totalRevenue += Number(row.netAmount || 0);
+      group.products.push({
+        productId: row.productId,
+        productName: row.productName,
+        unit: row.unit,
+        totalQuantity: Number(row.totalQuantity || 0),
+        netAmount: Number(row.netAmount || 0),
+      });
+    }
 
-  const colTooltips: [string, string, string, string][] = [
-    ['qty',    'SL bán',        'Số lượng bán',      'Tổng số lượng sản phẩm được bán trong kỳ báo cáo (tính trên các hóa đơn đã thanh toán).'],
-    ['gross',  'DT gộp',        'Doanh thu gộp',     'Giá bán gốc × Số lượng, trước khi áp dụng bất kỳ giảm giá hay phí dịch vụ nào.'],
-    ['disc',   'Giảm giá',      'Giảm giá',          'Tổng số tiền giảm giá đã áp dụng cho sản phẩm này trong các hóa đơn của kỳ báo cáo.'],
-    ['surch',  'Phí dịch vụ',   'Phí dịch vụ',       'Tổng phí dịch vụ áp dụng riêng cho sản phẩm này trong các hóa đơn (ví dụ: phụ phí theo dòng món).'],
-    ['net',    'DT thuần',      'Doanh thu thuần',   'DT gộp − Giảm giá + Phí dịch vụ. Đây là số tiền thực thu được từ sản phẩm này sau tất cả điều chỉnh.'],
-    ['cost',   'Giá vốn',       'Giá vốn đơn vị',   'Giá nhập hàng (giá vốn) đã khai báo trong danh mục sản phẩm. Nếu chưa khai báo sẽ hiển thị "−".'],
-    ['profit', 'LN gộp',        'Lợi nhuận gộp',    'DT thuần − (Giá vốn × Số lượng). Phản ánh lợi nhuận trước chi phí vận hành. Chỉ tính khi sản phẩm có giá vốn.'],
-  ];
+    return Array.from(grouped.values())
+      .map((group) => ({
+        ...group,
+        products: [...group.products].sort((a, b) => a.productName.localeCompare(b.productName, 'vi')),
+      }))
+      .sort((a, b) => a.categoryName.localeCompare(b.categoryName, 'vi'));
+  }, [rows]);
 
   const totals = useMemo(() => rows.reduce((acc, r) => ({
-    totalQuantity: acc.totalQuantity + r.totalQuantity,
-    grossAmount: acc.grossAmount + r.grossAmount,
-    discountAmount: acc.discountAmount + r.discountAmount,
-    surchargeAmount: acc.surchargeAmount + r.surchargeAmount,
-    netAmount: acc.netAmount + r.netAmount,
-    grossProfit: acc.grossProfit != null && r.grossProfit != null ? acc.grossProfit + r.grossProfit : null,
-  }), { totalQuantity: 0, grossAmount: 0, discountAmount: 0, surchargeAmount: 0, netAmount: 0, grossProfit: 0 as number | null }), [rows]);
+    totalQuantity: acc.totalQuantity + Number(r.totalQuantity || 0),
+    totalRevenue: acc.totalRevenue + Number(r.netAmount || 0),
+  }), { totalQuantity: 0, totalRevenue: 0 }), [rows]);
 
   const exportToCsv = () => {
     const esc = (v: string) => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
@@ -148,14 +158,14 @@ export default function ProductReportPage() {
     out.push(['BÁO CÁO HÀNG HÓA']);
     out.push([`Từ: ${startDate} ${startTime}  Đến: ${endDate} ${endTime}`]);
     out.push([]);
-    out.push(['Tên sản phẩm', 'Danh mục', 'ĐVT', 'SL bán', 'DT gộp', 'Giảm giá', 'Phí dịch vụ', 'DT thuần', 'Giá vốn', 'LN gộp']);
-    for (const r of rows) {
-      out.push([r.productName, r.categoryName, r.unit || '-', String(Math.trunc(r.totalQuantity)), String(Math.trunc(r.grossAmount)), String(Math.trunc(r.discountAmount)), String(Math.trunc(r.surchargeAmount)), String(Math.trunc(r.netAmount)), r.costPrice != null ? String(Math.trunc(r.costPrice)) : '-', r.grossProfit != null ? String(Math.trunc(r.grossProfit)) : '-']);
-      for (const o of r.orderDetails) {
-        out.push([`  ${o.orderCode}`, formatDateTimeVN(o.createdAt), '', String(Math.trunc(o.quantity)), '', '', '', String(Math.trunc(o.lineTotal)), '', '']);
+    out.push(['Tên nhóm/món', 'ĐVT', 'SL', 'Doanh thu']);
+    for (const group of groupedRows) {
+      out.push([`Nhóm: ${group.categoryName}`, '', String(Math.trunc(group.totalQuantity)), String(Math.trunc(group.totalRevenue))]);
+      for (const product of group.products) {
+        out.push([`  ${product.productName}`, product.unit || '-', String(Math.trunc(product.totalQuantity)), String(Math.trunc(product.netAmount))]);
       }
     }
-    out.push(['TỔNG CỘNG', '', '', String(Math.trunc(totals.totalQuantity)), String(Math.trunc(totals.grossAmount)), String(Math.trunc(totals.discountAmount)), String(Math.trunc(totals.surchargeAmount)), String(Math.trunc(totals.netAmount)), '-', totals.grossProfit != null ? String(Math.trunc(totals.grossProfit)) : '-']);
+    out.push(['TỔNG CỘNG', '', String(Math.trunc(totals.totalQuantity)), String(Math.trunc(totals.totalRevenue))]);
     const csv = out.map((r) => r.map(esc).join(',')).join('\r\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -244,98 +254,46 @@ export default function ProductReportPage() {
         <table className="sales-report-table">
           <thead>
             <tr>
-              <th>Tên sản phẩm</th>
-              <th>Danh mục</th>
+              <th>Tên nhóm/món</th>
               <th>ĐVT</th>
-              {(colTooltips).map(([key, label, title]) => (
-                <th key={key} className="num-col">
-                  <span className="col-th-wrap">
-                    {label}
-                    <span className="col-th-tooltip-anchor">
-                      <TooltipInfoButton
-                        label={title}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (openTooltip?.key === key) { setOpenTooltip(null); return; }
-                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                          setOpenTooltip({ key, top: rect.bottom + 8, left: Math.max(16, rect.right - 260) });
-                        }}
-                      />
-                    </span>
-                  </span>
-                </th>
-              ))}
+              <th className="num-col">SL</th>
+              <th className="num-col">Doanh thu</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={10} className="sales-report-empty">Chưa có dữ liệu</td></tr>
+              <tr><td colSpan={4} className="sales-report-empty">Chưa có dữ liệu</td></tr>
             ) : (
               <>
                 <tr className="product-report-total-row">
-                  <td colSpan={3}><strong>Tổng cộng ({rows.length} sản phẩm)</strong></td>
+                  <td colSpan={2}><strong>Tổng cộng ({rows.length} món)</strong></td>
                   <td className="num-col"><strong>{fmt(totals.totalQuantity)}</strong></td>
-                  <td className="num-col"><strong>{fmt(totals.grossAmount)}</strong></td>
-                  <td className="num-col"><strong>{fmt(totals.discountAmount)}</strong></td>
-                  <td className="num-col"><strong>{fmt(totals.surchargeAmount)}</strong></td>
-                  <td className="num-col"><strong>{fmt(totals.netAmount)}</strong></td>
-                  <td className="num-col">-</td>
-                  <td className="num-col"><strong>{totals.grossProfit != null ? fmt(totals.grossProfit) : '-'}</strong></td>
+                  <td className="num-col"><strong>{fmt(totals.totalRevenue)}</strong></td>
                 </tr>
 
-                {rows.map((r) => {
-                  const expanded = expandedIds.includes(r.productId);
-                  return (
-                    <Fragment key={r.productId}>
-                      <tr className="sales-group-row" onClick={() => toggleExpand(r.productId)}>
-                        <td>
-                          <button type="button" className="sales-expand-btn">
-                            {expanded ? '▼' : '▶'} {r.productName} ({r.orderDetails.length} hóa đơn)
-                          </button>
-                        </td>
-                        <td>{r.categoryName}</td>
-                        <td>{r.unit || '-'}</td>
-                        <td className="num-col">{fmt(r.totalQuantity)}</td>
-                        <td className="num-col">{fmt(r.grossAmount)}</td>
-                        <td className="num-col">{fmt(r.discountAmount)}</td>
-                        <td className="num-col">{fmt(r.surchargeAmount)}</td>
-                        <td className="num-col">{fmt(r.netAmount)}</td>
-                        <td className="num-col">{r.costPrice != null ? fmt(r.costPrice) : '-'}</td>
-                        <td className="num-col">{r.grossProfit != null ? fmt(r.grossProfit) : '-'}</td>
+                {groupedRows.map((group) => (
+                  <Fragment key={`group-${group.categoryId}`}>
+                    <tr className="sales-group-row">
+                      <td><strong>{group.categoryName}</strong></td>
+                      <td></td>
+                      <td className="num-col"><strong>{fmt(group.totalQuantity)}</strong></td>
+                      <td className="num-col"><strong>{fmt(group.totalRevenue)}</strong></td>
+                    </tr>
+                    {group.products.map((product) => (
+                      <tr key={product.productId}>
+                        <td style={{ paddingLeft: 28 }}>{product.productName}</td>
+                        <td>{product.unit || '-'}</td>
+                        <td className="num-col">{fmt(product.totalQuantity)}</td>
+                        <td className="num-col">{fmt(product.netAmount)}</td>
                       </tr>
-                      {expanded && r.orderDetails.map((o) => (
-                        <tr key={o.orderId} className="sales-detail-row">
-                          <td style={{ paddingLeft: 28 }}>{o.orderCode}</td>
-                          <td>{formatDateTimeVN(o.createdAt)}</td>
-                          <td></td>
-                          <td className="num-col">{fmt(o.quantity)}</td>
-                          <td className="num-col">-</td>
-                          <td className="num-col">-</td>
-                          <td className="num-col">-</td>
-                          <td className="num-col">{fmt(o.lineTotal)}</td>
-                          <td className="num-col">{fmt(o.unitPrice)}</td>
-                          <td className="num-col">-</td>
-                        </tr>
-                      ))}
-                    </Fragment>
-                  );
-                })}
+                    ))}
+                  </Fragment>
+                ))}
               </>
             )}
           </tbody>
         </table>
       </div>
-
-      {openTooltip && (() => {
-        const tip = colTooltips.find(([k]) => k === openTooltip.key);
-        if (!tip) return null;
-        return (
-          <div className="col-th-tooltip-popover" style={{ top: openTooltip.top, left: openTooltip.left }}>
-            <strong>{tip[2]}</strong>
-            {tip[3]}
-          </div>
-        );
-      })()}
     </div>
   );
 }

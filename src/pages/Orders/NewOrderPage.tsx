@@ -5,7 +5,7 @@ import OrdersProductPicker from './components/OrdersProductPicker';
 import OrdersTablePicker from './components/OrdersTablePicker';
 import type { BillItem, DuplicateHandling, SelectableTable } from './types';
 import { printUsingConfiguredRoute, resolveTemplateKeyForPrintFamily } from '../../utils/printerRouting';
-import { formatDateTimeVN } from '../../utils/formatters';
+import { formatDateTimeVN, formatNumberVi } from '../../utils/formatters';
 import type { Receipt80mmData } from '../../utils/receipt80mmGenerator';
 import { useOrderEditor } from './hooks/useOrderEditor';
 import { toAmountNumber, toPercentNumber, useOrderPricing } from './hooks/useOrderPricing';
@@ -135,7 +135,6 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     initialData?.paymentMethod,
   ]);
 
-  const canOpenProductTab = true;
 
   const { totalAmount, discountAmount, surchargeAmount } = useOrderPricing({
     billItems,
@@ -253,7 +252,6 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
   const pendingPaymentMethodRef = useRef<'CASH' | 'BANKING'>(initialData?.paymentMethod ?? 'CASH');
 
   const buildPrintableContent = (items: BillItem[], label: string) => {
-    const formatNumberVi = (value: number) => Math.trunc(Number(value || 0)).toLocaleString('vi-VN');
     const location = selectedTable
       ? selectedTable.entityType === 'ROOM'
         ? `${selectedTable.areaName} / ${selectedTable.roomName || selectedTable.name}`
@@ -411,11 +409,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
             <button
               type="button"
               className={`orders-step-tab ${activeTab === 'product' ? 'active' : ''}`}
-              onClick={() => {
-                if (!canOpenProductTab) return;
-                setActiveTab('product');
-              }}
-              disabled={!canOpenProductTab}
+              onClick={() => setActiveTab('product')}
             >
               Chọn món
             </button>

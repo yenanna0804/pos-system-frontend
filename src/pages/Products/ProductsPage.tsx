@@ -6,16 +6,10 @@ import FormFieldError from '../../components/FormFieldError';
 import FilterResetButton from '../../components/FilterResetButton';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
+import { resolveImageUrl } from '../../utils/formatters';
+import { getErrorMessage } from '../../utils/errorHelpers';
+import { PAGE_SIZE, SEARCH_DEBOUNCE_MS } from '../../config/constants';
 import './ProductsPage.css';
-
-const API_ASSET_ORIGIN = import.meta.env.VITE_API_ASSET_ORIGIN || import.meta.env.VITE_API_PROXY_TARGET || '';
-
-const resolveImageUrl = (url?: string) => {
-  if (!url) return '';
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  if (url.startsWith('/')) return API_ASSET_ORIGIN ? `${API_ASSET_ORIGIN}${url}` : url;
-  return url;
-};
 
 type Category = {
   id: string;
@@ -230,7 +224,7 @@ export default function ProductsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [page, setPage] = useState(1);
-  const pageSize = 7;
+  const pageSize = PAGE_SIZE;
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [isListLoading, setIsListLoading] = useState(false);
@@ -464,8 +458,8 @@ export default function ProductsPage() {
     try {
       const detailRes = await productService.getById(product.id);
       details = detailRes.data;
-    } catch (message: any) {
-      pushToast('error', message || 'Không tải được chi tiết hàng hóa từ CSDL');
+    } catch (error) {
+      pushToast('error', getErrorMessage(error));
       setLoading(false);
       return;
     }
@@ -743,9 +737,10 @@ export default function ProductsPage() {
       setActiveComboDropdown(null);
       setProductFieldErrors({});
       setPage(1);
-    } catch (message: any) {
-      setError(message || 'Không thể lưu hàng hóa');
-      pushToast('error', message || 'Không thể lưu hàng hóa');
+    } catch (error) {
+      const msg = getErrorMessage(error);
+      setError(msg);
+      pushToast('error', msg);
     } finally {
       setLoading(false);
     }
@@ -805,9 +800,10 @@ export default function ProductsPage() {
       } else {
         pushToast('success', 'Đã xóa hàng hóa');
       }
-    } catch (message: any) {
-      setError(message || 'Không thể xóa hàng hóa');
-      pushToast('error', message || 'Không thể xóa hàng hóa');
+    } catch (error) {
+      const msg = getErrorMessage(error);
+      setError(msg);
+      pushToast('error', msg);
     }
   };
 
@@ -862,8 +858,8 @@ export default function ProductsPage() {
         pushToast('success', `Đã xóa ${selectedProductIds.length} hàng hóa`);
       }
       setSelectedProductIds([]);
-    } catch (message: any) {
-      pushToast('error', message || 'Không thể xóa các hàng hóa đã chọn');
+    } catch (error) {
+      pushToast('error', getErrorMessage(error));
     }
   };
 
@@ -888,8 +884,8 @@ export default function ProductsPage() {
       } while (nextPage <= nextTotalPages);
       setSelectedProductIds(Array.from(collected));
       pushToast('success', `Đã chọn tất cả ${collected.size} hàng hóa theo bộ lọc`);
-    } catch (message: any) {
-      pushToast('error', message || 'Không thể chọn tất cả hàng hóa');
+    } catch (error) {
+      pushToast('error', getErrorMessage(error));
     } finally {
       setIsSelectingAllProducts(false);
     }
@@ -961,9 +957,10 @@ export default function ProductsPage() {
       await loadCategories(true);
       await loadData();
       pushToast('success', 'Đã thêm nhóm hàng hóa');
-    } catch (message: any) {
-      setError(message || 'Không thể thêm nhóm hàng');
-      pushToast('error', message || 'Không thể thêm nhóm hàng');
+    } catch (error) {
+      const msg = getErrorMessage(error);
+      setError(msg);
+      pushToast('error', msg);
     }
   };
 
@@ -1001,9 +998,10 @@ export default function ProductsPage() {
       await loadCategories(true);
       await loadData();
       pushToast('success', 'Đã cập nhật nhóm hàng hóa');
-    } catch (message: any) {
-      setError(message || 'Không thể sửa nhóm hàng');
-      pushToast('error', message || 'Không thể sửa nhóm hàng');
+    } catch (error) {
+      const msg = getErrorMessage(error);
+      setError(msg);
+      pushToast('error', msg);
     }
   };
 
@@ -1035,9 +1033,10 @@ export default function ProductsPage() {
       } else {
         pushToast('success', 'Đã xóa nhóm hàng hóa');
       }
-    } catch (message: any) {
-      setError(message || 'Không thể xóa nhóm hàng');
-      pushToast('error', message || 'Không thể xóa nhóm hàng');
+    } catch (error) {
+      const msg = getErrorMessage(error);
+      setError(msg);
+      pushToast('error', msg);
     }
   };
 

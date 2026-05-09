@@ -45,7 +45,7 @@ export function useOrderEditor(initialBillItems: BillItem[], resetKey: string) {
         timeRateMinutesSnapshot: product.type === 'TIME' ? Math.max(1, Math.trunc(Number(product.timeRateMinutes || 1))) : undefined,
         usedMinutes: product.type === 'TIME' ? 0 : undefined,
         lineTotal: product.type === 'TIME' ? 0 : undefined,
-        timerStatus: product.type === 'TIME' ? undefined : undefined,
+        timerStatus: undefined,
         note: '',
       };
       return [...prev, newLine];

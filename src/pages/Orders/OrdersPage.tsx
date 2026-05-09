@@ -6,7 +6,9 @@ import { areaService, diningTableService, orderService, roomService } from '../.
 import { DeleteActionIcon, EditActionIcon } from '../../components/ActionIcons';
 import FilterResetButton from '../../components/FilterResetButton';
 import { printUsingConfiguredRoute, resolveTemplateKeyForPrintFamily } from '../../utils/printerRouting';
-import { formatDateTimeVN, toISOWithVNOffset } from '../../utils/formatters';
+import { formatDateTimeVN, formatNumberVi, formatUnitPriceDisplay, ORDER_STATE_CLASS, ORDER_STATE_LABEL, paymentMethodLabel, splitDateTimeParts, toDateFromParts, toDateTimeInputValue, toISOWithVNOffset } from '../../utils/formatters';
+import { getErrorMessage } from '../../utils/errorHelpers';
+import { HISTORY_PAGE_SIZE, PAGE_SIZE, SEARCH_DEBOUNCE_MS, TOAST_TIMEOUT_MS } from '../../config/constants';
 import type { Receipt80mmData } from '../../utils/receipt80mmGenerator';
 import NewOrderPage from './NewOrderPage';
 import DateTimePicker from './components/DateTimePicker';
@@ -154,55 +156,8 @@ type CreateOrderDraft = {
   paymentMethod?: 'CASH' | 'BANKING';
 };
 
-const orderStateLabel: Record<OrderRow['orderState'], string> = {
-  DRAFT: 'Nháp',
-  PAID: 'Đã thanh toán',
-  DELETED: 'Đã xóa',
-  PARTIAL: 'Nợ',
-  UNPAID: 'Chưa thanh toán',
-};
-
-const orderStateClass: Record<OrderRow['orderState'], string> = {
-  DRAFT: 'orders-status-tag is-draft',
-  PAID: 'orders-status-tag is-paid',
-  DELETED: 'orders-status-tag is-deleted',
-  PARTIAL: 'orders-status-tag is-partial',
-  UNPAID: 'orders-status-tag is-unpaid',
-};
-
-const paymentMethodLabel = (method?: 'CASH' | 'BANKING' | null) => {
-  if (method === 'BANKING') return 'Chuyển khoản';
-  if (method === 'CASH') return 'Tiền mặt';
-  return '-';
-};
-
-const formatNumberVi = (value: number) => Math.trunc(Number(value || 0)).toLocaleString('vi-VN');
-const formatUnitPriceDisplay = (price: number, pricingType?: 'FIXED' | 'TIME', rateMinutes?: number) => {
-  const normalizedPrice = Math.max(0, Math.trunc(Number(price || 0))).toLocaleString('vi-VN');
-  if (pricingType !== 'TIME') return normalizedPrice;
-  const minutes = Math.max(1, Math.trunc(Number(rateMinutes || 0)));
-  return `${normalizedPrice} / ${minutes} phút`;
-};
-
-const toDateTimeInputValue = (value: Date) => {
-  const y = value.getFullYear();
-  const m = String(value.getMonth() + 1).padStart(2, '0');
-  const d = String(value.getDate()).padStart(2, '0');
-  const h = String(value.getHours()).padStart(2, '0');
-  const min = String(value.getMinutes()).padStart(2, '0');
-  return `${y}-${m}-${d}T${h}:${min}`;
-};
-
-const splitDateTimeParts = (value: string) => {
-  const [datePart, timePart] = value.split('T');
-  const [hourPart = '00', minutePart = '00'] = (timePart || '00:00').split(':');
-  return { datePart, timePart: `${hourPart}:${minutePart}` };
-};
-
-const toDateFromParts = (datePart: string, timePart: string) => {
-  const parsed = new Date(`${datePart}T${timePart}:00`);
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-};
+const orderStateLabel = ORDER_STATE_LABEL;
+const orderStateClass = ORDER_STATE_CLASS;
 
 const buildOrderA4Content = (order: OrderDetail) => {
   const lines: string[] = [];
@@ -406,7 +361,7 @@ export default function OrdersPage() {
   const latestDraftAutosaveRequestRef = useRef(0);
   const isCreatingDraftRef = useRef(false);
 
-  const historyPageSize = 5;
+  const historyPageSize = HISTORY_PAGE_SIZE;
 
   const clearDraftAutosaveTimeout = () => {
     if (draftAutosaveTimeoutRef.current) {
@@ -419,7 +374,7 @@ export default function OrdersPage() {
   const showToast = (type: 'error' | 'success', message: string) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ type, message });
-    toastTimerRef.current = setTimeout(() => setToast(null), 2800);
+    toastTimerRef.current = setTimeout(() => setToast(null), TOAST_TIMEOUT_MS);
   };
 
   const resetListFilters = () => {
@@ -461,14 +416,14 @@ export default function OrdersPage() {
 
   const loadOrders = async () => {
     try {
-      const response = await orderService.list(buildListParams(page, 7));
+      const response = await orderService.list(buildListParams(page, PAGE_SIZE));
       const responseData = response.data;
       const rows = Array.isArray(responseData) ? responseData : Array.isArray(responseData?.items) ? responseData.items : [];
       setOrders((rows as OrderRowApi[]).map(mapOrderRow));
       setTotalPages(responseData?.pagination?.totalPages || 1);
       setTotalItems(responseData?.pagination?.total || rows.length);
     } catch (error) {
-      showToast('error', typeof error === 'string' ? error : 'Không tải được danh sách hóa đơn');
+      showToast('error', getErrorMessage(error));
     }
   };
 
@@ -558,7 +513,7 @@ export default function OrdersPage() {
       } catch (error) {
         setEditingOrder(null);
         setEditingDraftBillItems([]);
-        showToast('error', typeof error === 'string' ? error : 'Không thể cập nhật hóa đơn');
+        showToast('error', getErrorMessage(error));
         navigate('/orders');
       }
     };
@@ -618,7 +573,7 @@ export default function OrdersPage() {
   }, [branchId]);
 
   useEffect(() => {
-    loadOrders().catch((error) => showToast('error', typeof error === 'string' ? error : 'Không tải được danh sách hóa đơn'));
+    loadOrders().catch((error) => showToast('error', getErrorMessage(error)));
   }, [branchId, page, debouncedSearch, areaFilter, roomFilter, tableFilter, startDate, startTime, endDate, endTime, statusFilters.join(','), paymentMethodFilter]);
 
   useEffect(() => {
@@ -628,7 +583,7 @@ export default function OrdersPage() {
     searchTimeoutRef.current = setTimeout(() => {
       setDebouncedSearch(search.trim());
       setPage(1);
-    }, 400);
+    }, SEARCH_DEBOUNCE_MS);
 
     return () => {
       if (searchTimeoutRef.current) {
@@ -726,7 +681,7 @@ export default function OrdersPage() {
       navigate('/orders');
       showToast('success', 'Lưu hóa đơn thành công');
     } catch (error) {
-      showToast('error', typeof error === 'string' ? error : 'Không lưu được hóa đơn');
+      showToast('error', getErrorMessage(error));
     }
   };
 
@@ -739,7 +694,7 @@ export default function OrdersPage() {
       setHistoryLogs(Array.isArray(response.data) ? (response.data as OrderLogRow[]) : []);
     } catch (error) {
       setHistoryLogs([]);
-      showToast('error', typeof error === 'string' ? error : 'Không tải được lịch sử thao tác');
+      showToast('error', getErrorMessage(error));
     } finally {
       setIsLoadingHistory(false);
     }
@@ -767,7 +722,7 @@ export default function OrdersPage() {
       });
       showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {
-      showToast('error', typeof error === 'string' ? error : ((error as any)?.message || 'Không thể in hóa đơn'));
+      showToast('error', getErrorMessage(error));
     }
   };
 
@@ -785,7 +740,7 @@ export default function OrdersPage() {
       });
       showToast('success', 'Đã gửi lệnh in phiếu order');
     } catch (error) {
-      showToast('error', typeof error === 'string' ? error : ((error as any)?.message || 'Không thể in phiếu order'));
+      showToast('error', getErrorMessage(error));
     }
   };
 
@@ -804,7 +759,7 @@ export default function OrdersPage() {
       await loadOrders();
       showToast('success', 'Đã xóa vĩnh viễn hóa đơn');
     } catch (error) {
-      showToast('error', typeof error === 'string' ? error : 'Không thể xóa vĩnh viễn hóa đơn');
+      showToast('error', getErrorMessage(error));
     } finally {
       setDeleteConfirmOrder(null);
     }
@@ -818,7 +773,7 @@ export default function OrdersPage() {
       setSelectedOrderIds([]);
       showToast('success', `Đã xóa vĩnh viễn ${selectedOrderIds.length} hóa đơn`);
     } catch (error) {
-      showToast('error', typeof error === 'string' ? error : 'Không thể xóa vĩnh viễn hóa đơn đã chọn');
+      showToast('error', getErrorMessage(error));
     } finally {
       setShowBulkDeleteConfirm(false);
     }
@@ -852,7 +807,7 @@ export default function OrdersPage() {
       setSelectedOrderIds(Array.from(collected));
       showToast('success', `Đã chọn tất cả ${collected.size} hóa đơn theo bộ lọc`);
     } catch (error) {
-      showToast('error', typeof error === 'string' ? error : 'Không thể chọn tất cả hóa đơn');
+      showToast('error', getErrorMessage(error));
     } finally {
       setIsSelectingAllOrders(false);
     }
@@ -1018,7 +973,7 @@ export default function OrdersPage() {
         orderState: normalizeOrderState(detail),
       });
     } catch (error) {
-      setOrderDetailError(typeof error === 'string' ? error : 'Không tải được chi tiết hóa đơn');
+      setOrderDetailError(getErrorMessage(error));
     } finally {
       setIsLoadingOrderDetail(false);
     }
@@ -1046,7 +1001,7 @@ export default function OrdersPage() {
       });
       showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {
-      showToast('error', typeof error === 'string' ? error : ((error as any)?.message || 'Không thể in hóa đơn'));
+      showToast('error', getErrorMessage(error));
     }
   };
 
@@ -1063,7 +1018,7 @@ export default function OrdersPage() {
       });
       showToast('success', 'Đã gửi lệnh in phiếu order');
     } catch (error) {
-      showToast('error', typeof error === 'string' ? error : ((error as any)?.message || 'Không thể in phiếu order'));
+      showToast('error', getErrorMessage(error));
     }
   };
 
@@ -1154,7 +1109,7 @@ export default function OrdersPage() {
         }
         await orderService.update(autosaveOrderId, autosavePayload);
       } catch (error: unknown) {
-        const message = typeof error === 'string' ? error : 'Không tự lưu được hóa đơn nháp';
+        const message = getErrorMessage(error);
         showToast('error', message);
       }
     }, 500);
@@ -1360,7 +1315,7 @@ export default function OrdersPage() {
             setEditingDraftBillItems([]);
             showToast('success', 'Cập nhật hóa đơn thành công');
           } catch (error) {
-            const message = typeof error === 'string' ? error : 'Không thể cập nhật hóa đơn';
+            const message = getErrorMessage(error);
             if (String(message).includes('IMMUTABLE_TIME_SNAPSHOT')) {
               showToast('error', 'Không thể sửa mức giá/phút snapshot của dòng dịch vụ thời gian đã tạo');
               return;
@@ -1498,7 +1453,7 @@ export default function OrdersPage() {
       await loadOrders();
       navigate('/orders/new');
     } catch (error: unknown) {
-      const message = typeof error === 'string' ? error : 'Không tạo được hóa đơn nháp';
+      const message = getErrorMessage(error);
       showToast('error', message);
     } finally {
       isCreatingDraftRef.current = false;
