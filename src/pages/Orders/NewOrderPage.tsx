@@ -37,6 +37,8 @@ type Props = {
     paymentMethod?: 'CASH' | 'BANKING';
   };
   defaultTab?: 'table' | 'product';
+  activeTab?: 'table' | 'product';
+  onActiveTabChange?: (tab: 'table' | 'product') => void;
   onSaveOrder: (payload: {
     table: SelectableTable | null;
     customerName: string;
@@ -74,9 +76,14 @@ type Props = {
   }) => void;
 };
 
-export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', orderCode, orderId, initialData, defaultTab = 'table', onToggleTimeLineTimer, onUpdateTimeLineTimestamp, onBillItemsChange, onDraftChange }: Props) {
+export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', orderCode, orderId, initialData, defaultTab = 'table', activeTab: controlledActiveTab, onActiveTabChange, onToggleTimeLineTimer, onUpdateTimeLineTimestamp, onBillItemsChange, onDraftChange }: Props) {
   const { branchId, user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'table' | 'product'>(defaultTab);
+  const [internalActiveTab, setInternalActiveTab] = useState<'table' | 'product'>(defaultTab);
+  const activeTab = controlledActiveTab ?? internalActiveTab;
+  const setActiveTab = (tab: 'table' | 'product') => {
+    if (onActiveTabChange) onActiveTabChange(tab);
+    if (controlledActiveTab == null) setInternalActiveTab(tab);
+  };
   const [selectedTable, setSelectedTable] = useState<SelectableTable | null>(initialData?.selectedTable || null);
   const [customerName, setCustomerName] = useState(initialData?.customerName || '');
   const [duplicateHandling, setDuplicateHandling] = useState<DuplicateHandling>('merge');

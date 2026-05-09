@@ -385,6 +385,7 @@ export default function OrdersPage() {
   const [isSelectingAllOrders, setIsSelectingAllOrders] = useState(false);
   const [editingOrder, setEditingOrder] = useState<EditingOrderState | null>(null);
   const [editingDraftBillItems, setEditingDraftBillItems] = useState<EditingOrderState['billItems']>([]);
+  const [editActiveTab, setEditActiveTab] = useState<'table' | 'product'>('product');
   const [createDraft, setCreateDraft] = useState<CreateOrderDraft | null>(null);
   const [createDraftOrderId, setCreateDraftOrderId] = useState<string | null>(null);
   const draftAutosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -540,6 +541,7 @@ export default function OrdersPage() {
         const nextEditing = mapOrderDetailToEditingState(response.data as OrderDetail);
         setEditingOrder(nextEditing);
         setEditingDraftBillItems(nextEditing.billItems);
+        setEditActiveTab('product');
       } catch (error) {
         setEditingOrder(null);
         setEditingDraftBillItems([]);
@@ -1288,7 +1290,8 @@ export default function OrdersPage() {
           key={`order-edit-${editingOrder.id}`}
           mode="edit"
           orderId={editingOrder.id}
-          defaultTab="product"
+          activeTab={editActiveTab}
+          onActiveTabChange={setEditActiveTab}
 
           orderCode={editingOrder.code}
           initialData={{
