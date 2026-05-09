@@ -14,6 +14,7 @@ import NewOrderPage from './NewOrderPage';
 import DateTimePicker from './components/DateTimePicker';
 import { orderFeatureFlags } from './orderFeatureFlags';
 import type { BillItem } from './types';
+import { buildReceipt80mmData as buildReceipt80mmPayload } from './receipt80mmBuilders';
 import './OrdersPage.css';
 
 type OrderRow = {
@@ -166,36 +167,6 @@ const paymentMethodLabel = (method?: 'CASH' | 'BANKING' | null) => {
 };
 
 const formatNumberVi = (value: number) => Math.trunc(Number(value || 0)).toLocaleString('vi-VN');
-const formatMinutesLabel = (minutesRaw: number) => {
-  const minutes = Math.max(0, Math.trunc(Number(minutesRaw || 0)));
-  const hours = Math.floor(minutes / 60);
-  const remainMinutes = minutes % 60;
-  if (hours <= 0) return `${remainMinutes}'`;
-  if (remainMinutes === 0) return `${hours}h`;
-  return `${hours}h${remainMinutes}'`;
-};
-
-const formatTimePart = (iso?: string | null) => {
-  if (!iso) return '--:--';
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return '--:--';
-  const hh = String(parsed.getHours()).padStart(2, '0');
-  const mm = String(parsed.getMinutes()).padStart(2, '0');
-  return `${hh}:${mm}`;
-};
-
-const buildTimeUsageNote = (item: OrderDetailItem) => {
-  const usedMinutes = Math.max(0, Math.trunc(Number(item.usedMinutes || 0)));
-  const isTimeItem = item.pricingTypeSnapshot === 'TIME';
-  const hasTimeEvidence = usedMinutes > 0 || Boolean(item.startAt) || Boolean(item.stopAt);
-  if (!isTimeItem && !hasTimeEvidence) return '';
-  const lines: string[] = [];
-  lines.push(`Tổng thời gian: ${formatMinutesLabel(usedMinutes)}`);
-  if (item.startAt || item.stopAt) {
-    lines.push(`${formatTimePart(item.startAt)} -> ${formatTimePart(item.stopAt)} (${formatMinutesLabel(usedMinutes)})`);
-  }
-  return lines.join('\n');
-};
 const formatUnitPriceDisplay = (price: number, pricingType?: 'FIXED' | 'TIME', rateMinutes?: number) => {
   const normalizedPrice = Math.max(0, Math.trunc(Number(price || 0))).toLocaleString('vi-VN');
   if (pricingType !== 'TIME') return normalizedPrice;
@@ -255,44 +226,27 @@ const buildOrderA4Content = (order: OrderDetail) => {
   return lines.join('\n');
 };
 
-const buildOrder80mmData = (order: OrderDetail, username?: string): Receipt80mmData => {
+const buildReceipt80mmData = (order: OrderDetail, username?: string): Receipt80mmData => {
   const discountTotal = Number(order.discountAmount || 0) + order.items.reduce((sum, item) => sum + Number(item.lineDiscountAmount || 0), 0);
   const surchargeTotal = Number(order.surchargeAmount || 0) + order.items.reduce((sum, item) => sum + Number(item.lineSurchargeAmount || 0), 0);
 
-  return {
+  return buildReceipt80mmPayload({
     title: 'Hoa don',
     orderCode: order.code,
     datetime: formatDateTimeVN(order.createdAt),
-    customerName: order.customerName || '-',
-    username: username || '-',
+    customerName: order.customerName,
+    username,
     location: order.locationLabel || '-',
-    items: order.items.map((item) => {
-      const note = item.note?.trim();
-      const timeUsageNote = buildTimeUsageNote(item);
-      const baseUnitPrice = Math.max(0, Number(item.baseUnitPrice ?? item.unitPrice ?? 0));
-      const unitPrice = Math.max(0, Number(item.unitPrice ?? 0));
-      const discountPercent = baseUnitPrice > 0
-        ? Math.max(0, (1 - unitPrice / baseUnitPrice) * 100)
-        : 0;
-      return {
-        note: [note ? `* ${note}` : '', timeUsageNote].filter(Boolean).join('\n').trim(),
-        name: item.productName || '-',
-        unit: item.unit || '-',
-        quantity: Math.max(0, Math.trunc(Number(item.quantity || 0))),
-        unitPrice: Math.max(0, Math.trunc(baseUnitPrice)),
-        discount: discountPercent,
-        lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)))),
-      };
-    }),
-    subtotal: Math.max(0, Math.trunc(Number(order.totalAmount || 0))),
-    discount: Math.max(0, Math.trunc(discountTotal)),
-    surcharge: Math.max(0, Math.trunc(surchargeTotal)),
-    total: Math.max(0, Math.trunc(Number(order.finalAmount ?? order.totalAmount ?? 0))),
-  };
+    items: order.items,
+    subtotal: Number(order.totalAmount || 0),
+    discount: discountTotal,
+    surcharge: surchargeTotal,
+    total: Number(order.finalAmount ?? order.totalAmount ?? 0),
+  });
 };
 
 const buildOrderSlip80mmData = (order: OrderDetail, username?: string): Receipt80mmData => ({
-  ...buildOrder80mmData(order, username),
+  ...buildReceipt80mmData(order, username),
   title: 'PHIẾU ORDER',
 });
 
@@ -794,7 +748,7 @@ export default function OrdersPage() {
       const detail = detailRes.data as OrderDetail;
       await printUsingConfiguredRoute(`Hóa đơn ${detail.code}`, buildOrderA4Content(detail), {
         templateKey: resolveTemplateKeyForPrintFamily('invoice'),
-        receipt80mmData: buildOrder80mmData(detail, user?.username),
+        receipt80mmData: buildReceipt80mmData(detail, user?.username),
       });
       showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {
@@ -1073,7 +1027,7 @@ export default function OrdersPage() {
     try {
       await printUsingConfiguredRoute(`Hóa đơn ${detailOrder.code}`, buildOrderA4Content(detailOrder), {
         templateKey: resolveTemplateKeyForPrintFamily('invoice'),
-        receipt80mmData: buildOrder80mmData(detailOrder, user?.username),
+        receipt80mmData: buildReceipt80mmData(detailOrder, user?.username),
       });
       showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {

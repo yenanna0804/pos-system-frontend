@@ -10,6 +10,7 @@ import type { Receipt80mmData } from '../../utils/receipt80mmGenerator';
 import { useOrderEditor } from './hooks/useOrderEditor';
 import { toAmountNumber, toPercentNumber, useOrderPricing } from './hooks/useOrderPricing';
 import { useOrderTimer } from './hooks/useOrderTimer';
+import { buildReceipt80mmData as buildReceipt80mmPayload } from './receipt80mmBuilders';
 
 type Props = {
   onBack: () => void;
@@ -74,7 +75,7 @@ type Props = {
 };
 
 export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', orderCode, orderId, initialData, defaultTab = 'table', onToggleTimeLineTimer, onUpdateTimeLineTimestamp, onBillItemsChange, onDraftChange }: Props) {
-  const { branchId } = useAuth();
+  const { branchId, user } = useAuth();
   const [activeTab, setActiveTab] = useState<'table' | 'product'>(defaultTab);
   const [selectedTable, setSelectedTable] = useState<SelectableTable | null>(initialData?.selectedTable || null);
   const [customerName, setCustomerName] = useState(initialData?.customerName || '');
@@ -295,7 +296,24 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
 
   const onPrintInvoice = async () => {
     if (billItems.length === 0) return;
-    const receiptData = buildReceipt80mmData(billItems, 'Hóa đơn');
+    const location = selectedTable
+      ? selectedTable.entityType === 'ROOM'
+        ? `${selectedTable.areaName} / ${selectedTable.roomName || selectedTable.name}`
+        : `${selectedTable.areaName}${selectedTable.roomName ? ` / ${selectedTable.roomName}` : ''} / ${selectedTable.name}`
+      : '-';
+    const receiptData = buildReceipt80mmPayload({
+      title: 'PHIẾU TẠM TÍNH',
+      orderCode: orderCode || 'TAM',
+      datetime: formatDateTimeVN(new Date().toISOString()),
+      customerName: customerName || '-',
+      username: user?.username,
+      location,
+      items: billItems,
+      subtotal: Math.max(0, totalAmount + discountAmount - surchargeAmount),
+      discount: discountAmount,
+      surcharge: surchargeAmount,
+      total: totalAmount,
+    });
     await printUsingConfiguredRoute('Hóa đơn tạm', buildPrintableContent(billItems, 'Hóa đơn'), {
       templateKey: resolveTemplateKeyForPrintFamily('invoice'),
       receipt80mmData: receiptData,
@@ -306,14 +324,14 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     const selectedItems = billItems.filter((item) => selectedLineIds.includes(item.lineId));
     const itemsToPrint = selectedItems.length > 0 ? selectedItems : billItems;
     if (itemsToPrint.length === 0) return;
-    const receiptData = buildReceipt80mmData(itemsToPrint, 'Order');
+    const receiptData = buildOrderSlip80mmData(itemsToPrint, 'Order');
     await printUsingConfiguredRoute('Order tạm', buildPrintableContent(itemsToPrint, 'Order'), {
       templateKey: resolveTemplateKeyForPrintFamily('order_slip'),
       receipt80mmData: receiptData,
     });
   };
 
-  const buildReceipt80mmData = (items: BillItem[], label: string): Receipt80mmData => {
+  const buildOrderSlip80mmData = (items: BillItem[], label: string): Receipt80mmData => {
     const location = selectedTable
       ? selectedTable.entityType === 'ROOM'
         ? `${selectedTable.areaName} / ${selectedTable.roomName || selectedTable.name}`
