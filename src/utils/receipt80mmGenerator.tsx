@@ -73,8 +73,8 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const width = 576;
   const marginX = 16;
   const contentWidth = width - marginX * 2;
-  const titleSize = 28;
-  const bodySize = 24;
+  const titleSize = 24;
+  const bodySize = 16;
   const lineHeight = 34;
 
   const tableLeft = marginX;
@@ -82,8 +82,8 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const colHashWidth = 30;
   const colSlWidth = 34;
   const colUnitWidth = isOrderPrint ? 94 : 0;
-  const colDgWidth = isOrderPrint ? 0 : 131;
-  const colTtWidth = isOrderPrint ? 0 : 140;
+  const colDgWidth = isOrderPrint ? 0 : 90;
+  const colTtWidth = isOrderPrint ? 0 : 95;
 
   const colHashRight = tableLeft + colHashWidth;
   const colNameRight = tableRight - (colSlWidth + colUnitWidth + colDgWidth + colTtWidth);
