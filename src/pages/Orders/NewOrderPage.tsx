@@ -368,6 +368,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
       orderCode: orderCode || 'TAM',
       datetime: formatDateTimeVN(new Date().toISOString()),
       customerName: customerName || '-',
+      fullName: user?.fullName || user?.username,
       location,
       items: items.map((item) => {
         const note = (item.note || '').trim();
