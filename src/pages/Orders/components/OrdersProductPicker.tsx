@@ -22,6 +22,7 @@ type ProductRow = {
   timeRateAmount?: string | number;
   timeRateMinutes?: string | number;
   stock?: string | number;
+  comboItems?: { itemProductId: string; itemName: string; itemUnit?: string; quantity: number }[];
 };
 
 type Props = {
