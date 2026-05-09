@@ -149,7 +149,12 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
 
   const drawLabelValue = (label: string, value: string) => {
     ctx.textAlign = 'left';
-    ctx.fillText(`${label}: ${value || '-'}`, marginX, y);
+    const labelText = `${label}: `;
+    ctx.font = `bold ${bodySize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
+    ctx.fillText(labelText, marginX, y);
+    const labelWidth = ctx.measureText(labelText).width;
+    ctx.font = `${bodySize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
+    ctx.fillText(value || '-', marginX + labelWidth, y);
     y += lineHeight;
   };
 
