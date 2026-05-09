@@ -47,6 +47,7 @@ export function useOrderEditor(initialBillItems: BillItem[], resetKey: string) {
         lineTotal: product.type === 'TIME' ? 0 : undefined,
         timerStatus: undefined,
         note: '',
+        comboItems: product.comboItems,
       };
       return [...prev, newLine];
     });

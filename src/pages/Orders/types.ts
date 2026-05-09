@@ -8,6 +8,13 @@ export type SelectableTable = {
   roomName?: string | null;
 };
 
+export type ComboComponent = {
+  itemProductId: string;
+  itemName: string;
+  itemUnit?: string;
+  quantity: number;
+};
+
 export type ProductOption = {
   id: string;
   sku?: string;
@@ -19,6 +26,7 @@ export type ProductOption = {
   timeRateAmount?: number;
   timeRateMinutes?: number;
   stock?: number;
+  comboItems?: ComboComponent[];
 };
 
 export type BillItem = {
@@ -42,6 +50,7 @@ export type BillItem = {
   startAt?: string | null;
   stopAt?: string | null;
   note: string;
+  comboItems?: ComboComponent[];
 };
 
 export type DuplicateHandling = 'merge' | 'split';

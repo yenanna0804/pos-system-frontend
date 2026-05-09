@@ -254,6 +254,7 @@ export default function OrdersProductPicker({ branchId, onAddProduct }: Props) {
                        timeRateAmount: Math.trunc(Number(product.timeRateAmount || 0)),
                        timeRateMinutes: Math.max(1, Math.trunc(Number(product.timeRateMinutes || 0))),
                        stock: Number(product.stock || 0),
+                       comboItems: product.comboItems || [],
                     })
                   }
                 >

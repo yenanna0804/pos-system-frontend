@@ -213,6 +213,10 @@
   font-size: 12px;
 }
 
+.bill-combo-components {
+  font-style: italic;
+}
+
 .orders-time-value {
   color: var(--ui-primary, #2563eb);
   cursor: pointer;

@@ -474,7 +474,12 @@ export default function OrderBillsPanel({
                   <h4>
                     {index + 1}. {item.productName}
                   </h4>
-                  {item.pricingTypeSnapshot !== 'TIME' && <small>{item.unit ? `Đơn vị: ${item.unit}` : 'Đơn vị: -'}</small>}
+                  {item.pricingTypeSnapshot !== 'TIME' && !(item.comboItems && item.comboItems.length > 0) && <small>{item.unit ? `Đơn vị: ${item.unit}` : 'Đơn vị: -'}</small>}
+                  {item.comboItems && item.comboItems.length > 0 && (
+                    <small className="bill-combo-components">
+                      Thành phần: {item.comboItems.map((c) => `${c.itemName}: ${c.quantity} ${c.itemUnit || ''}`).join('; ')}
+                    </small>
+                  )}
                   {item.pricingTypeSnapshot === 'TIME' && (
                     <>
                       <small>
