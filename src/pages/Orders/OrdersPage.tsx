@@ -226,7 +226,7 @@ const buildOrderA4Content = (order: OrderDetail) => {
   return lines.join('\n');
 };
 
-const buildReceipt80mmData = (order: OrderDetail, username?: string): Receipt80mmData => {
+const buildReceipt80mmData = (order: OrderDetail, fullName?: string): Receipt80mmData => {
   const discountTotal = Number(order.discountAmount || 0) + order.items.reduce((sum, item) => sum + Number(item.lineDiscountAmount || 0), 0);
   const surchargeTotal = Number(order.surchargeAmount || 0) + order.items.reduce((sum, item) => sum + Number(item.lineSurchargeAmount || 0), 0);
 
@@ -235,7 +235,7 @@ const buildReceipt80mmData = (order: OrderDetail, username?: string): Receipt80m
     orderCode: order.code,
     datetime: formatDateTimeVN(order.createdAt),
     customerName: order.customerName,
-    username,
+    fullName,
     location: order.locationLabel || '-',
     items: order.items,
     subtotal: Number(order.totalAmount || 0),
@@ -245,8 +245,8 @@ const buildReceipt80mmData = (order: OrderDetail, username?: string): Receipt80m
   });
 };
 
-const buildOrderSlip80mmData = (order: OrderDetail, username?: string): Receipt80mmData => ({
-  ...buildReceipt80mmData(order, username),
+const buildOrderSlip80mmData = (order: OrderDetail, fullName?: string): Receipt80mmData => ({
+  ...buildReceipt80mmData(order, fullName),
   title: 'PHIẾU ORDER',
 });
 
@@ -758,7 +758,7 @@ export default function OrdersPage() {
       const detail = detailRes.data as OrderDetail;
       await printUsingConfiguredRoute(`Hóa đơn ${detail.code}`, buildOrderA4Content(detail), {
         templateKey: resolveTemplateKeyForPrintFamily('invoice'),
-        receipt80mmData: buildReceipt80mmData(detail, user?.username),
+        receipt80mmData: buildReceipt80mmData(detail, user?.fullName || user?.username),
       });
       showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {
@@ -776,7 +776,7 @@ export default function OrdersPage() {
       const detail = detailRes.data as OrderDetail;
       await printUsingConfiguredRoute(`Phiếu order ${detail.code}`, buildOrderSlipA4Content(detail), {
         templateKey: resolveTemplateKeyForPrintFamily('order_slip'),
-        receipt80mmData: buildOrderSlip80mmData(detail, user?.username),
+        receipt80mmData: buildOrderSlip80mmData(detail, user?.fullName || user?.username),
       });
       showToast('success', 'Đã gửi lệnh in phiếu order');
     } catch (error) {
@@ -1037,7 +1037,7 @@ export default function OrdersPage() {
     try {
       await printUsingConfiguredRoute(`Hóa đơn ${detailOrder.code}`, buildOrderA4Content(detailOrder), {
         templateKey: resolveTemplateKeyForPrintFamily('invoice'),
-        receipt80mmData: buildReceipt80mmData(detailOrder, user?.username),
+        receipt80mmData: buildReceipt80mmData(detailOrder, user?.fullName || user?.username),
       });
       showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {
@@ -1054,7 +1054,7 @@ export default function OrdersPage() {
     try {
       await printUsingConfiguredRoute(`Phiếu order ${detailOrder.code}`, buildOrderSlipA4Content(detailOrder), {
         templateKey: resolveTemplateKeyForPrintFamily('order_slip'),
-        receipt80mmData: buildOrderSlip80mmData(detailOrder, user?.username),
+        receipt80mmData: buildOrderSlip80mmData(detailOrder, user?.fullName || user?.username),
       });
       showToast('success', 'Đã gửi lệnh in phiếu order');
     } catch (error) {

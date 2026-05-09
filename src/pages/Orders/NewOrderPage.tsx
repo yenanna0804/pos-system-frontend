@@ -313,7 +313,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
       orderCode: orderCode || 'TAM',
       datetime: formatDateTimeVN(new Date().toISOString()),
       customerName: customerName || '-',
-      username: user?.username,
+      fullName: user?.fullName || user?.username,
       location,
       items: billItems,
       subtotal: Math.max(0, totalAmount + discountAmount - surchargeAmount),

@@ -25,7 +25,7 @@ type BuildReceipt80mmParams = {
   orderCode?: string;
   datetime?: string;
   customerName?: string | null;
-  username?: string | null;
+  fullName?: string | null;
   location?: string;
   items: ReceiptSourceItem[];
   subtotal: number;
@@ -85,7 +85,7 @@ export const buildReceipt80mmData = (params: BuildReceipt80mmParams): Receipt80m
   orderCode: params.orderCode,
   datetime: params.datetime,
   customerName: params.customerName || '-',
-  username: params.username || '-',
+  fullName: params.fullName || '-',
   location: params.location || '-',
   items: params.items.map((item) => {
     const note = item.note?.trim();
