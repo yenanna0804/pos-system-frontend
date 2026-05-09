@@ -126,10 +126,30 @@
 }
 
 .orders-bill-lines {
-  border: 1px solid #e4e7ec;
+  border: 0px solid #e4e7ec;
   border-radius: 10px;
   max-height: 560px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: rgba(152, 162, 179, 0.45) transparent;
+  scrollbar-width: thin;
+}
+
+.orders-bill-lines::-webkit-scrollbar {
+  width: 6px;
+}
+
+.orders-bill-lines::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.orders-bill-lines::-webkit-scrollbar-thumb {
+  background: rgba(152, 162, 179, 0.45);
+  border-radius: 999px;
+}
+
+.orders-bill-lines::-webkit-scrollbar-thumb:hover {
+  background: rgba(152, 162, 179, 0.65);
 }
 
 .orders-bill-lines.orders-bill-lines-force-scroll {
