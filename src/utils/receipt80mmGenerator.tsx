@@ -27,11 +27,12 @@ export type Receipt80mmData = {
 export const DEFAULT_RECEIPT_80MM_DATA: Receipt80mmData = {
   title: 'PHIẾU TẠM TÍNH',
   datetime: '09/05/2026 21:16:08',
+  orderCode: "HĐ1234",
   location: 'Tầng 1 / Bàn 3',
   guestCount: '2',
   cashier: 'abc',
   items: [
-    { name: 'Gà rán *cay nồng đặc biệt', quantity: 1, unitPrice: 15000, lineTotal: 15000 },
+    { name: 'Gà rán', note: 'cay nồng đặc biệt', quantity: 1, unitPrice: 15000, lineTotal: 15000 },
     { name: 'Bia budweisser combo đặc biệt', quantity: 3, unitPrice: 55000, lineTotal: 165000 },
   ],
   subtotal: 180000,
@@ -75,7 +76,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const contentWidth = width - marginX * 2;
   const titleSize = 24;
   const bodySize = 16;
-  const lineHeight = 34;
+  const lineHeight = 24;
 
   const tableLeft = marginX;
   const tableRight = marginX + contentWidth;
@@ -99,6 +100,10 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const xUnitRight = colDgRight - 10;
   const xTotalRight = colTtRight - 10;
   const nameColumnWidth = colNameRight - xName - 8;
+  const noteX = xName;
+  const noteColumnWidth = tableRight - noteX - 8;
+  const noteSize = Math.max(14, bodySize - 2);
+  const noteLineHeight = Math.max(20, lineHeight - 4);
 
   const sampleCanvas = document.createElement('canvas');
   const sampleCtx = sampleCanvas.getContext('2d');
@@ -106,10 +111,13 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   sampleCtx.font = `${bodySize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
 
   let estimatedRows = 16;
-  for (const item of data.items) {
+  for (let itemIdx = 0; itemIdx < data.items.length; itemIdx += 1) {
+    const item = data.items[itemIdx];
     estimatedRows += wrapByWidth(sampleCtx, item.name, nameColumnWidth).length;
-    if (item.note?.trim()) estimatedRows += wrapByWidth(sampleCtx, `*${item.note.trim()}`, nameColumnWidth).length;
+    if (item.note?.trim()) estimatedRows += wrapByWidth(sampleCtx, item.note.trim(), noteColumnWidth).length;
     if (isOrderPrint) estimatedRows += 1;
+    if (item.note?.trim()) estimatedRows += 1;
+    if (itemIdx < data.items.length - 1) estimatedRows += 1;
   }
   const estimatedHeight = 86 + estimatedRows * lineHeight;
   const height = Math.max(320, Math.min(1700, estimatedHeight));
@@ -127,11 +135,12 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   ctx.textBaseline = 'top';
 
   let y = 10;
+  const mergedRowBands: Array<{ start: number; end: number }> = [];
   const title = isOrderPrint ? 'PHIẾU ORDER' : 'PHIẾU TẠM TÍNH';
   ctx.font = `bold ${titleSize}px 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
   ctx.textAlign = 'center';
   ctx.fillText(title, width / 2, y);
-  y += 44;
+  y += 40;
   ctx.fillRect(marginX, y, contentWidth, 2);
   y += 12;
 
@@ -176,9 +185,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
 
   for (let idx = 0; idx < data.items.length; idx += 1) {
     const item = data.items[idx];
-    const [baseName, inlineNoteRaw] = item.name.split('*');
-    const inlineNote = inlineNoteRaw?.trim();
-    const nameLines = wrapByWidth(ctx, (baseName || '').trim(), nameColumnWidth);
+    const nameLines = wrapByWidth(ctx, (item.name || '').trim(), nameColumnWidth);
 
     ctx.textAlign = 'center';
     ctx.fillText(String(idx + 1), xHashCenter, y);
@@ -202,27 +209,57 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
       y += lineHeight;
     }
 
-    const effectiveNote = item.note?.trim() || inlineNote;
-    if (effectiveNote) {
-      const noteLines = wrapByWidth(ctx, `*${effectiveNote}`, nameColumnWidth);
+    const itemNote = item.note?.trim();
+    if (itemNote) {
+      const noteBandStart = y;
+      ctx.fillRect(colHashRight, y, tableRight - colHashRight, 2);
+      y += 8;
+      const noteLines = wrapByWidth(ctx, itemNote, noteColumnWidth);
+      ctx.font = `italic ${noteSize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
       for (const noteLine of noteLines) {
         ctx.textAlign = 'left';
-        ctx.fillText(noteLine, xName, y);
-        y += lineHeight;
+        ctx.fillText(noteLine, noteX, y);
+        y += noteLineHeight;
       }
+      ctx.font = `${bodySize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
+      mergedRowBands.push({ start: noteBandStart, end: y });
+    }
+
+    if (idx < data.items.length - 1) {
+      ctx.fillRect(marginX, y, contentWidth, 2);
+      y += 10;
     }
   }
 
   const tableBottom = y;
   ctx.fillRect(marginX, y, contentWidth, 2);
+  const drawVerticalWithMergedBands = (x: number, bands: Array<{ start: number; end: number }>) => {
+    if (bands.length === 0) {
+      ctx.fillRect(x, tableTop, 2, tableBottom - tableTop + 2);
+      return;
+    }
+    let cursor = tableTop;
+    for (const band of bands) {
+      const bandStart = Math.max(tableTop, band.start);
+      const bandEnd = Math.min(tableBottom + 2, band.end);
+      if (bandStart > cursor) {
+        ctx.fillRect(x, cursor, 2, bandStart - cursor);
+      }
+      cursor = Math.max(cursor, bandEnd);
+    }
+    if (cursor < tableBottom + 2) {
+      ctx.fillRect(x, cursor, 2, tableBottom + 2 - cursor);
+    }
+  };
+
   ctx.fillRect(tableLeft, tableTop, 2, tableBottom - tableTop + 2);
   ctx.fillRect(colHashRight, tableTop, 2, tableBottom - tableTop + 2);
-  ctx.fillRect(colNameRight, tableTop, 2, tableBottom - tableTop + 2);
-  ctx.fillRect(colSlRight, tableTop, 2, tableBottom - tableTop + 2);
+  drawVerticalWithMergedBands(colNameRight, mergedRowBands);
+  drawVerticalWithMergedBands(colSlRight, mergedRowBands);
   if (isOrderPrint) {
-    ctx.fillRect(colUnitRight, tableTop, 2, tableBottom - tableTop + 2);
+    drawVerticalWithMergedBands(colUnitRight, mergedRowBands);
   } else {
-    ctx.fillRect(colDgRight, tableTop, 2, tableBottom - tableTop + 2);
+    drawVerticalWithMergedBands(colDgRight, mergedRowBands);
   }
   ctx.fillRect(tableRight, tableTop, 2, tableBottom - tableTop + 2);
   y += 12;
