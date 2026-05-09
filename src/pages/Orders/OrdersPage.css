@@ -656,6 +656,12 @@
   color: #b54708;
 }
 
+.orders-status-tag.is-unpaid {
+  background: #eff8ff;
+  border-color: #b2ddff;
+  color: #175cd3;
+}
+
 .orders-status-tag.is-deleted {
   background: #fee4e2;
   border-color: #fecdca;

@@ -68,7 +68,7 @@ type OrderDetail = {
   customerName?: string | null;
   locationLabel?: string;
   createdAt: string;
-  orderState?: 'DRAFT' | 'PAID' | 'PARTIAL' | 'DELETED';
+  orderState?: 'DRAFT' | 'PAID' | 'PARTIAL' | 'UNPAID' | 'DELETED';
   totalAmount: number;
   finalAmount?: number;
   paidAmount: number;
@@ -92,18 +92,20 @@ const formatUnitPriceDisplay = (price: number, pricingType?: 'FIXED' | 'TIME', r
   return `${normalizedPrice} / ${minutes} phút`;
 };
 
-const orderStateLabel: Record<'DRAFT' | 'PAID' | 'PARTIAL' | 'DELETED', string> = {
+const orderStateLabel: Record<'DRAFT' | 'PAID' | 'PARTIAL' | 'UNPAID' | 'DELETED', string> = {
   DRAFT: 'Nháp',
   PAID: 'Đã thanh toán',
   DELETED: 'Đã xóa',
   PARTIAL: 'Nợ',
+  UNPAID: 'Chưa thanh toán',
 };
 
-const orderStateClass: Record<'DRAFT' | 'PAID' | 'PARTIAL' | 'DELETED', string> = {
+const orderStateClass: Record<'DRAFT' | 'PAID' | 'PARTIAL' | 'UNPAID' | 'DELETED', string> = {
   DRAFT: 'orders-status-tag is-draft',
   PAID: 'orders-status-tag is-paid',
   DELETED: 'orders-status-tag is-deleted',
   PARTIAL: 'orders-status-tag is-partial',
+  UNPAID: 'orders-status-tag is-unpaid',
 };
 
 const toDisplayDate = (isoDate: string) => {
@@ -160,10 +162,12 @@ export default function SalesEndOfDayPage() {
   const now = useMemo(() => new Date(), []);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [statusFilters, setStatusFilters] = useState<string[]>(['PAID', 'PARTIAL']);
+  const [statusFilters, setStatusFilters] = useState<string[]>(['PAID', 'PARTIAL', 'UNPAID']);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement | null>(null);
-  const initialStart = toDateTimeInputValue(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0));
+  const initialStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0);
+  initialStartDate.setDate(initialStartDate.getDate() - 1);
+  const initialStart = toDateTimeInputValue(initialStartDate);
   const initialEnd = toDateTimeInputValue(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59));
   const [startDate, setStartDate] = useState(splitDateTimeParts(initialStart).datePart);
   const [startTime, setStartTime] = useState(splitDateTimeParts(initialStart).timePart);
@@ -252,7 +256,9 @@ export default function SalesEndOfDayPage() {
   }, []);
 
   const resetFilters = () => {
-    const nextStart = splitDateTimeParts(toDateTimeInputValue(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0)));
+    const nextStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0);
+    nextStartDate.setDate(nextStartDate.getDate() - 1);
+    const nextStart = splitDateTimeParts(toDateTimeInputValue(nextStartDate));
     const nextEnd = splitDateTimeParts(toDateTimeInputValue(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59)));
     setStartDate(nextStart.datePart);
     setStartTime(nextStart.timePart);
@@ -260,7 +266,7 @@ export default function SalesEndOfDayPage() {
     setEndTime(nextEnd.timePart);
     setSearch('');
     setDebouncedSearch('');
-    setStatusFilters(['PAID', 'PARTIAL']);
+    setStatusFilters(['PAID', 'PARTIAL', 'UNPAID']);
     setAreaFilter('');
     setRoomFilter('');
     setTableFilter('');
@@ -451,6 +457,7 @@ export default function SalesEndOfDayPage() {
                 {[
                   { value: 'PAID', label: 'Đã thanh toán' },
                   { value: 'PARTIAL', label: 'Nợ' },
+                  { value: 'UNPAID', label: 'Chưa thanh toán' },
                 ].map((option) => (
                   <label key={option.value} className="orders-multi-select-option">
                     <input

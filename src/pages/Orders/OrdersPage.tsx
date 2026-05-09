@@ -24,7 +24,7 @@ type OrderRow = {
   finalAmount?: number;
   paidAmount?: number;
   paymentMethod?: 'CASH' | 'BANKING' | null;
-  orderState: 'DRAFT' | 'PAID' | 'DELETED' | 'PARTIAL';
+  orderState: 'DRAFT' | 'PAID' | 'DELETED' | 'PARTIAL' | 'UNPAID';
   createdAt: string;
 };
 
@@ -159,6 +159,7 @@ const orderStateLabel: Record<OrderRow['orderState'], string> = {
   PAID: 'Đã thanh toán',
   DELETED: 'Đã xóa',
   PARTIAL: 'Nợ',
+  UNPAID: 'Chưa thanh toán',
 };
 
 const orderStateClass: Record<OrderRow['orderState'], string> = {
@@ -166,6 +167,7 @@ const orderStateClass: Record<OrderRow['orderState'], string> = {
   PAID: 'orders-status-tag is-paid',
   DELETED: 'orders-status-tag is-deleted',
   PARTIAL: 'orders-status-tag is-partial',
+  UNPAID: 'orders-status-tag is-unpaid',
 };
 
 const paymentMethodLabel = (method?: 'CASH' | 'BANKING' | null) => {
@@ -290,8 +292,8 @@ const normalizeOrderState = (row: { orderState?: OrderState; paidAmount?: number
   if (apiState) return apiState;
   const paidAmount = Math.trunc(Number(row.paidAmount || 0));
   const payableAmount = Math.trunc(Number(row.finalAmount ?? row.totalAmount ?? 0));
-  if (paidAmount >= payableAmount && payableAmount > 0) return 'PAID';
-  if (paidAmount < payableAmount) return 'PARTIAL';
+  if (paidAmount === 0) return payableAmount === 0 ? 'PAID' : 'UNPAID';
+  if (paidAmount >= payableAmount) return 'PAID';
   return 'PARTIAL';
 };
 
@@ -360,12 +362,15 @@ export default function OrdersPage() {
   const [totalItems, setTotalItems] = useState(0);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [statusFilters, setStatusFilters] = useState<string[]>(['DRAFT', 'PAID', 'PARTIAL']);
+  const [statusFilters, setStatusFilters] = useState<string[]>(['DRAFT', 'PAID', 'PARTIAL', 'UNPAID']);
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<'' | 'CASH' | 'BANKING'>('');
   const [areaFilter, setAreaFilter] = useState('');
   const [roomFilter, setRoomFilter] = useState('');
   const [tableFilter, setTableFilter] = useState('');
-  const initialStart = toDateTimeInputValue(new Date(new Date().setHours(0, 0, 0, 0)));
+  const initialStartDate = new Date();
+  initialStartDate.setDate(initialStartDate.getDate() - 1);
+  initialStartDate.setHours(0, 0, 0, 0);
+  const initialStart = toDateTimeInputValue(initialStartDate);
   const initialEnd = toDateTimeInputValue(new Date(new Date().setHours(23, 59, 0, 0)));
   const [startDate, setStartDate] = useState(splitDateTimeParts(initialStart).datePart);
   const [startTime, setStartTime] = useState(splitDateTimeParts(initialStart).timePart);
@@ -420,12 +425,15 @@ export default function OrdersPage() {
   const resetListFilters = () => {
     setSearch('');
     setDebouncedSearch('');
-    setStatusFilters(['DRAFT', 'PAID', 'PARTIAL']);
+    setStatusFilters(['DRAFT', 'PAID', 'PARTIAL', 'UNPAID']);
     setPaymentMethodFilter('');
     setAreaFilter('');
     setRoomFilter('');
     setTableFilter('');
-    const resetStart = splitDateTimeParts(toDateTimeInputValue(new Date(new Date().setHours(0, 0, 0, 0))));
+    const resetStartDate = new Date();
+    resetStartDate.setDate(resetStartDate.getDate() - 1);
+    resetStartDate.setHours(0, 0, 0, 0);
+    const resetStart = splitDateTimeParts(toDateTimeInputValue(resetStartDate));
     const resetEnd = splitDateTimeParts(toDateTimeInputValue(new Date(new Date().setHours(23, 59, 0, 0))));
     setStartDate(resetStart.datePart);
     setStartTime(resetStart.timePart);
@@ -586,7 +594,7 @@ export default function OrdersPage() {
     surchargeValue: number;
     paidAmount: number;
     paymentMethod: 'CASH' | 'BANKING';
-    orderState?: 'DRAFT' | 'PAID' | 'PARTIAL';
+    orderState?: 'DRAFT' | 'PAID' | 'PARTIAL' | 'UNPAID';
   }) => {
     const entityType = payload.table?.entityType;
     return {
@@ -1568,6 +1576,7 @@ export default function OrdersPage() {
                     { value: 'DRAFT', label: 'Nháp' },
                     { value: 'PAID', label: 'Đã thanh toán' },
                     { value: 'PARTIAL', label: 'Nợ' },
+                    { value: 'UNPAID', label: 'Chưa thanh toán' },
                     { value: 'DELETED', label: 'Đã xóa' },
                   ].map((option) => (
                     <label key={option.value} className="orders-multi-select-option">

@@ -165,7 +165,7 @@ export type OrderPayload = {
   surchargeValue?: number;
   paidAmount?: number;
   paymentMethod?: 'CASH' | 'BANKING';
-  orderState?: 'DRAFT' | 'PAID' | 'PARTIAL' | 'DELETED';
+  orderState?: 'DRAFT' | 'PAID' | 'PARTIAL' | 'UNPAID' | 'DELETED';
   billItems: BillItemPayload[];
   branchId?: string;
   billItemsPatch?: {
