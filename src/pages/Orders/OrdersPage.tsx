@@ -82,6 +82,7 @@ type OrderDetail = {
   tableName?: string | null;
   locationLabel?: string;
   customerName?: string | null;
+  creatorName?: string | null;
   discountAmount?: number;
   discountMode?: 'percent' | 'amount';
   discountValue?: number;
@@ -262,6 +263,7 @@ const buildOrder80mmData = (order: OrderDetail): Receipt80mmData => {
     orderCode: order.code,
     datetime: formatDateTimeVN(order.createdAt),
     customerName: order.customerName || '-',
+    creatorName: order.creatorName || '-',
     location: order.locationLabel || '-',
     items: order.items.map((item) => ({
       note: [item.note?.trim(), buildTimeUsageNote(item)].filter(Boolean).join('\n').trim(),
