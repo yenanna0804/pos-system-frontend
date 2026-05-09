@@ -32,8 +32,20 @@ export const DEFAULT_RECEIPT_80MM_DATA: Receipt80mmData = {
   guestCount: '2',
   cashier: 'abc',
   items: [
-    { name: 'Gà rán', note: 'cay nồng đặc biệt', quantity: 1, unitPrice: 15000, lineTotal: 15000 },
-    { name: 'Bia budweisser combo đặc biệt', quantity: 3, unitPrice: 55000, lineTotal: 165000 },
+    {
+      name: 'Gói karaoke',
+      note: "\nTổng thời gian: 1h20'\n23:40 -> 01:00 (1h20')",
+      quantity: 1,
+      unitPrice: 15000,
+      lineTotal: 15000,
+    },
+    {
+      name: 'Bia budweisser combo đặc biệt',
+      note: "12 x chai, hoa quả, khăn ướt",
+      quantity: 3,
+      unitPrice: 55000,
+      lineTotal: 165000
+    },
   ],
   subtotal: 180000,
   discount: 15000,
@@ -114,7 +126,15 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   for (let itemIdx = 0; itemIdx < data.items.length; itemIdx += 1) {
     const item = data.items[itemIdx];
     estimatedRows += wrapByWidth(sampleCtx, item.name, nameColumnWidth).length;
-    if (item.note?.trim()) estimatedRows += wrapByWidth(sampleCtx, item.note.trim(), noteColumnWidth).length;
+    if (item.note?.trim()) {
+      const noteSegments = item.note
+        .split(/\r?\n/)
+        .map((segment) => segment.trim())
+        .filter(Boolean);
+      for (const segment of noteSegments) {
+        estimatedRows += wrapByWidth(sampleCtx, segment, noteColumnWidth).length;
+      }
+    }
     if (isOrderPrint) estimatedRows += 1;
     if (item.note?.trim()) estimatedRows += 1;
     if (itemIdx < data.items.length - 1) estimatedRows += 1;
@@ -219,12 +239,18 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
       const noteBandStart = y;
       ctx.fillRect(colHashRight, y, tableRight - colHashRight, 2);
       y += 8;
-      const noteLines = wrapByWidth(ctx, itemNote, noteColumnWidth);
       ctx.font = `italic ${noteSize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
-      for (const noteLine of noteLines) {
-        ctx.textAlign = 'left';
-        ctx.fillText(noteLine, noteX, y);
-        y += noteLineHeight;
+      const noteSegments = itemNote
+        .split(/\r?\n/)
+        .map((segment) => segment.trim())
+        .filter(Boolean);
+      for (const segment of noteSegments) {
+        const noteLines = wrapByWidth(ctx, segment, noteColumnWidth);
+        for (const noteLine of noteLines) {
+          ctx.textAlign = 'left';
+          ctx.fillText(noteLine, noteX, y);
+          y += noteLineHeight;
+        }
       }
       ctx.font = `${bodySize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
       mergedRowBands.push({ start: noteBandStart, end: y });

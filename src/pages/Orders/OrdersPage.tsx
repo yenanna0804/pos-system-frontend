@@ -158,6 +158,68 @@ type CreateOrderDraft = {
 
 const orderStateLabel = ORDER_STATE_LABEL;
 const orderStateClass = ORDER_STATE_CLASS;
+const paymentMethodLabel = (method?: 'CASH' | 'BANKING' | null) => {
+  if (method === 'BANKING') return 'Chuyển khoản';
+  if (method === 'CASH') return 'Tiền mặt';
+  return '-';
+};
+
+const formatNumberVi = (value: number) => Math.trunc(Number(value || 0)).toLocaleString('vi-VN');
+const formatMinutesLabel = (minutesRaw: number) => {
+  const minutes = Math.max(0, Math.trunc(Number(minutesRaw || 0)));
+  const hours = Math.floor(minutes / 60);
+  const remainMinutes = minutes % 60;
+  if (hours <= 0) return `${remainMinutes}'`;
+  if (remainMinutes === 0) return `${hours}h`;
+  return `${hours}h${remainMinutes}'`;
+};
+
+const formatTimePart = (iso?: string | null) => {
+  if (!iso) return '--:--';
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return '--:--';
+  const hh = String(parsed.getHours()).padStart(2, '0');
+  const mm = String(parsed.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+};
+
+const buildTimeUsageNote = (item: OrderDetailItem) => {
+  if (item.pricingTypeSnapshot !== 'TIME') return '';
+  const usedMinutes = Math.max(0, Math.trunc(Number(item.usedMinutes || 0)));
+  if (usedMinutes <= 0 && !item.startAt && !item.stopAt) return '';
+  const lines: string[] = [];
+  lines.push(`Tổng thời gian: ${formatMinutesLabel(usedMinutes)}`);
+  if (item.startAt || item.stopAt) {
+    lines.push(`${formatTimePart(item.startAt)} -> ${formatTimePart(item.stopAt)} (${formatMinutesLabel(usedMinutes)})`);
+  }
+  return lines.join('\n');
+};
+const formatUnitPriceDisplay = (price: number, pricingType?: 'FIXED' | 'TIME', rateMinutes?: number) => {
+  const normalizedPrice = Math.max(0, Math.trunc(Number(price || 0))).toLocaleString('vi-VN');
+  if (pricingType !== 'TIME') return normalizedPrice;
+  const minutes = Math.max(1, Math.trunc(Number(rateMinutes || 0)));
+  return `${normalizedPrice} / ${minutes} phút`;
+};
+
+const toDateTimeInputValue = (value: Date) => {
+  const y = value.getFullYear();
+  const m = String(value.getMonth() + 1).padStart(2, '0');
+  const d = String(value.getDate()).padStart(2, '0');
+  const h = String(value.getHours()).padStart(2, '0');
+  const min = String(value.getMinutes()).padStart(2, '0');
+  return `${y}-${m}-${d}T${h}:${min}`;
+};
+
+const splitDateTimeParts = (value: string) => {
+  const [datePart, timePart] = value.split('T');
+  const [hourPart = '00', minutePart = '00'] = (timePart || '00:00').split(':');
+  return { datePart, timePart: `${hourPart}:${minutePart}` };
+};
+
+const toDateFromParts = (datePart: string, timePart: string) => {
+  const parsed = new Date(`${datePart}T${timePart}:00`);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+};
 
 const buildOrderA4Content = (order: OrderDetail) => {
   const lines: string[] = [];
@@ -202,12 +264,12 @@ const buildOrder80mmData = (order: OrderDetail): Receipt80mmData => {
     customerName: order.customerName || '-',
     location: order.locationLabel || '-',
     items: order.items.map((item) => ({
+      note: [item.note?.trim(), buildTimeUsageNote(item)].filter(Boolean).join('\n').trim(),
       name: item.productName || '-',
       unit: item.unit || '-',
       quantity: Math.max(0, Math.trunc(Number(item.quantity || 0))),
       unitPrice: Math.max(0, Math.trunc(Number(item.unitPrice || 0))),
       lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)))),
-      note: item.note || '',
     })),
     subtotal: Math.max(0, Math.trunc(Number(order.totalAmount || 0))),
     discount: Math.max(0, Math.trunc(discountTotal)),
