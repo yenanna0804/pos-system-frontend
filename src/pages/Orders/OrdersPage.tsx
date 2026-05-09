@@ -268,13 +268,18 @@ const buildOrder80mmData = (order: OrderDetail): Receipt80mmData => {
     items: order.items.map((item) => {
       const note = item.note?.trim();
       const timeUsageNote = buildTimeUsageNote(item);
+      const baseUnitPrice = Math.max(0, Number(item.baseUnitPrice ?? item.unitPrice ?? 0));
+      const unitPrice = Math.max(0, Number(item.unitPrice ?? 0));
+      const discountPercent = baseUnitPrice > 0
+        ? Math.max(0, Math.round(((baseUnitPrice - unitPrice) / baseUnitPrice) * 100))
+        : 0;
       return {
         note: [note ? `* ${note}` : '', timeUsageNote].filter(Boolean).join('\n').trim(),
         name: item.productName || '-',
         unit: item.unit || '-',
         quantity: Math.max(0, Math.trunc(Number(item.quantity || 0))),
         unitPrice: Math.max(0, Math.trunc(Number(item.unitPrice || 0))),
-        discount: Math.max(0, Math.trunc(Number(item.lineDiscountAmount || 0))),
+        discount: discountPercent,
         lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)))),
       };
     }),

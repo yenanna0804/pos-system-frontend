@@ -37,7 +37,7 @@ export const DEFAULT_RECEIPT_80MM_DATA: Receipt80mmData = {
       note: "\nTổng thời gian: 1h20'\n23:40 -> 01:00 (1h20')",
       quantity: 1,
       unitPrice: 1600000,
-      discount: 100000,
+      discount: 10,
       lineTotal: 1500000,
     },
     {
@@ -116,7 +116,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const colSlWidth = 34;
   const colUnitWidth = isOrderPrint ? 94 : 0;
   const colDgWidth = isOrderPrint ? 0 : 100;
-  const colKmWidth = isOrderPrint ? 0 : 82;
+  const colKmWidth = isOrderPrint ? 0 : 54;
   const colTtWidth = isOrderPrint ? 0 : 100;
 
   const colHashRight = tableLeft + colHashWidth;
@@ -243,7 +243,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     ctx.textAlign = 'right';
     ctx.fillText('ĐG', xUnitRight, y);
     ctx.textAlign = 'center';
-    ctx.fillText('KM', xKmCenter, y);
+    ctx.fillText('%KM', xKmCenter, y);
     ctx.textAlign = 'right';
     ctx.fillText('TT', xTotalRight, y);
   }
