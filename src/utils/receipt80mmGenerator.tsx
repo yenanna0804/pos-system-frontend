@@ -56,6 +56,13 @@ export const DEFAULT_RECEIPT_80MM_DATA: Receipt80mmData = {
 
 const toMoney = (value: number) => `${Math.trunc(value).toLocaleString('vi-VN')}đ`;
 const toNumberVi = (value: number) => Math.trunc(value).toLocaleString('vi-VN');
+const toPercentVi = (value: number) => {
+  const normalized = Number.isFinite(value) ? Math.max(0, value) : 0;
+  const rounded = Math.round(normalized * 10) / 10;
+  return Number.isInteger(rounded)
+    ? rounded.toLocaleString('vi-VN', { maximumFractionDigits: 0 })
+    : rounded.toLocaleString('vi-VN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+};
 
 const wrapByWidth = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
   const normalized = (text || '').trim().replace(/\s+/g, ' ');
@@ -150,7 +157,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     const item = data.items[itemIdx];
     const nameRows = wrapByWidth(sampleCtx, item.name, nameColumnWidth).length;
     const dgRows = isOrderPrint ? 1 : wrapByWidthHard(sampleCtx, toNumberVi(item.unitPrice), Math.max(10, colDgWidth - 8)).length;
-    const kmRows = isOrderPrint ? 1 : wrapByWidthHard(sampleCtx, toNumberVi(Math.abs(Number(item.discount || 0))), Math.max(10, colKmWidth - 8)).length;
+    const kmRows = isOrderPrint ? 1 : wrapByWidthHard(sampleCtx, toPercentVi(Number(item.discount || 0)), Math.max(10, colKmWidth - 8)).length;
     const ttRows = isOrderPrint ? 1 : wrapByWidthHard(sampleCtx, toNumberVi(item.lineTotal), Math.max(10, colTtWidth - 8)).length;
     estimatedRows += Math.max(nameRows, dgRows, kmRows, ttRows);
     if (item.note?.trim()) {
@@ -256,7 +263,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     const item = data.items[idx];
     const nameLines = wrapByWidth(ctx, (item.name || '').trim(), nameColumnWidth);
     const dgLines = isOrderPrint ? [] : wrapByWidthHard(ctx, toNumberVi(item.unitPrice), Math.max(10, colDgWidth - 8));
-    const kmLines = isOrderPrint ? [] : wrapByWidthHard(ctx, toNumberVi(Math.abs(Number(item.discount || 0))), Math.max(10, colKmWidth - 8));
+    const kmLines = isOrderPrint ? [] : wrapByWidthHard(ctx, toPercentVi(Number(item.discount || 0)), Math.max(10, colKmWidth - 8));
     const ttLines = isOrderPrint ? [] : wrapByWidthHard(ctx, toNumberVi(item.lineTotal), Math.max(10, colTtWidth - 8));
     const rowLineCount = isOrderPrint
       ? Math.max(1, nameLines.length)

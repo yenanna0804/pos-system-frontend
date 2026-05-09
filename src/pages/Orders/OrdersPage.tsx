@@ -272,14 +272,14 @@ const buildOrder80mmData = (order: OrderDetail, username?: string): Receipt80mmD
       const baseUnitPrice = Math.max(0, Number(item.baseUnitPrice ?? item.unitPrice ?? 0));
       const unitPrice = Math.max(0, Number(item.unitPrice ?? 0));
       const discountPercent = baseUnitPrice > 0
-        ? Math.max(0, Math.round(((baseUnitPrice - unitPrice) / baseUnitPrice) * 100))
+        ? Math.max(0, (1 - unitPrice / baseUnitPrice) * 100)
         : 0;
       return {
         note: [note ? `* ${note}` : '', timeUsageNote].filter(Boolean).join('\n').trim(),
         name: item.productName || '-',
         unit: item.unit || '-',
         quantity: Math.max(0, Math.trunc(Number(item.quantity || 0))),
-        unitPrice: Math.max(0, Math.trunc(Number(item.unitPrice || 0))),
+        unitPrice: Math.max(0, Math.trunc(baseUnitPrice)),
         discount: discountPercent,
         lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)))),
       };
