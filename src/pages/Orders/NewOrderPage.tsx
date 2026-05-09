@@ -338,6 +338,21 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     });
   };
 
+  const buildOrderComboNote = (item: BillItem) => {
+    const comboItems = Array.isArray(item.comboItems) ? item.comboItems : [];
+    if (comboItems.length === 0) return '';
+    const details = comboItems
+      .map((comboItem) => {
+        const name = (comboItem.itemName || '').trim() || '-';
+        const quantity = Math.max(0, Number(comboItem.quantity || 0));
+        const unit = (comboItem.itemUnit || '').trim();
+        return `${name}: ${quantity} ${unit}`.trim();
+      })
+      .filter(Boolean)
+      .join(', ');
+    return details ? `Combo bao gồm: (${details})` : '';
+  };
+
   const buildOrderSlip80mmData = (items: BillItem[], label: string): Receipt80mmData => {
     const location = selectedTable
       ? selectedTable.entityType === 'ROOM'
@@ -354,14 +369,18 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
       datetime: formatDateTimeVN(new Date().toISOString()),
       customerName: customerName || '-',
       location,
-      items: items.map((item) => ({
-        name: item.productName,
-        unit: item.unit || '-',
-        quantity: Math.max(0, Math.trunc(Number(item.quantity || 0))),
-        unitPrice: Math.max(0, Math.trunc(Number(item.unitPrice || 0))),
-        lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)))),
-        note: item.note || '',
-      })),
+      items: items.map((item) => {
+        const note = (item.note || '').trim();
+        const comboNote = buildOrderComboNote(item);
+        return {
+          name: item.productName,
+          unit: item.unit || '-',
+          quantity: Math.max(0, Math.trunc(Number(item.quantity || 0))),
+          unitPrice: Math.max(0, Math.trunc(Number(item.unitPrice || 0))),
+          lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)))),
+          note: [note ? `* ${note}` : '', comboNote].filter(Boolean).join('\n').trim(),
+        };
+      }),
       subtotal: Math.max(0, Math.trunc(subtotalSelected)),
       discount: useFullTotals ? Math.max(0, Math.trunc(discountAmount)) : 0,
       surcharge: useFullTotals ? Math.max(0, Math.trunc(surchargeAmount)) : 0,
