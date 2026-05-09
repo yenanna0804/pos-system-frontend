@@ -32,9 +32,7 @@ function AppRoutes() {
         path="/dashboard"
         element={
           <PrivateRoute>
-            <StaffBlockedRoute>
-              <Dashboard />
-            </StaffBlockedRoute>
+            <Dashboard />
           </PrivateRoute>
         }
       />

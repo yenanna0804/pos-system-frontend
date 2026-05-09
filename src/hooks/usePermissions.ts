@@ -5,7 +5,7 @@ export function usePermissions() {
   const isStaff = user?.role === 'STAFF';
 
   return {
-    canAccessReports: !isStaff,
+    canAccessReports: true,
     canAccessTables: !isStaff,
     canAccessPrinters: true,
 
