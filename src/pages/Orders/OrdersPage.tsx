@@ -21,7 +21,7 @@ type OrderRow = {
   code: string;
   tableName: string;
   customerName?: string;
-  creatorName?: string;
+  username?: string;
   totalAmount: number;
   finalAmount?: number;
   paidAmount?: number;
@@ -82,7 +82,7 @@ type OrderDetail = {
   tableName?: string | null;
   locationLabel?: string;
   customerName?: string | null;
-  creatorName?: string | null;
+  username?: string | null;
   discountAmount?: number;
   discountMode?: 'percent' | 'amount';
   discountValue?: number;
@@ -263,7 +263,7 @@ const buildOrder80mmData = (order: OrderDetail): Receipt80mmData => {
     orderCode: order.code,
     datetime: formatDateTimeVN(order.createdAt),
     customerName: order.customerName || '-',
-    creatorName: order.creatorName || '-',
+    username: order.username || '-',
     location: order.locationLabel || '-',
     items: order.items.map((item) => {
       const note = item.note?.trim();
@@ -328,6 +328,7 @@ const normalizeOrderState = (row: { orderState?: OrderState; paidAmount?: number
 
 const mapOrderRow = (row: OrderRowApi): OrderRow => ({
   ...row,
+  username: row.username || '',
   orderState: normalizeOrderState(row),
 });
 
@@ -1823,7 +1824,7 @@ export default function OrdersPage() {
                   <td className="orders-col-status">
                     <span className={orderStateClass[order.orderState]}>{orderStateLabel[order.orderState]}</span>
                   </td>
-                  <td>{order.creatorName || '-'}</td>
+                  <td>{order.username || '-'}</td>
                   <td className="orders-col-actions">
                     <div className="orders-row-actions">
                       <button

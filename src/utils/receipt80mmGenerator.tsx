@@ -16,7 +16,7 @@ export type Receipt80mmData = {
   datetime?: string;
   customerName?: string;
   location?: string;
-  creatorName?: string;
+  username?: string;
   items: Receipt80mmItem[];
   subtotal: number;
   discount: number;
@@ -30,7 +30,7 @@ export const DEFAULT_RECEIPT_80MM_DATA: Receipt80mmData = {
   orderCode: "HĐ1234",
   customerName: 'Nguyen Van A - 09xxxxxxx',
   location: 'Tầng 1 / Bàn 3',
-  creatorName: 'abc',
+  username: 'abc',
   items: [
     {
       name: 'Gói karaoke',
@@ -116,7 +116,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const colSlWidth = 34;
   const colUnitWidth = isOrderPrint ? 94 : 0;
   const colDgWidth = isOrderPrint ? 0 : 100;
-  const colKmWidth = isOrderPrint ? 0 : 54;
+  const colKmWidth = isOrderPrint ? 0 : 55;
   const colTtWidth = isOrderPrint ? 0 : 100;
 
   const colHashRight = tableLeft + colHashWidth;
@@ -223,7 +223,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   drawLabelValue('Mã HĐ', data.orderCode || '-');
   drawLabelValue('Vị trí', data.location || '-');
   drawLabelValue('Khách hàng', data.customerName || '-');
-  drawLabelValue('Thu ngân', data.creatorName || '-');
+  drawLabelValue('Thu ngân', data.username || '-');
 
   y += 2;
   const tableTop = y;
