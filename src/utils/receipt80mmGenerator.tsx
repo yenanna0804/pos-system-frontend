@@ -42,7 +42,7 @@ export const DEFAULT_RECEIPT_80MM_DATA: Receipt80mmData = {
     },
     {
       name: 'Bia budweisser combo đặc biệt',
-      note: "12 x chai, hoa quả, khăn ướt",
+      note: "Combo bao gồm: (Budweisser: 10 chai, Hoa quả: 1 đĩa)",
       quantity: 2,
       unitPrice: 1000000,
       lineTotal: 2000000
@@ -434,7 +434,7 @@ const buildImageEscPosBytesFromCanvas = (canvas: HTMLCanvasElement) => {
   const alignLeft = Uint8Array.from([0x1b, 0x61, 0x00]);
   const lf = Uint8Array.from([0x0a, 0x0a]);
   const cut = Uint8Array.from([0x1d, 0x56, 0x42, 0x00]);
-  const STRIP_HEIGHT = 200;
+  const STRIP_HEIGHT = 100;
 
   const strips: Uint8Array[] = [];
   for (let stripStart = 0; stripStart < height; stripStart += STRIP_HEIGHT) {

@@ -76,8 +76,8 @@ const buildComboItemsNote = (item: ReceiptSourceItem) => {
       return `${name}: ${quantity} ${unit}`.trim();
     })
     .filter(Boolean)
-    .join('; ');
-  return details ? `Combo bao gồm: ${details}` : '';
+    .join(', ');
+  return details ? `Combo bao gồm: (${details})` : '';
 };
 
 export const buildReceipt80mmData = (params: BuildReceipt80mmParams): Receipt80mmData => ({
