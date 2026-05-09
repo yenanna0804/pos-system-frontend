@@ -8,7 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { resolveImageUrl } from '../../utils/formatters';
 import { getErrorMessage } from '../../utils/errorHelpers';
-import { PAGE_SIZE, SEARCH_DEBOUNCE_MS } from '../../config/constants';
+import { PAGE_SIZE } from '../../config/constants';
 import './ProductsPage.css';
 
 type Category = {

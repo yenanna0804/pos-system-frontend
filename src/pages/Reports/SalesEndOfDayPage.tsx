@@ -4,7 +4,6 @@ import { areaService, diningTableService, orderService, reportService, roomServi
 import FilterResetButton from '../../components/FilterResetButton';
 import TooltipInfoButton from '../../components/TooltipInfoButton';
 import { formatDateTimeVN, formatNumberVi, formatUnitPriceDisplay, ORDER_STATE_CLASS, ORDER_STATE_LABEL, paymentMethodLabel, splitDateTimeParts, toDateFromParts, toDateTimeInputValue, toISOWithVNOffset } from '../../utils/formatters';
-import { getErrorMessage } from '../../utils/errorHelpers';
 import DateTimePicker from '../Orders/components/DateTimePicker';
 import '../Orders/OrdersPage.css';
 import './SalesEndOfDayPage.css';
