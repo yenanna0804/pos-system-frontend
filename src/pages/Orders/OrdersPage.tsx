@@ -185,9 +185,10 @@ const formatTimePart = (iso?: string | null) => {
 };
 
 const buildTimeUsageNote = (item: OrderDetailItem) => {
-  if (item.pricingTypeSnapshot !== 'TIME') return '';
   const usedMinutes = Math.max(0, Math.trunc(Number(item.usedMinutes || 0)));
-  if (usedMinutes <= 0 && !item.startAt && !item.stopAt) return '';
+  const isTimeItem = item.pricingTypeSnapshot === 'TIME';
+  const hasTimeEvidence = usedMinutes > 0 || Boolean(item.startAt) || Boolean(item.stopAt);
+  if (!isTimeItem && !hasTimeEvidence) return '';
   const lines: string[] = [];
   lines.push(`Tổng thời gian: ${formatMinutesLabel(usedMinutes)}`);
   if (item.startAt || item.stopAt) {
@@ -254,7 +255,7 @@ const buildOrderA4Content = (order: OrderDetail) => {
   return lines.join('\n');
 };
 
-const buildOrder80mmData = (order: OrderDetail): Receipt80mmData => {
+const buildOrder80mmData = (order: OrderDetail, username?: string): Receipt80mmData => {
   const discountTotal = Number(order.discountAmount || 0) + order.items.reduce((sum, item) => sum + Number(item.lineDiscountAmount || 0), 0);
   const surchargeTotal = Number(order.surchargeAmount || 0) + order.items.reduce((sum, item) => sum + Number(item.lineSurchargeAmount || 0), 0);
 
@@ -263,7 +264,7 @@ const buildOrder80mmData = (order: OrderDetail): Receipt80mmData => {
     orderCode: order.code,
     datetime: formatDateTimeVN(order.createdAt),
     customerName: order.customerName || '-',
-    username: order.username || '-',
+    username: username || '-',
     location: order.locationLabel || '-',
     items: order.items.map((item) => {
       const note = item.note?.trim();
@@ -290,8 +291,8 @@ const buildOrder80mmData = (order: OrderDetail): Receipt80mmData => {
   };
 };
 
-const buildOrderSlip80mmData = (order: OrderDetail): Receipt80mmData => ({
-  ...buildOrder80mmData(order),
+const buildOrderSlip80mmData = (order: OrderDetail, username?: string): Receipt80mmData => ({
+  ...buildOrder80mmData(order, username),
   title: 'PHIẾU ORDER',
 });
 
@@ -378,7 +379,7 @@ const mapOrderDetailToEditingState = (data: OrderDetail): EditingOrderState => {
 };
 
 export default function OrdersPage() {
-  const { branchId } = useAuth();
+  const { branchId, user } = useAuth();
   const { canDeleteOrder } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
@@ -793,7 +794,7 @@ export default function OrdersPage() {
       const detail = detailRes.data as OrderDetail;
       await printUsingConfiguredRoute(`Hóa đơn ${detail.code}`, buildOrderA4Content(detail), {
         templateKey: resolveTemplateKeyForPrintFamily('invoice'),
-        receipt80mmData: buildOrder80mmData(detail),
+        receipt80mmData: buildOrder80mmData(detail, user?.username),
       });
       showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {
@@ -811,7 +812,7 @@ export default function OrdersPage() {
       const detail = detailRes.data as OrderDetail;
       await printUsingConfiguredRoute(`Phiếu order ${detail.code}`, buildOrderSlipA4Content(detail), {
         templateKey: resolveTemplateKeyForPrintFamily('order_slip'),
-        receipt80mmData: buildOrderSlip80mmData(detail),
+        receipt80mmData: buildOrderSlip80mmData(detail, user?.username),
       });
       showToast('success', 'Đã gửi lệnh in phiếu order');
     } catch (error) {
@@ -1072,7 +1073,7 @@ export default function OrdersPage() {
     try {
       await printUsingConfiguredRoute(`Hóa đơn ${detailOrder.code}`, buildOrderA4Content(detailOrder), {
         templateKey: resolveTemplateKeyForPrintFamily('invoice'),
-        receipt80mmData: buildOrder80mmData(detailOrder),
+        receipt80mmData: buildOrder80mmData(detailOrder, user?.username),
       });
       showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {
@@ -1089,7 +1090,7 @@ export default function OrdersPage() {
     try {
       await printUsingConfiguredRoute(`Phiếu order ${detailOrder.code}`, buildOrderSlipA4Content(detailOrder), {
         templateKey: resolveTemplateKeyForPrintFamily('order_slip'),
-        receipt80mmData: buildOrderSlip80mmData(detailOrder),
+        receipt80mmData: buildOrderSlip80mmData(detailOrder, user?.username),
       });
       showToast('success', 'Đã gửi lệnh in phiếu order');
     } catch (error) {
