@@ -265,15 +265,19 @@ const buildOrder80mmData = (order: OrderDetail): Receipt80mmData => {
     customerName: order.customerName || '-',
     creatorName: order.creatorName || '-',
     location: order.locationLabel || '-',
-    items: order.items.map((item) => ({
-      note: [item.note?.trim(), buildTimeUsageNote(item)].filter(Boolean).join('\n').trim(),
-      name: item.productName || '-',
-      unit: item.unit || '-',
-      quantity: Math.max(0, Math.trunc(Number(item.quantity || 0))),
-      unitPrice: Math.max(0, Math.trunc(Number(item.unitPrice || 0))),
-      discount: Math.max(0, Math.trunc(Number(item.lineDiscountAmount || 0))),
-      lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)))),
-    })),
+    items: order.items.map((item) => {
+      const note = item.note?.trim();
+      const timeUsageNote = buildTimeUsageNote(item);
+      return {
+        note: [note ? `* ${note}` : '', timeUsageNote].filter(Boolean).join('\n').trim(),
+        name: item.productName || '-',
+        unit: item.unit || '-',
+        quantity: Math.max(0, Math.trunc(Number(item.quantity || 0))),
+        unitPrice: Math.max(0, Math.trunc(Number(item.unitPrice || 0))),
+        discount: Math.max(0, Math.trunc(Number(item.lineDiscountAmount || 0))),
+        lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)))),
+      };
+    }),
     subtotal: Math.max(0, Math.trunc(Number(order.totalAmount || 0))),
     discount: Math.max(0, Math.trunc(discountTotal)),
     surcharge: Math.max(0, Math.trunc(surchargeTotal)),
