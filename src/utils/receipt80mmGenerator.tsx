@@ -37,22 +37,22 @@ export const DEFAULT_RECEIPT_80MM_DATA: Receipt80mmData = {
       name: 'Gói karaoke',
       note: "\nTổng thời gian: 1h20'\n23:40 -> 01:00 (1h20')",
       quantity: 1,
-      unitPrice: 15000,
-      discount: 10,
-      lineTotal: 15000,
+      unitPrice: 1600000,
+      discount: 100000,
+      lineTotal: 1500000,
     },
     {
       name: 'Bia budweisser combo đặc biệt',
       note: "12 x chai, hoa quả, khăn ướt",
-      quantity: 10,
-      unitPrice: 10000000,
-      lineTotal: 100000000
+      quantity: 2,
+      unitPrice: 1000000,
+      lineTotal: 2000000
     },
   ],
-  subtotal: 180000,
-  discount: 15000,
+  subtotal: 3500000,
+  discount: 300000,
   surcharge: 0,
-  total: 165000,
+  total: 3200000,
 };
 
 const toMoney = (value: number) => `${Math.trunc(value).toLocaleString('vi-VN')}đ`;
@@ -77,6 +77,25 @@ const wrapByWidth = (ctx: CanvasRenderingContext2D, text: string, maxWidth: numb
   return lines;
 };
 
+const wrapByWidthHard = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
+  const normalized = (text || '').trim().replace(/\s+/g, ' ');
+  if (!normalized) return ['-'];
+  if (ctx.measureText(normalized).width <= maxWidth) return [normalized];
+  const lines: string[] = [];
+  let current = '';
+  for (const ch of normalized) {
+    const next = `${current}${ch}`;
+    if (!current || ctx.measureText(next).width <= maxWidth) {
+      current = next;
+      continue;
+    }
+    lines.push(current);
+    current = ch;
+  }
+  if (current) lines.push(current);
+  return lines;
+};
+
 const buildReceiptCanvas = (data: Receipt80mmData) => {
   const normalizedTitle = (data.title || '').trim().toUpperCase();
   const isOrderPrint =
@@ -89,7 +108,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const marginX = 16;
   const contentWidth = width - marginX * 2;
   const titleSize = 24;
-  const bodySize = 16;
+  const bodySize = 20;
   const lineHeight = 24;
 
   const tableLeft = marginX;
@@ -97,9 +116,9 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const colHashWidth = 30;
   const colSlWidth = 34;
   const colUnitWidth = isOrderPrint ? 94 : 0;
-  const colDgWidth = isOrderPrint ? 0 : 96;
-  const colKmWidth = isOrderPrint ? 0 : 46;
-  const colTtWidth = isOrderPrint ? 0 : 96;
+  const colDgWidth = isOrderPrint ? 0 : 100;
+  const colKmWidth = isOrderPrint ? 0 : 82;
+  const colTtWidth = isOrderPrint ? 0 : 100;
 
   const colHashRight = tableLeft + colHashWidth;
   const colNameRight = tableRight - (colSlWidth + colUnitWidth + colDgWidth + colKmWidth + colTtWidth);
@@ -119,7 +138,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const nameColumnWidth = colNameRight - xName - 8;
   const noteX = xName;
   const noteColumnWidth = tableRight - noteX - 8;
-  const noteSize = Math.max(14, bodySize - 2);
+  const noteSize = Math.max(16, bodySize - 2);
   const noteLineHeight = Math.max(20, lineHeight - 4);
 
   const sampleCanvas = document.createElement('canvas');
@@ -130,7 +149,11 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   let estimatedRows = 16;
   for (let itemIdx = 0; itemIdx < data.items.length; itemIdx += 1) {
     const item = data.items[itemIdx];
-    estimatedRows += wrapByWidth(sampleCtx, item.name, nameColumnWidth).length;
+    const nameRows = wrapByWidth(sampleCtx, item.name, nameColumnWidth).length;
+    const dgRows = isOrderPrint ? 1 : wrapByWidthHard(sampleCtx, toNumberVi(item.unitPrice), Math.max(10, colDgWidth - 8)).length;
+    const kmRows = isOrderPrint ? 1 : wrapByWidthHard(sampleCtx, toNumberVi(Math.abs(Number(item.discount || 0))), Math.max(10, colKmWidth - 8)).length;
+    const ttRows = isOrderPrint ? 1 : wrapByWidthHard(sampleCtx, toNumberVi(item.lineTotal), Math.max(10, colTtWidth - 8)).length;
+    estimatedRows += Math.max(nameRows, dgRows, kmRows, ttRows);
     if (item.note?.trim()) {
       const noteSegments = item.note
         .split(/\r?\n/)
@@ -221,7 +244,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     ctx.textAlign = 'right';
     ctx.fillText('ĐG', xUnitRight, y);
     ctx.textAlign = 'center';
-    ctx.fillText('%KM', xKmCenter, y);
+    ctx.fillText('KM', xKmCenter, y);
     ctx.textAlign = 'right';
     ctx.fillText('TT', xTotalRight, y);
   }
@@ -233,29 +256,34 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   for (let idx = 0; idx < data.items.length; idx += 1) {
     const item = data.items[idx];
     const nameLines = wrapByWidth(ctx, (item.name || '').trim(), nameColumnWidth);
+    const dgLines = isOrderPrint ? [] : wrapByWidthHard(ctx, toNumberVi(item.unitPrice), Math.max(10, colDgWidth - 8));
+    const kmLines = isOrderPrint ? [] : wrapByWidthHard(ctx, toNumberVi(Math.abs(Number(item.discount || 0))), Math.max(10, colKmWidth - 8));
+    const ttLines = isOrderPrint ? [] : wrapByWidthHard(ctx, toNumberVi(item.lineTotal), Math.max(10, colTtWidth - 8));
+    const rowLineCount = isOrderPrint
+      ? Math.max(1, nameLines.length)
+      : Math.max(1, nameLines.length, dgLines.length, kmLines.length, ttLines.length);
 
     ctx.textAlign = 'center';
     ctx.fillText(String(idx + 1), xHashCenter, y);
-    ctx.textAlign = 'left';
-    ctx.fillText(nameLines[0] || '-', xName, y);
-
     ctx.textAlign = 'center';
     ctx.fillText(String(Math.trunc(item.quantity)), xSlCenter, y);
-    if (isOrderPrint) {
-      ctx.fillText((item.unit || '-').trim() || '-', xUnitCenter, y);
-    } else {
-      ctx.textAlign = 'right';
-      ctx.fillText(toNumberVi(item.unitPrice), xUnitRight, y);
-      ctx.textAlign = 'center';
-      ctx.fillText(toNumberVi(Math.abs(Number(item.discount || 0))), xKmCenter, y);
-      ctx.textAlign = 'right';
-      ctx.fillText(toNumberVi(item.lineTotal), xTotalRight, y);
-    }
-    y += lineHeight;
+    if (isOrderPrint) ctx.fillText((item.unit || '-').trim() || '-', xUnitCenter, y);
 
-    for (let nameLineIdx = 1; nameLineIdx < nameLines.length; nameLineIdx += 1) {
+    for (let rowLineIdx = 0; rowLineIdx < rowLineCount; rowLineIdx += 1) {
+      const nameLine = nameLines[rowLineIdx];
       ctx.textAlign = 'left';
-      ctx.fillText(nameLines[nameLineIdx], xName, y);
+      if (nameLine) ctx.fillText(nameLine, xName, y);
+      if (!isOrderPrint) {
+        const dgLine = dgLines[rowLineIdx];
+        const kmLine = kmLines[rowLineIdx];
+        const ttLine = ttLines[rowLineIdx];
+        ctx.textAlign = 'right';
+        if (dgLine) ctx.fillText(dgLine, xUnitRight, y);
+        ctx.textAlign = 'center';
+        if (kmLine) ctx.fillText(kmLine, xKmCenter, y);
+        ctx.textAlign = 'right';
+        if (ttLine) ctx.fillText(ttLine, xTotalRight, y);
+      }
       y += lineHeight;
     }
 
