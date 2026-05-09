@@ -434,7 +434,7 @@ const buildImageEscPosBytesFromCanvas = (canvas: HTMLCanvasElement) => {
   const alignLeft = Uint8Array.from([0x1b, 0x61, 0x00]);
   const lf = Uint8Array.from([0x0a, 0x0a]);
   const cut = Uint8Array.from([0x1d, 0x56, 0x42, 0x00]);
-  const STRIP_HEIGHT = 100;
+  const STRIP_HEIGHT = 250;
 
   const strips: Uint8Array[] = [];
   for (let stripStart = 0; stripStart < height; stripStart += STRIP_HEIGHT) {
