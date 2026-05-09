@@ -13,6 +13,11 @@ type ReceiptSourceItem = {
   usedMinutes?: number;
   startAt?: string | null;
   stopAt?: string | null;
+  comboItems?: {
+    itemName?: string;
+    itemUnit?: string;
+    quantity?: number;
+  }[];
 };
 
 type BuildReceipt80mmParams = {
@@ -60,6 +65,21 @@ const buildTimeUsageNote = (item: ReceiptSourceItem) => {
   return lines.join('\n');
 };
 
+const buildComboItemsNote = (item: ReceiptSourceItem) => {
+  const comboItems = Array.isArray(item.comboItems) ? item.comboItems : [];
+  if (comboItems.length === 0) return '';
+  const details = comboItems
+    .map((comboItem) => {
+      const name = (comboItem.itemName || '').trim() || '-';
+      const quantity = Math.max(0, Number(comboItem.quantity || 0));
+      const unit = (comboItem.itemUnit || '').trim();
+      return `${name}: ${quantity} ${unit}`.trim();
+    })
+    .filter(Boolean)
+    .join('; ');
+  return details ? `Combo bao gồm: ${details}` : '';
+};
+
 export const buildReceipt80mmData = (params: BuildReceipt80mmParams): Receipt80mmData => ({
   title: params.title,
   orderCode: params.orderCode,
@@ -75,8 +95,9 @@ export const buildReceipt80mmData = (params: BuildReceipt80mmParams): Receipt80m
     const discountPercent = baseUnitPrice > 0
       ? Math.max(0, (1 - unitPrice / baseUnitPrice) * 100)
       : 0;
+    const comboItemsNote = buildComboItemsNote(item);
     return {
-      note: [note ? `* ${note}` : '', timeUsageNote].filter(Boolean).join('\n').trim(),
+      note: [note ? `* ${note}` : '', timeUsageNote, comboItemsNote].filter(Boolean).join('\n').trim(),
       name: item.productName || '-',
       unit: item.unit || '-',
       quantity: Math.max(0, Math.trunc(Number(item.quantity || 0))),
