@@ -391,6 +391,7 @@ export default function OrdersPage() {
   const draftAutosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestDraftAutosaveRequestRef = useRef(0);
   const isCreatingDraftRef = useRef(false);
+  const lastEditOrderIdRef = useRef<string | null>(null);
 
   const historyPageSize = HISTORY_PAGE_SIZE;
 
@@ -530,6 +531,14 @@ export default function OrdersPage() {
   }, [isCreateRoute]);
 
   useEffect(() => {
+    if (isEditRoute && editingOrderIdFromRoute && lastEditOrderIdRef.current !== editingOrderIdFromRoute) {
+      setEditActiveTab('product');
+      lastEditOrderIdRef.current = editingOrderIdFromRoute;
+    }
+    if (!isEditRoute) {
+      lastEditOrderIdRef.current = null;
+    }
+
     const loadEditingOrderFromRoute = async () => {
       if (!isEditRoute || !editingOrderIdFromRoute) {
         setEditingOrder(null);
@@ -541,7 +550,6 @@ export default function OrdersPage() {
         const nextEditing = mapOrderDetailToEditingState(response.data as OrderDetail);
         setEditingOrder(nextEditing);
         setEditingDraftBillItems(nextEditing.billItems);
-        setEditActiveTab('product');
       } catch (error) {
         setEditingOrder(null);
         setEditingDraftBillItems([]);
