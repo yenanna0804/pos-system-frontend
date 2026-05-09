@@ -96,7 +96,7 @@ const orderStateLabel: Record<'DRAFT' | 'PAID' | 'PARTIAL' | 'DELETED', string> 
   DRAFT: 'Nháp',
   PAID: 'Đã thanh toán',
   DELETED: 'Đã xóa',
-  PARTIAL: 'Chưa thanh toán',
+  PARTIAL: 'Nợ',
 };
 
 const orderStateClass: Record<'DRAFT' | 'PAID' | 'PARTIAL' | 'DELETED', string> = {
@@ -450,7 +450,7 @@ export default function SalesEndOfDayPage() {
               <div className="orders-multi-select-menu">
                 {[
                   { value: 'PAID', label: 'Đã thanh toán' },
-                  { value: 'PARTIAL', label: 'Chưa thanh toán' },
+                  { value: 'PARTIAL', label: 'Nợ' },
                 ].map((option) => (
                   <label key={option.value} className="orders-multi-select-option">
                     <input

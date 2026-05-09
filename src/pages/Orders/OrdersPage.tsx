@@ -158,7 +158,7 @@ const orderStateLabel: Record<OrderRow['orderState'], string> = {
   DRAFT: 'Nháp',
   PAID: 'Đã thanh toán',
   DELETED: 'Đã xóa',
-  PARTIAL: 'Chưa thanh toán',
+  PARTIAL: 'Nợ',
 };
 
 const orderStateClass: Record<OrderRow['orderState'], string> = {
@@ -1567,7 +1567,7 @@ export default function OrdersPage() {
                   {[
                     { value: 'DRAFT', label: 'Nháp' },
                     { value: 'PAID', label: 'Đã thanh toán' },
-                    { value: 'PARTIAL', label: 'Chưa thanh toán' },
+                    { value: 'PARTIAL', label: 'Nợ' },
                     { value: 'DELETED', label: 'Đã xóa' },
                   ].map((option) => (
                     <label key={option.value} className="orders-multi-select-option">

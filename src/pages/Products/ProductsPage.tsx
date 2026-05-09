@@ -1105,7 +1105,7 @@ export default function ProductsPage() {
           <div className="search-input-wrap">
             <input
               type="text"
-              placeholder="Tên hàng hóa, nhóm hàng..."
+              placeholder="Mã hàng, tên hàng hóa, nhóm hàng..."
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);

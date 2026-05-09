@@ -132,7 +132,7 @@ export default function OrdersProductPicker({ branchId, onAddProduct }: Props) {
           <div className="orders-search-input-wrap">
             <input
               type="text"
-              placeholder="Tên hàng hóa, nhóm hàng..."
+              placeholder="Mã hàng, tên hàng hóa, nhóm hàng..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
             />
