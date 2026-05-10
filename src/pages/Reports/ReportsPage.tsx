@@ -9,7 +9,8 @@ export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<ReportTab>('sales');
 
   return (
-    <div>
+    <div className="reports-page">
+      <div className="reports-shell">
       <div className="reports-tab-bar">
         <button
           type="button"
@@ -29,6 +30,7 @@ export default function ReportsPage() {
 
       {activeTab === 'sales' && <SalesEndOfDayPage />}
       {activeTab === 'products' && <ProductReportPage />}
+      </div>
     </div>
   );
 }

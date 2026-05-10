@@ -579,7 +579,7 @@ export default function TablesPage() {
                 x
               </button>
             </div>
-            <p style={{ whiteSpace: 'pre-line', margin: '4px 0 0', color: '#344054' }}>{confirmDialog.message}</p>
+            <p style={{ whiteSpace: 'pre-line', margin: '4px 0 0', color: 'var(--color-text-secondary)' }}>{confirmDialog.message}</p>
             <div className="modal-actions" style={{ marginTop: 16 }}>
               <button type="button" className="ghost-btn" onClick={() => closeConfirmDialog(false)}>
                 {confirmDialog.cancelText || 'Hủy'}
@@ -596,19 +596,20 @@ export default function TablesPage() {
         </div>
       )}
 
-      <div className="products-toolbar">
-        <h2>Danh sách phòng/bàn</h2>
-        <div className="products-toolbar-actions">
-          <button className="primary-btn" onClick={openCreateTable}>
-            Thêm mới phòng/bàn
-          </button>
-          <button className="secondary-btn" onClick={openAreaModal}>
-            Quản lý khu vực
-          </button>
+      <div className="products-shell">
+        <div className="products-toolbar">
+          <h2>Danh sách phòng/bàn</h2>
+          <div className="products-toolbar-actions">
+            <button className="primary-btn" onClick={openCreateTable}>
+              Thêm mới phòng/bàn
+            </button>
+            <button className="secondary-btn" onClick={openAreaModal}>
+              Quản lý khu vực
+            </button>
+          </div>
         </div>
-      </div>
 
-      <div className="products-filters tables-filters">
+        <div className="products-filters tables-filters">
         <label className="search-label">
           Tìm kiếm
           <div className="search-input-wrap">
@@ -698,15 +699,14 @@ export default function TablesPage() {
             <path d="M20 4v6h-6" />
           </svg>
         </button>
-      </div>
+        </div>
 
-      {error && <p className="products-error">{error}</p>}
+        {error && <p className="products-error">{error}</p>}
 
-      <div className="products-table-wrap tables-table-wrap">
         {grouped.length === 0 ? (
           <div className="empty-row table-empty-block">Không có dữ liệu</div>
         ) : (
-          <div className="area-group-list">
+          <>
             {grouped.map((group) => (
               <div className="area-group-card" key={group.area.id}>
                 <div className="area-group-header">
@@ -813,11 +813,10 @@ export default function TablesPage() {
                 </div>
               </div>
             ))}
-          </div>
+          </>
         )}
-      </div>
 
-      <div className="pagination-bar">
+        <div className="pagination-bar">
         <span>
           Trang {currentPage}/{totalPages} - {totalItems} bản ghi
         </span>
@@ -842,6 +841,7 @@ export default function TablesPage() {
           >
             Sau
           </button>
+        </div>
         </div>
       </div>
 

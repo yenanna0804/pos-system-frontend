@@ -575,7 +575,7 @@ export default function SalesEndOfDayPage() {
                       <td>-</td>
                       <td className="num-col">{toMoneyText(group.summary.totalQuantity)}</td>
                       <td className="num-col">{toMoneyText(group.summary.paymentAmount)}</td>
-                      <td className="num-col">{toMoneyText(group.summary.debtAmount)}</td>
+                      <td className="num-col debt-col">{toMoneyText(group.summary.debtAmount)}</td>
                       <td className="num-col">{toMoneyText(group.summary.revenueAmount)}</td>
                       <td className="num-col">{toMoneyText(group.summary.grossAmount)}</td>
                       <td className="num-col">{toMoneyText(group.summary.discountAmount)}</td>
@@ -595,7 +595,7 @@ export default function SalesEndOfDayPage() {
                           <td>{paymentMethodLabel(row.paymentMethod)}</td>
                           <td className="num-col">{toMoneyText(row.totalQuantity)}</td>
                           <td className="num-col">{toMoneyText(row.paymentAmount)}</td>
-                          <td className="num-col">{toMoneyText(row.debtAmount)}</td>
+                          <td className="num-col debt-col">{toMoneyText(row.debtAmount)}</td>
                           <td className="num-col">{toMoneyText(row.revenueAmount)}</td>
                           <td className="num-col">{toMoneyText(row.grossAmount)}</td>
                           <td className="num-col">{toMoneyText(row.discountAmount)}</td>

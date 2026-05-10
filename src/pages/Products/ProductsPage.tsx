@@ -1051,7 +1051,7 @@ export default function ProductsPage() {
       </div>
 
       {confirmDialog.open && (
-        <div className="modal-overlay" onClick={() => closeConfirmDialog(false)}>
+        <div className="modal-overlay confirm-dialog-overlay" onClick={() => closeConfirmDialog(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{confirmDialog.title}</h3>
@@ -1076,29 +1076,30 @@ export default function ProductsPage() {
         </div>
       )}
 
-      <div className="products-toolbar">
-        <h2>Danh sách hàng hóa</h2>
-        <div className="products-toolbar-actions">
-          {canCreateProduct && (
-            <button className="primary-btn" onClick={openCreateModal}>
-              Thêm mới hàng hóa
-            </button>
-          )}
-          {canCreateProduct && (
-            <button
-              className="secondary-btn"
-              onClick={() => {
-                loadCategories().catch(() => pushToast('error', 'Không tải được nhóm hàng hóa'));
-                setIsCategoryOpen(true);
-              }}
-            >
-              Quản lý nhóm hàng hóa
-            </button>
-          )}
+      <div className="products-shell">
+        <div className="products-toolbar">
+          <h2>Danh sách hàng hóa</h2>
+          <div className="products-toolbar-actions">
+            {canCreateProduct && (
+              <button className="primary-btn" onClick={openCreateModal}>
+                Thêm mới hàng hóa
+              </button>
+            )}
+            {canCreateProduct && (
+              <button
+                className="secondary-btn"
+                onClick={() => {
+                  loadCategories().catch(() => pushToast('error', 'Không tải được nhóm hàng hóa'));
+                  setIsCategoryOpen(true);
+                }}
+              >
+                Quản lý nhóm hàng hóa
+              </button>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="products-filters">
+        <div className="products-filters">
         <label className="search-label">
           Tìm kiếm
           <div className="search-input-wrap">
@@ -1186,9 +1187,9 @@ export default function ProductsPage() {
 
         <FilterResetButton onClick={resetListFilters} />
 
-      </div>
+        </div>
 
-      <div className={`products-table-wrap ${isListLoading ? 'is-loading' : ''}`}>
+        <div className={`products-table-wrap ${isListLoading ? 'is-loading' : ''}`}>
         {isListLoading && (
           <div className="list-loading-overlay">
             <div className="list-loading">
@@ -1273,7 +1274,13 @@ export default function ProductsPage() {
                       {product.imageThumb || product.imageUrl ? (
                         <img src={resolveImageUrl(product.imageThumb || product.imageUrl)} alt={product.name} />
                       ) : (
-                        <span>--</span>
+                        <span className="product-thumb-placeholder" aria-hidden>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+                            <circle cx="9" cy="10" r="1.8" />
+                            <path d="m20.5 16-4.6-4.4a1.4 1.4 0 0 0-2 0l-5.8 5.9" />
+                          </svg>
+                        </span>
                       )}
                     </div>
                   </td>
@@ -1326,9 +1333,9 @@ export default function ProductsPage() {
             )}
           </tbody>
         </table>
-      </div>
+        </div>
 
-      <div className="pagination-bar">
+        <div className="pagination-bar">
         <span>
           Trang {page}/{totalPages} - {totalItems} sản phẩm
         </span>
@@ -1383,6 +1390,7 @@ export default function ProductsPage() {
           >
             Sau
           </button>
+        </div>
         </div>
       </div>
 
@@ -1510,7 +1518,7 @@ export default function ProductsPage() {
                     }}
                     onChange={(event) => setProductForm({ ...productForm, categoryId: event.target.value })}
                   >
-                    <option value="">--Lựa chọn--</option>
+                    <option value="">Chọn hàng hóa</option>
                     {categories.map((category) => (
                       <option key={category.id} value={category.id}>
                         {category.name}
@@ -1961,7 +1969,13 @@ export default function ProductsPage() {
                             {item.imageThumb || item.imageUrl ? (
                               <img src={resolveImageUrl(item.imageThumb || item.imageUrl)} alt={item.name || 'item'} />
                             ) : (
-                              <span>--</span>
+                              <span className="product-thumb-placeholder" aria-hidden>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+                                  <circle cx="9" cy="10" r="1.8" />
+                                  <path d="m20.5 16-4.6-4.4a1.4 1.4 0 0 0-2 0l-5.8 5.9" />
+                                </svg>
+                              </span>
                             )}
                           </div>
                         </td>
