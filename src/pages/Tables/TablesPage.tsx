@@ -43,6 +43,13 @@ type ConfirmDialogState = {
   danger?: boolean;
 };
 
+const normalizeSearch = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+
 export default function TablesPage() {
   const { branchId } = useAuth();
   const [areas, setAreas] = useState<Area[]>([]);
@@ -53,11 +60,6 @@ export default function TablesPage() {
   const [areaFilter, setAreaFilter] = useState('');
   const [roomFilter, setRoomFilter] = useState('');
   const [tableFilter, setTableFilter] = useState('');
-
-  const [page, setPage] = useState(1);
-  const pageSize = 7;
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalItems, setTotalItems] = useState(0);
 
   const [error, setError] = useState('');
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -115,38 +117,23 @@ export default function TablesPage() {
     setAreaFilter('');
     setRoomFilter('');
     setTableFilter('');
-    setPage(1);
   };
 
   const loadAll = async () => {
     const [areasRes, roomsRes, tablesRes] = await Promise.all([
       areaService.list(branchId || undefined),
       roomService.list({ branchId: branchId || undefined }),
-      diningTableService.list({
-        branchId: branchId || undefined,
-        areaId: areaFilter || undefined,
-        roomId: roomFilter || undefined,
-        search: search.trim() || undefined,
-        page,
-        pageSize,
-      }),
+      diningTableService.options({ branchId: branchId || undefined }),
     ]);
     setAreas(areasRes.data || []);
     setRooms(roomsRes.data || []);
-    const tableData = tablesRes.data;
-    const tableRows: DiningTable[] = Array.isArray(tableData)
-      ? tableData
-      : Array.isArray(tableData?.items)
-        ? tableData.items
-        : [];
+    const tableRows: DiningTable[] = Array.isArray(tablesRes.data) ? tablesRes.data : [];
     setTables(tableRows);
-    setTotalPages(tableData?.pagination?.totalPages || 1);
-    setTotalItems(tableData?.pagination?.total || tableRows.length);
   };
 
   useEffect(() => {
     loadAll().catch((e) => setError(getErrorMessage(e) || 'Không tải được dữ liệu'));
-  }, [branchId, areaFilter, roomFilter, search, page]);
+  }, [branchId]);
 
   const resetEntityForm = () => {
     setEditingEntityId(null);
@@ -493,9 +480,17 @@ export default function TablesPage() {
     () => rooms.filter((r) => !areaFilter || r.areaId === areaFilter),
     [rooms, areaFilter],
   );
+  const normalizedSearch = useMemo(() => normalizeSearch(search), [search]);
+  const filteredTablesBySearch = useMemo(() => {
+    if (!normalizedSearch) return tables;
+    return tables.filter((table) => {
+      const areaName = areas.find((area) => area.id === table.areaId)?.name || table.areaName || '';
+      return [table.name, table.roomName || '', areaName].some((value) => normalizeSearch(value).includes(normalizedSearch));
+    });
+  }, [tables, areas, normalizedSearch]);
   const filteredTablesForFilter = useMemo(
-    () => tables.filter((t) => (!areaFilter || t.areaId === areaFilter) && (!roomFilter || t.roomId === roomFilter)),
-    [tables, areaFilter, roomFilter],
+    () => filteredTablesBySearch.filter((t) => (!areaFilter || t.areaId === areaFilter) && (!roomFilter || t.roomId === roomFilter)),
+    [filteredTablesBySearch, areaFilter, roomFilter],
   );
 
   const selectedRoom = rooms.find((r) => r.id === roomFilter);
@@ -509,19 +504,17 @@ export default function TablesPage() {
     return sourceAreas
       .map((area) => {
         const areaRooms = rooms.filter((r) => r.areaId === area.id && (!roomFilter || r.id === roomFilter));
-        const directTables = tables.filter(
+        const directTables = filteredTablesBySearch.filter(
           (t) => t.areaId === area.id && !t.roomId && (!tableFilter || t.id === tableFilter),
         );
         const roomGroups = areaRooms.map((room) => ({
           room,
-          tables: tables.filter((t) => t.roomId === room.id && (!tableFilter || t.id === tableFilter)),
+          tables: filteredTablesBySearch.filter((t) => t.roomId === room.id && (!tableFilter || t.id === tableFilter)),
         }));
         const total = directTables.length + roomGroups.reduce((acc, item) => acc + item.tables.length, 0);
         return { area, directTables, roomGroups, total };
       });
-  }, [areas, rooms, tables, effectiveAreaFilter, roomFilter, tableFilter]);
-
-  const currentPage = Math.min(page, totalPages);
+  }, [areas, rooms, filteredTablesBySearch, effectiveAreaFilter, roomFilter, tableFilter]);
 
   const quickContextDescription = useMemo(() => {
     if (!quickContext) return '';
@@ -618,7 +611,6 @@ export default function TablesPage() {
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
-                setPage(1);
               }}
             />
             <button type="button" className="search-icon-btn" aria-label="Tìm kiếm">
@@ -638,7 +630,6 @@ export default function TablesPage() {
               setAreaFilter(e.target.value);
               setRoomFilter('');
               setTableFilter('');
-              setPage(1);
             }}
           >
             <option value="">Tất cả khu vực</option>
@@ -657,7 +648,6 @@ export default function TablesPage() {
             onChange={(e) => {
               setRoomFilter(e.target.value);
               setTableFilter('');
-              setPage(1);
             }}
           >
             <option value="">Tất cả phòng</option>
@@ -675,7 +665,6 @@ export default function TablesPage() {
             value={tableFilter}
             onChange={(e) => {
               setTableFilter(e.target.value);
-              setPage(1);
             }}
           >
             <option value="">Tất cả bàn</option>
@@ -816,33 +805,6 @@ export default function TablesPage() {
           </>
         )}
 
-        <div className="pagination-bar">
-        <span>
-          Trang {currentPage}/{totalPages} - {totalItems} bản ghi
-        </span>
-        <div className="pagination-actions">
-          <button className="ghost-btn" disabled={currentPage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-            Trước
-          </button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((num) => (
-            <button
-              key={num}
-              className={`ghost-btn ${num === currentPage ? 'active' : ''}`}
-              disabled={num === currentPage}
-              onClick={() => setPage(num)}
-            >
-              {num}
-            </button>
-          ))}
-          <button
-            className="ghost-btn"
-            disabled={currentPage >= totalPages}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          >
-            Sau
-          </button>
-        </div>
-        </div>
       </div>
 
       {isEntityModalOpen && (

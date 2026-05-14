@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { areaService, diningTableService, roomService } from '../../../services/api';
-import { PAGE_SIZE } from '../../../config/constants';
 import type { SelectableTable } from '../types';
 
 type Area = {
@@ -29,6 +28,13 @@ type Props = {
   onSelectTable: (table: SelectableTable) => void;
 };
 
+const normalizeSearch = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+
 export default function OrdersTablePicker({ branchId, selectedTableId, onSelectTable }: Props) {
   const [areas, setAreas] = useState<Area[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -38,23 +44,13 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
   const [areaFilter, setAreaFilter] = useState('');
   const [roomFilter, setRoomFilter] = useState('');
   const [tableFilter, setTableFilter] = useState('');
-  const [page, setPage] = useState(1);
   const [error, setError] = useState('');
-
-  const pageSize = PAGE_SIZE;
 
   const loadAll = async () => {
     const [areasRes, roomsRes, tablesRes] = await Promise.all([
       areaService.list(branchId || undefined),
       roomService.list({ branchId: branchId || undefined }),
-      diningTableService.list({
-        branchId: branchId || undefined,
-        areaId: areaFilter || undefined,
-        roomId: roomFilter || undefined,
-        search: search.trim() || undefined,
-        page,
-        pageSize,
-      }),
+      diningTableService.options({ branchId: branchId || undefined }),
     ]);
 
     setAreas((areasRes.data || []) as Area[]);
@@ -65,27 +61,29 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
       setAreaFilter(incomingAreas[0].id);
     }
 
-    const tableData = tablesRes.data;
-    const tableRows: DiningTable[] = Array.isArray(tableData)
-      ? tableData
-      : Array.isArray(tableData?.items)
-        ? tableData.items
-        : [];
+    const tableRows: DiningTable[] = Array.isArray(tablesRes.data) ? tablesRes.data : [];
     setTables(tableRows);
   };
 
   useEffect(() => {
     loadAll().catch(() => setError('Không tải được danh sách phòng/bàn'));
-  }, [branchId, areaFilter, roomFilter, search, page]);
+  }, [branchId]);
 
   const filteredRoomsForFilter = useMemo(
     () => rooms.filter((room) => !areaFilter || room.areaId === areaFilter),
     [rooms, areaFilter],
   );
+  const normalizedSearch = useMemo(() => normalizeSearch(search), [search]);
+  const filteredTablesBySearch = useMemo(() => {
+    if (!normalizedSearch) return tables;
+    return tables.filter((table) =>
+      [table.name, table.areaName || '', table.roomName || ''].some((value) => normalizeSearch(value).includes(normalizedSearch)),
+    );
+  }, [tables, normalizedSearch]);
 
   const filteredTablesForFilter = useMemo(
-    () => tables.filter((table) => (!areaFilter || table.areaId === areaFilter) && (!roomFilter || table.roomId === roomFilter)),
-    [tables, areaFilter, roomFilter],
+    () => filteredTablesBySearch.filter((table) => (!areaFilter || table.areaId === areaFilter) && (!roomFilter || table.roomId === roomFilter)),
+    [filteredTablesBySearch, areaFilter, roomFilter],
   );
 
   const selectedRoom = rooms.find((room) => room.id === roomFilter);
@@ -99,21 +97,20 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
 
     return sourceAreas.map((area) => {
       const areaRooms = rooms.filter((room) => room.areaId === area.id && (!roomFilter || room.id === roomFilter));
-      const directTables = tables.filter((table) => table.areaId === area.id && !table.roomId && (!tableFilter || table.id === tableFilter));
+      const directTables = filteredTablesBySearch.filter((table) => table.areaId === area.id && !table.roomId && (!tableFilter || table.id === tableFilter));
       const roomGroups = areaRooms.map((room) => ({
         room,
-        tables: tables.filter((table) => table.roomId === room.id && (!tableFilter || table.id === tableFilter)),
+        tables: filteredTablesBySearch.filter((table) => table.roomId === room.id && (!tableFilter || table.id === tableFilter)),
       }));
 
       return { area, directTables, roomGroups };
     });
-  }, [areas, rooms, tables, effectiveAreaFilter, roomFilter, tableFilter]);
+  }, [areas, rooms, filteredTablesBySearch, effectiveAreaFilter, roomFilter, tableFilter]);
 
   const resetListFilters = () => {
     setSearch('');
     setRoomFilter('');
     setTableFilter('');
-    setPage(1);
   };
 
   return (
@@ -127,7 +124,6 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value);
-                setPage(1);
               }}
             />
             <button type="button" className="orders-search-icon-btn" aria-label="Tìm kiếm">
@@ -146,7 +142,6 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
             onChange={(event) => {
               setRoomFilter(event.target.value);
               setTableFilter('');
-              setPage(1);
             }}
           >
             <option value="">Tất cả phòng</option>
@@ -164,7 +159,6 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
             value={tableFilter}
             onChange={(event) => {
               setTableFilter(event.target.value);
-              setPage(1);
             }}
           >
             <option value="">Tất cả bàn</option>
@@ -207,7 +201,6 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
                   setAreaFilter(area.id);
                   setRoomFilter('');
                   setTableFilter('');
-                  setPage(1);
                 }}
               >
                 {area.name}
