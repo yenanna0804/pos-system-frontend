@@ -130,6 +130,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const contentWidth = width - marginX * 2;
   const titleSize = 28;
   const bodySize = 24;
+  const totalAmountSize = bodySize + 8;
   const contentLineHeight = 48;
   const tableLineHeight = 32;
 
@@ -394,7 +395,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
 
   ctx.fillRect(marginX, y, contentWidth, 2);
   y += 22;
-  ctx.font = `bold ${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
+  ctx.font = `bold ${totalAmountSize}px '${RECEIPT_FONT_FAMILY}'`;
   drawSummary('THANH TOÁN', toMoney(data.total));
   ctx.font = `${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
 
