@@ -64,6 +64,21 @@ const toPercentVi = (value: number) => {
     : rounded.toLocaleString('vi-VN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 };
 
+const RECEIPT_FONT_FAMILY = 'Helvetica';
+
+const assertReceiptFontLoaded = async () => {
+  if (typeof document === 'undefined' || !('fonts' in document)) return;
+  const fonts = document.fonts;
+  const check = () => fonts.check(`16px "${RECEIPT_FONT_FAMILY}"`);
+  if (check()) return;
+  await fonts.load(`400 16px "${RECEIPT_FONT_FAMILY}"`);
+  await fonts.load(`700 16px "${RECEIPT_FONT_FAMILY}"`);
+  await fonts.load(`italic 400 16px "${RECEIPT_FONT_FAMILY}"`);
+  if (!check()) {
+    throw new Error(`Font ${RECEIPT_FONT_FAMILY} is not loaded`);
+  }
+};
+
 const wrapByWidth = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
   const normalized = (text || '').trim().replace(/\s+/g, ' ');
   if (!normalized) return ['-'];
@@ -115,7 +130,8 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const contentWidth = width - marginX * 2;
   const titleSize = 28;
   const bodySize = 24;
-  const lineHeight = 28;
+  const contentLineHeight = 48;
+  const tableLineHeight = 32;
 
   const tableLeft = marginX;
   const tableRight = marginX + contentWidth;
@@ -145,12 +161,12 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const noteX = xName;
   const noteColumnWidth = tableRight - noteX - 8;
   const noteSize = Math.max(20, bodySize - 2);
-  const noteLineHeight = Math.max(20, lineHeight - 4);
+  const noteLineHeight = Math.max(20, tableLineHeight - 4);
 
   const sampleCanvas = document.createElement('canvas');
   const sampleCtx = sampleCanvas.getContext('2d');
   if (!sampleCtx) throw new Error('Khong tao duoc canvas bitmap');
-  sampleCtx.font = `${bodySize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
+  sampleCtx.font = `${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
 
   let estimatedRows = 16;
   for (let itemIdx = 0; itemIdx < data.items.length; itemIdx += 1) {
@@ -173,7 +189,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     if (item.note?.trim()) estimatedRows += 1;
     if (itemIdx < data.items.length - 1) estimatedRows += 1;
   }
-  const estimatedHeight = 86 + estimatedRows * lineHeight;
+  const estimatedHeight = 86 + estimatedRows * tableLineHeight;
   const height = Math.max(320, Math.min(1700, estimatedHeight));
 
   const canvas = document.createElement('canvas');
@@ -205,25 +221,25 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   let y = 10;
   const mergedRowBands: Array<{ start: number; end: number }> = [];
   const title = isOrderPrint ? 'PHIẾU ORDER' : 'PHIẾU TẠM TÍNH';
-  ctx.font = `bold ${titleSize}px 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
+  ctx.font = `bold ${titleSize}px '${RECEIPT_FONT_FAMILY}'`;
   ctx.textAlign = 'center';
   ctx.fillText(title, width / 2, y);
   y += 40;
   ctx.fillRect(marginX, y, contentWidth, 2);
   y += 12;
 
-  ctx.font = `${bodySize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
+  ctx.font = `${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
   ctx.textAlign = 'left';
 
   const drawLabelValue = (label: string, value: string) => {
     ctx.textAlign = 'left';
     const labelText = `${label}: `;
-    ctx.font = `bold ${bodySize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
+    ctx.font = `bold ${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
     ctx.fillText(labelText, marginX, y);
     const labelWidth = ctx.measureText(labelText).width;
-    ctx.font = `${bodySize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
+    ctx.font = `${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
     ctx.fillText(value || '-', marginX + labelWidth, y);
-    y += lineHeight;
+    y += contentLineHeight;
   };
 
   drawLabelValue('Ngày', data.datetime || formatDateTimeVN(new Date().toISOString()));
@@ -237,7 +253,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   ctx.fillRect(marginX, y, contentWidth, 2);
   y += 10;
 
-  ctx.font = `bold ${bodySize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
+  ctx.font = `bold ${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
   ctx.textAlign = 'center';
   ctx.fillText('#', xHashCenter, y);
   ctx.textAlign = 'left';
@@ -254,10 +270,10 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     ctx.textAlign = 'right';
     ctx.fillText('TT', xTotalRight, y);
   }
-  y += lineHeight;
+  y += tableLineHeight;
   ctx.fillRect(marginX, y, contentWidth, 2);
   y += 10;
-  ctx.font = `${bodySize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
+  ctx.font = `${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
 
   for (let idx = 0; idx < data.items.length; idx += 1) {
     const item = data.items[idx];
@@ -290,7 +306,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
         ctx.textAlign = 'right';
         if (ttLine) ctx.fillText(ttLine, xTotalRight, y);
       }
-      y += lineHeight;
+      y += tableLineHeight;
     }
 
     const itemNote = item.note?.trim();
@@ -298,7 +314,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
       const noteBandStart = y;
       ctx.fillRect(colHashRight, y, tableRight - colHashRight, 2);
       y += 8;
-      ctx.font = `italic ${noteSize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
+      ctx.font = `italic ${noteSize}px '${RECEIPT_FONT_FAMILY}'`;
       const noteSegments = itemNote
         .split(/\r?\n/)
         .map((segment) => segment.trim())
@@ -311,7 +327,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
           y += noteLineHeight;
         }
       }
-      ctx.font = `${bodySize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
+      ctx.font = `${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
       mergedRowBands.push({ start: noteBandStart, end: y });
     }
 
@@ -359,9 +375,9 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     y += 8;
     ctx.textAlign = 'center';
     ctx.fillText('Vui lòng kiểm tra kỹ lại nội dung', width / 2, y);
-    y += lineHeight;
+    y += contentLineHeight;
     ctx.fillText('trước khi chế biến', width / 2, y);
-    return finalizeCanvasHeight(y + lineHeight + 8);
+    return finalizeCanvasHeight(y + contentLineHeight + 8);
   }
 
   const drawSummary = (label: string, value: string) => {
@@ -369,7 +385,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     ctx.fillText(label, xName, y);
     ctx.textAlign = 'right';
     ctx.fillText(value, xTotalRight, y);
-    y += lineHeight;
+    y += contentLineHeight;
   };
 
   drawSummary('Tạm tính', toNumberVi(data.subtotal));
@@ -378,17 +394,17 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
 
   ctx.fillRect(marginX, y, contentWidth, 2);
   y += 22;
-  ctx.font = `bold ${bodySize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
+  ctx.font = `bold ${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
   drawSummary('THANH TOÁN', toMoney(data.total));
-  ctx.font = `${bodySize}px 'DejaVu Sans Mono', 'DejaVu Sans', 'Noto Sans', Arial, sans-serif`;
+  ctx.font = `${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
 
-  y += 28;
+  y += 32;
   ctx.textAlign = 'center';
   ctx.fillText('Vui lòng kiểm tra kỹ lại nội dung', width / 2, y);
-  y += lineHeight;
+  y += contentLineHeight;
   ctx.fillText('trước khi thanh toán', width / 2, y);
 
-  return finalizeCanvasHeight(y + lineHeight + 8);
+  return finalizeCanvasHeight(y + contentLineHeight + 8);
 };
 
 export const buildReceipt80mmBitmapDataUrl = (data?: Receipt80mmData) => {
@@ -466,6 +482,7 @@ const buildImageEscPosBytesFromCanvas = (canvas: HTMLCanvasElement) => {
 };
 
 export const buildReceipt80mmEscPosBytes = async (data: Receipt80mmData) => {
+  await assertReceiptFontLoaded();
   const canvas = buildReceiptCanvas(data);
   return buildImageEscPosBytesFromCanvas(canvas);
 };
