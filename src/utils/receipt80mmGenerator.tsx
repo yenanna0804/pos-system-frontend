@@ -113,18 +113,18 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const width = 576;
   const marginX = 16;
   const contentWidth = width - marginX * 2;
-  const titleSize = 24;
-  const bodySize = 20;
-  const lineHeight = 24;
+  const titleSize = 28;
+  const bodySize = 24;
+  const lineHeight = 28;
 
   const tableLeft = marginX;
   const tableRight = marginX + contentWidth;
   const colHashWidth = 30;
   const colSlWidth = 34;
   const colUnitWidth = isOrderPrint ? 94 : 0;
-  const colDgWidth = isOrderPrint ? 0 : 100;
+  const colDgWidth = isOrderPrint ? 0 : 120;
   const colKmWidth = isOrderPrint ? 0 : 55;
-  const colTtWidth = isOrderPrint ? 0 : 100;
+  const colTtWidth = isOrderPrint ? 0 : 120;
 
   const colHashRight = tableLeft + colHashWidth;
   const colNameRight = tableRight - (colSlWidth + colUnitWidth + colDgWidth + colKmWidth + colTtWidth);
@@ -144,7 +144,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const nameColumnWidth = colNameRight - xName - 8;
   const noteX = xName;
   const noteColumnWidth = tableRight - noteX - 8;
-  const noteSize = Math.max(16, bodySize - 2);
+  const noteSize = Math.max(20, bodySize - 2);
   const noteLineHeight = Math.max(20, lineHeight - 4);
 
   const sampleCanvas = document.createElement('canvas');
