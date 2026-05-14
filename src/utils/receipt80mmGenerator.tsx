@@ -129,16 +129,16 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const marginX = 16;
   const contentWidth = width - marginX * 2;
   const titleSize = 28;
-  const bodySize = 24;
+  const bodySize = isOrderPrint ? 30 : 24;
   const totalAmountSize = bodySize + 8;
-  const contentLineHeight = 48;
-  const tableLineHeight = 32;
+  const contentLineHeight = isOrderPrint ? 52 : 48;
+  const tableLineHeight = isOrderPrint ? 40 : 32;
 
   const tableLeft = marginX;
   const tableRight = marginX + contentWidth;
   const colHashWidth = 30;
-  const colSlWidth = 34;
-  const colUnitWidth = isOrderPrint ? 94 : 0;
+  const colSlWidth = isOrderPrint ? 100 : 34;
+  const colUnitWidth = isOrderPrint ? 50 : 0;
   const colDgWidth = isOrderPrint ? 0 : 120;
   const colKmWidth = isOrderPrint ? 0 : 55;
   const colTtWidth = isOrderPrint ? 0 : 120;
@@ -260,10 +260,11 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   ctx.textAlign = 'left';
   ctx.fillText('Tên món', xName, y);
   ctx.textAlign = 'center';
-  ctx.fillText('SL', xSlCenter, y);
   if (isOrderPrint) {
-    ctx.fillText('ĐVT', xUnitCenter, y);
+    ctx.fillText('ĐVT', xSlCenter, y);
+    ctx.fillText('SL', xUnitCenter, y);
   } else {
+    ctx.fillText('SL', xSlCenter, y);
     ctx.textAlign = 'right';
     ctx.fillText('ĐG', xUnitRight, y);
     ctx.textAlign = 'center';
@@ -288,9 +289,14 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
 
     ctx.textAlign = 'center';
     ctx.fillText(String(idx + 1), xHashCenter, y);
-    ctx.textAlign = 'center';
-    ctx.fillText(String(Math.trunc(item.quantity)), xSlCenter, y);
-    if (isOrderPrint) ctx.fillText((item.unit || '-').trim() || '-', xUnitCenter, y);
+    if (isOrderPrint) {
+      ctx.textAlign = 'center';
+      ctx.fillText((item.unit || '-').trim() || '-', xSlCenter, y);
+      ctx.fillText(String(Math.trunc(item.quantity)), xUnitCenter, y);
+    } else {
+      ctx.textAlign = 'center';
+      ctx.fillText(String(Math.trunc(item.quantity)), xSlCenter, y);
+    }
 
     for (let rowLineIdx = 0; rowLineIdx < rowLineCount; rowLineIdx += 1) {
       const nameLine = nameLines[rowLineIdx];
