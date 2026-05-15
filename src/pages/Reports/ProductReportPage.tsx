@@ -56,10 +56,13 @@ type GroupedCategory = {
 export default function ProductReportPage() {
   const { branchId } = useAuth();
   const now = useMemo(() => new Date(), []);
-  const initStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0);
-  initStartDate.setDate(initStartDate.getDate() - 1);
+  const isAfterNoon = now.getHours() >= 12;
+  const initStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+  if (!isAfterNoon) initStartDate.setDate(initStartDate.getDate() - 1);
+  const initEndDate = new Date(initStartDate);
+  initEndDate.setDate(initEndDate.getDate() + 1);
   const initStart = splitParts(toDateTimeInputValue(initStartDate));
-  const initEnd = splitParts(toDateTimeInputValue(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59)));
+  const initEnd = splitParts(toDateTimeInputValue(initEndDate));
 
   const [startDate, setStartDate] = useState(initStart.datePart);
   const [startTime, setStartTime] = useState(initStart.timePart);
@@ -104,10 +107,12 @@ export default function ProductReportPage() {
   }, [branchId, startDate, startTime, endDate, endTime, categoryFilter]);
 
   const resetFilters = () => {
-    const resetStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0);
-    resetStartDate.setDate(resetStartDate.getDate() - 1);
+    const resetStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+    if (!isAfterNoon) resetStartDate.setDate(resetStartDate.getDate() - 1);
+    const resetEndDate = new Date(resetStartDate);
+    resetEndDate.setDate(resetEndDate.getDate() + 1);
     const s = splitParts(toDateTimeInputValue(resetStartDate));
-    const e = splitParts(toDateTimeInputValue(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59)));
+    const e = splitParts(toDateTimeInputValue(resetEndDate));
     setStartDate(s.datePart); setStartTime(s.timePart);
     setEndDate(e.datePart); setEndTime(e.timePart);
     setCategoryFilter('');

@@ -115,15 +115,18 @@ const formatDateTimeFromParts = (dateText: string, timeText: string) => {
 export default function SalesEndOfDayPage() {
   const { branchId } = useAuth();
   const now = useMemo(() => new Date(), []);
+  const isAfterNoon = now.getHours() >= 12;
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>(['PAID', 'PARTIAL', 'UNPAID']);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement | null>(null);
-  const initialStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0);
-  initialStartDate.setDate(initialStartDate.getDate() - 1);
+  const initialStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+  if (!isAfterNoon) initialStartDate.setDate(initialStartDate.getDate() - 1);
+  const initialEndDate = new Date(initialStartDate);
+  initialEndDate.setDate(initialEndDate.getDate() + 1);
   const initialStart = toDateTimeInputValue(initialStartDate);
-  const initialEnd = toDateTimeInputValue(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59));
+  const initialEnd = toDateTimeInputValue(initialEndDate);
   const [startDate, setStartDate] = useState(splitDateTimeParts(initialStart).datePart);
   const [startTime, setStartTime] = useState(splitDateTimeParts(initialStart).timePart);
   const [endDate, setEndDate] = useState(splitDateTimeParts(initialEnd).datePart);
@@ -211,10 +214,12 @@ export default function SalesEndOfDayPage() {
   }, []);
 
   const resetFilters = () => {
-    const nextStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0);
-    nextStartDate.setDate(nextStartDate.getDate() - 1);
+    const nextStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+    if (!isAfterNoon) nextStartDate.setDate(nextStartDate.getDate() - 1);
+    const nextEndDate = new Date(nextStartDate);
+    nextEndDate.setDate(nextEndDate.getDate() + 1);
     const nextStart = splitDateTimeParts(toDateTimeInputValue(nextStartDate));
-    const nextEnd = splitDateTimeParts(toDateTimeInputValue(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59)));
+    const nextEnd = splitDateTimeParts(toDateTimeInputValue(nextEndDate));
     setStartDate(nextStart.datePart);
     setStartTime(nextStart.timePart);
     setEndDate(nextEnd.datePart);
