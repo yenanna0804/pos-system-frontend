@@ -429,8 +429,11 @@ export default function OrdersPage() {
     setPage(1);
   };
 
-  const selectableOrderIds = orders.map((order) => order.id);
-  const allSelectableChecked = selectableOrderIds.length > 0 && selectableOrderIds.every((id) => selectedOrderIds.includes(id));
+  const selectableOrderIds = useMemo(() => orders.map((order) => order.id), [orders]);
+  const allSelectableChecked = useMemo(() => selectableOrderIds.length > 0 && selectableOrderIds.every((id) => selectedOrderIds.includes(id)), [selectableOrderIds, selectedOrderIds]);
+
+  const filteredRoomOptions = useMemo(() => rooms.filter((room) => !areaFilter || room.areaId === areaFilter), [rooms, areaFilter]);
+  const filteredTableOptions = useMemo(() => tables.filter((table) => (!areaFilter || table.areaId === areaFilter) && (!roomFilter || table.roomId === roomFilter)), [tables, areaFilter, roomFilter]);
 
   const buildListParams = (nextPage: number, nextPageSize: number) => ({
     branchId: branchId || undefined,
@@ -1062,16 +1065,20 @@ export default function OrdersPage() {
     }
   };
 
-  const detailHeaderDiscount = Math.trunc(Number(detailOrder?.discountAmount || 0));
-  const detailHeaderSurcharge = Math.trunc(Number(detailOrder?.surchargeAmount || 0));
-  const detailLineDiscountTotal = detailOrder
-    ? detailOrder.items.reduce((sum, item) => sum + Number(item.lineDiscountAmount || 0), 0)
-    : 0;
-  const detailLineSurchargeTotal = detailOrder
-    ? detailOrder.items.reduce((sum, item) => sum + Number(item.lineSurchargeAmount || 0), 0)
-    : 0;
-  const detailBillDiscountTotal = detailHeaderDiscount + detailLineDiscountTotal;
-  const detailBillSurchargeTotal = detailHeaderSurcharge + detailLineSurchargeTotal;
+  const { detailBillDiscountTotal, detailBillSurchargeTotal } = useMemo(() => {
+    const headerDiscount = Math.trunc(Number(detailOrder?.discountAmount || 0));
+    const headerSurcharge = Math.trunc(Number(detailOrder?.surchargeAmount || 0));
+    const lineDiscount = detailOrder
+      ? detailOrder.items.reduce((sum, item) => sum + Number(item.lineDiscountAmount || 0), 0)
+      : 0;
+    const lineSurcharge = detailOrder
+      ? detailOrder.items.reduce((sum, item) => sum + Number(item.lineSurchargeAmount || 0), 0)
+      : 0;
+    return {
+      detailBillDiscountTotal: headerDiscount + lineDiscount,
+      detailBillSurchargeTotal: headerSurcharge + lineSurcharge,
+    };
+  }, [detailOrder]);
 
   const createInitialData = useMemo(() => (createDraft ? {
     selectedTable: createDraft.selectedTable,
@@ -1675,9 +1682,7 @@ export default function OrdersPage() {
               }}
             >
               <option value="">Tất cả phòng</option>
-              {rooms
-                .filter((room) => !areaFilter || room.areaId === areaFilter)
-                .map((room) => (
+              {filteredRoomOptions.map((room) => (
                   <option key={room.id} value={room.id}>
                     {room.name}
                   </option>
@@ -1695,9 +1700,7 @@ export default function OrdersPage() {
               }}
             >
               <option value="">Tất cả bàn</option>
-              {tables
-                .filter((table) => (!areaFilter || table.areaId === areaFilter) && (!roomFilter || table.roomId === roomFilter))
-                .map((table) => (
+              {filteredTableOptions.map((table) => (
                   <option key={table.id} value={table.id}>
                     {table.name}
                   </option>
