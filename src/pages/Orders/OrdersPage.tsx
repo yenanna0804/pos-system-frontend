@@ -26,6 +26,7 @@ type OrderRow = {
   totalAmount: number;
   finalAmount?: number;
   paidAmount?: number;
+  isDebt?: boolean;
   paymentMethod?: 'CASH' | 'BANKING' | null;
   orderState: 'DRAFT' | 'PAID' | 'DELETED' | 'PARTIAL' | 'UNPAID';
   createdAt: string;
@@ -93,6 +94,7 @@ type OrderDetail = {
   totalAmount: number;
   finalAmount?: number;
   paidAmount: number;
+  isDebt?: boolean;
   paymentMethod?: 'CASH' | 'BANKING' | null;
   orderState: OrderRow['orderState'];
   createdAt: string;
@@ -120,6 +122,7 @@ type EditingOrderState = {
   surchargeMode?: 'percent' | 'amount';
   surchargeValue?: number;
   paidAmount?: number;
+  isDebt?: boolean;
   paymentMethod?: 'CASH' | 'BANKING';
   updatedAt?: string;
   billItems: {
@@ -155,6 +158,7 @@ type CreateOrderDraft = {
   surchargeMode: 'percent' | 'amount';
   surchargeValue: string;
   paidAmount?: number;
+  isDebt?: boolean;
   paymentMethod?: 'CASH' | 'BANKING';
 };
 
@@ -320,6 +324,7 @@ const mapOrderDetailToEditingState = (data: OrderDetail): EditingOrderState => {
     surchargeMode: data.surchargeMode || 'amount',
     surchargeValue: Number(data.surchargeValue ?? data.surchargeAmount ?? 0),
     paidAmount: Math.trunc(Number(data.paidAmount || 0)),
+    isDebt: Boolean(data.isDebt),
     paymentMethod: data.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
     updatedAt: data.updatedAt,
     billItems: Array.isArray(data.items)
@@ -595,6 +600,7 @@ export default function OrdersPage() {
     surchargeMode: 'percent' | 'amount';
     surchargeValue: number;
     paidAmount: number;
+    isDebt?: boolean;
     paymentMethod: 'CASH' | 'BANKING';
     orderState?: 'DRAFT' | 'PAID' | 'PARTIAL' | 'UNPAID';
   }) => {
@@ -612,9 +618,10 @@ export default function OrdersPage() {
       surchargeMode: payload.surchargeMode,
       surchargeValue: payload.surchargeValue,
       paidAmount: Math.max(0, Math.trunc(payload.paidAmount || 0)),
+      isDebt: Boolean(payload.isDebt),
       paymentMethod: payload.paymentMethod,
       billItems: payload.billItems,
-      orderState: payload.orderState,
+      orderState: payload.isDebt ? 'PARTIAL' : payload.orderState,
       branchId: branchId || undefined,
     };
   }, [branchId]);
@@ -706,6 +713,7 @@ export default function OrdersPage() {
     surchargeMode: 'percent' | 'amount';
     surchargeValue: number;
     paidAmount: number;
+    isDebt: boolean;
     paymentMethod: 'CASH' | 'BANKING';
   }) => {
     try {
@@ -1104,6 +1112,7 @@ export default function OrdersPage() {
     surchargeMode: createDraft.surchargeMode,
     surchargeValue: Number(createDraft.surchargeValue || 0),
     paidAmount: createDraft.paidAmount,
+    isDebt: createDraft.isDebt,
     paymentMethod: createDraft.paymentMethod,
   } : undefined), [createDraft]);
 
@@ -1117,6 +1126,7 @@ export default function OrdersPage() {
     surchargeMode: 'percent' | 'amount';
     surchargeValue: string;
     paidAmount?: number;
+    isDebt?: boolean;
     paymentMethod?: 'CASH' | 'BANKING';
   }) => {
     if (!isCreateRoute || location.pathname !== '/orders/new') return;
@@ -1135,6 +1145,7 @@ export default function OrdersPage() {
         && prev.surchargeMode === normalized.surchargeMode
         && prev.surchargeValue === normalized.surchargeValue
         && Number(prev.paidAmount || 0) === Number(normalized.paidAmount || 0)
+        && Boolean(prev.isDebt) === Boolean(normalized.isDebt)
         && (prev.paymentMethod || 'CASH') === (normalized.paymentMethod || 'CASH')
         && prev.billItems === normalized.billItems;
       if (sameAsCurrent) return prev;
@@ -1153,6 +1164,7 @@ export default function OrdersPage() {
       surchargeMode: normalized.surchargeMode,
       surchargeValue: Number(normalized.surchargeValue || 0),
       paidAmount: Math.max(0, Math.trunc(Number(normalized.paidAmount || 0))),
+      isDebt: Boolean(normalized.isDebt),
       paymentMethod: normalized.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
       orderState: 'DRAFT',
     });
@@ -1232,6 +1244,7 @@ export default function OrdersPage() {
                 surchargeMode: createDraft.surchargeMode,
                 surchargeValue: Number(createDraft.surchargeValue || 0),
                 paidAmount: Math.max(0, Math.trunc(Number(createDraft.paidAmount || 0))),
+                isDebt: Boolean(createDraft.isDebt),
                 paymentMethod: createDraft.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
                 orderState: 'DRAFT',
               }),
@@ -1277,6 +1290,7 @@ export default function OrdersPage() {
                 surchargeMode: createDraft.surchargeMode,
                 surchargeValue: Number(createDraft.surchargeValue || 0),
                 paidAmount: Math.max(0, Math.trunc(Number(createDraft.paidAmount || 0))),
+                isDebt: Boolean(createDraft.isDebt),
                 paymentMethod: createDraft.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
                 orderState: 'DRAFT',
               }),
@@ -1334,6 +1348,7 @@ export default function OrdersPage() {
             surchargeMode: editingOrder.surchargeMode,
             surchargeValue: editingOrder.surchargeValue,
             paidAmount: editingOrder.paidAmount,
+            isDebt: Boolean(editingOrder.isDebt),
             paymentMethod: editingOrder.paymentMethod,
             billItems: editingOrder.billItems,
           }}
@@ -1360,7 +1375,9 @@ export default function OrdersPage() {
               surchargeMode: payload.surchargeMode,
               surchargeValue: payload.surchargeValue,
               paidAmount: Math.min(Math.trunc(payload.paidAmount), Math.max(0, Math.trunc(payload.totalAmount))),
+              isDebt: Boolean(payload.isDebt),
               paymentMethod: payload.paymentMethod,
+              orderState: payload.isDebt ? ('PARTIAL' as const) : undefined,
               ...(orderFeatureFlags.orderPatchUpdate && payload.billItemsPatch?.hasChanges
                 ? {
                   billItemsPatch: {
@@ -1420,6 +1437,7 @@ export default function OrdersPage() {
               surchargeMode: editingOrder.surchargeMode || 'amount',
               surchargeValue: Number(editingOrder.surchargeValue ?? editingOrder.surchargeAmount ?? 0),
               paidAmount: Math.max(0, Math.trunc(Number(editingOrder.paidAmount || 0))),
+              isDebt: Boolean(editingOrder.isDebt),
               paymentMethod: editingOrder.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
             });
 
@@ -1462,6 +1480,7 @@ export default function OrdersPage() {
               surchargeMode: editingOrder.surchargeMode || 'amount',
               surchargeValue: Number(editingOrder.surchargeValue ?? editingOrder.surchargeAmount ?? 0),
               paidAmount: Math.max(0, Math.trunc(Number(editingOrder.paidAmount || 0))),
+              isDebt: Boolean(editingOrder.isDebt),
               paymentMethod: editingOrder.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
             });
             const latestDetailResponse = await orderService.getById(editingOrder.id);
@@ -1493,6 +1512,7 @@ export default function OrdersPage() {
         surchargeMode: 'percent',
         surchargeValue: 5,
         paidAmount: 0,
+        isDebt: false,
         paymentMethod: 'CASH',
         orderState: 'DRAFT',
         billItems: [],
@@ -1510,6 +1530,7 @@ export default function OrdersPage() {
         surchargeMode: 'percent',
         surchargeValue: '5',
         paidAmount: 0,
+        isDebt: false,
         paymentMethod: 'CASH',
       });
       setCreateDraftOrderId(newDraftId);

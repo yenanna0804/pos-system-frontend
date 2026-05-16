@@ -670,12 +670,25 @@
 .orders-auto-fill-paid-option {
   align-items: center;
   color: #344054;
-  display: inline-flex;
+  display: flex;
   flex: 0 0 auto;
   font-size: 13px;
   font-weight: 600;
   gap: 8px;
+  justify-content: flex-start;
   white-space: nowrap;
+}
+
+.orders-paid-options {
+  align-items: flex-start;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.orders-debt-option {
+  margin-top: 0;
 }
 
 .orders-auto-fill-paid-option input {
@@ -826,6 +839,14 @@
 
   .orders-auto-fill-paid-option {
     align-self: flex-start;
+  }
+
+  .orders-paid-options {
+    align-self: flex-start;
+  }
+
+  .orders-debt-option {
+    margin-top: 0;
   }
 
   .orders-customer-main {

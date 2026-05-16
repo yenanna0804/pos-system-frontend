@@ -35,6 +35,7 @@ type Props = {
     surchargeValue?: number;
     paidAmount?: number;
     paymentMethod?: 'CASH' | 'BANKING';
+    isDebt?: boolean;
   };
   defaultTab?: 'table' | 'product';
   activeTab?: 'table' | 'product';
@@ -52,6 +53,7 @@ type Props = {
     surchargeValue: number;
     paidAmount: number;
     paymentMethod: 'CASH' | 'BANKING';
+    isDebt: boolean;
     billItemsPatch?: {
       addedItems: BillItem[];
       updatedItems: (Partial<BillItem> & { lineId: string })[];
@@ -214,7 +216,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setBillItems]);
 
-  const executeSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING') => {
+  const executeSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING', isDebt: boolean) => {
     if (billItems.length === 0) return;
 
     setIsSavingOrder(true);
@@ -233,31 +235,35 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
         surchargeValue: surchargeMode === 'amount' ? toAmountNumber(surchargeValue) : toPercentNumber(surchargeValue),
         paidAmount,
         paymentMethod,
+        isDebt,
       });
     } finally {
       setIsSavingOrder(false);
     }
   };
 
-  const handleSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING') => {
+  const handleSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING', isDebt: boolean) => {
     if (billItems.length === 0) return;
     if (!selectedTable && mode === 'create') {
       pendingPaidAmountRef.current = paidAmount;
       pendingPaymentMethodRef.current = paymentMethod;
+      pendingIsDebtRef.current = isDebt;
       setShowTakeawayConfirm(true);
       return;
     }
     if (mode === 'edit') {
       pendingPaidAmountRef.current = paidAmount;
       pendingPaymentMethodRef.current = paymentMethod;
+      pendingIsDebtRef.current = isDebt;
       setShowEditConfirm(true);
       return;
     }
-    await executeSaveOrder(paidAmount, paymentMethod);
+    await executeSaveOrder(paidAmount, paymentMethod, isDebt);
   };
 
   const pendingPaidAmountRef = useRef<number>(Math.max(0, Math.trunc(initialData?.paidAmount ?? totalAmount)));
   const pendingPaymentMethodRef = useRef<'CASH' | 'BANKING'>(initialData?.paymentMethod ?? 'CASH');
+  const pendingIsDebtRef = useRef<boolean>(Boolean(initialData?.isDebt));
 
   const buildPrintableContent = (items: BillItem[], label: string) => {
     const location = selectedTable
@@ -405,7 +411,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
                 className="primary-btn"
                 onClick={async () => {
                   setShowTakeawayConfirm(false);
-                  await executeSaveOrder(pendingPaidAmountRef.current, pendingPaymentMethodRef.current);
+                  await executeSaveOrder(pendingPaidAmountRef.current, pendingPaymentMethodRef.current, pendingIsDebtRef.current);
                 }}
               >
                 Đồng ý
@@ -431,7 +437,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
                 className="primary-btn"
                 onClick={async () => {
                   setShowEditConfirm(false);
-                  await executeSaveOrder(pendingPaidAmountRef.current, pendingPaymentMethodRef.current);
+                  await executeSaveOrder(pendingPaidAmountRef.current, pendingPaymentMethodRef.current, pendingIsDebtRef.current);
                 }}
               >
                 Xác nhận sửa
@@ -578,6 +584,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
           totalAmount={totalAmount}
           initialPaidAmount={initialData?.paidAmount}
           initialPaymentMethod={initialData?.paymentMethod}
+          initialIsDebt={initialData?.isDebt}
           onSaveOrder={handleSaveOrder}
           onPrintInvoice={() => onPrintInvoice().catch(() => undefined)}
           onPrintOrder={(selectedLineIds) => onPrintOrder(selectedLineIds).catch(() => undefined)}

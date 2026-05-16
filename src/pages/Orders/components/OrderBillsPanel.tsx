@@ -39,7 +39,8 @@ type Props = {
   totalAmount: number;
   initialPaidAmount?: number;
   initialPaymentMethod?: PaymentMethod;
-  onSaveOrder: (paidAmount: number, paymentMethod: PaymentMethod) => void;
+  initialIsDebt?: boolean;
+  onSaveOrder: (paidAmount: number, paymentMethod: PaymentMethod, isDebt: boolean) => void;
   onPrintInvoice: () => void;
   onPrintOrder: (selectedLineIds: string[]) => void;
   disableSave: boolean;
@@ -76,6 +77,7 @@ export default function OrderBillsPanel({
   totalAmount,
   initialPaidAmount,
   initialPaymentMethod,
+  initialIsDebt,
   onSaveOrder,
   onPrintInvoice,
   onPrintOrder,
@@ -90,6 +92,7 @@ export default function OrderBillsPanel({
   const [customerPaidInput, setCustomerPaidInput] = useState(String(Math.max(0, Math.trunc(initialPaidAmount ?? totalAmount))));
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initialPaymentMethod ?? 'CASH');
   const [autoFillPaid, setAutoFillPaid] = useState(false);
+  const [isDebt, setIsDebt] = useState(Boolean(initialIsDebt));
   const [editingTimeField, setEditingTimeField] = useState<{ lineId: string; field: 'startAt' | 'stopAt'; currentValue: Date } | null>(null);
   const [timeEditError, setTimeEditError] = useState<string | null>(null);
   const totalLimit = Math.max(0, Math.trunc(totalAmount));
@@ -112,6 +115,10 @@ export default function OrderBillsPanel({
   useEffect(() => {
     setPaymentMethod(initialPaymentMethod ?? 'CASH');
   }, [initialPaymentMethod]);
+
+  useEffect(() => {
+    setIsDebt(Boolean(initialIsDebt));
+  }, [initialIsDebt]);
 
   const subtotal = billItems.reduce((sum, item) => sum + getLineAmount(item), 0);
   const discountRaw = discountMode === 'amount' ? toAmountNumber(discountValue) : toPercentNumber(discountValue);
@@ -272,7 +279,7 @@ export default function OrderBillsPanel({
             <button
               type="button"
               className="primary-btn"
-              onClick={() => onSaveOrder(Number(customerPaidInput) || 0, paymentMethod)}
+              onClick={() => onSaveOrder(Number(customerPaidInput) || 0, paymentMethod, isDebt)}
               disabled={disableSave}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -418,20 +425,30 @@ export default function OrderBillsPanel({
               placeholder="0"
               disabled={autoFillPaid}
             />
-            <label className="orders-auto-fill-paid-option">
-              <input
-                type="checkbox"
-                checked={autoFillPaid}
-                onChange={(event) => {
-                  const checked = event.target.checked;
-                  setAutoFillPaid(checked);
-                  if (checked) {
-                    setCustomerPaidInput(String(totalLimit));
-                  }
-                }}
-              />
-              <span>Tự động điền</span>
-            </label>
+            <div className="orders-paid-options">
+              <label className="orders-auto-fill-paid-option">
+                <input
+                  type="checkbox"
+                  checked={autoFillPaid}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setAutoFillPaid(checked);
+                    if (checked) {
+                      setCustomerPaidInput(String(totalLimit));
+                    }
+                  }}
+                />
+                <span>Tự động điền</span>
+              </label>
+              <label className="orders-auto-fill-paid-option orders-debt-option">
+                <input
+                  type="checkbox"
+                  checked={isDebt}
+                  onChange={(event) => setIsDebt(event.target.checked)}
+                />
+                <span>Ghi nợ</span>
+              </label>
+            </div>
           </div>
         </div>
 
