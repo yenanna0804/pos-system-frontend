@@ -39,8 +39,8 @@ type Props = {
   totalAmount: number;
   initialPaidAmount?: number;
   initialPaymentMethod?: PaymentMethod;
-  initialIsDebt?: boolean;
-  onSaveOrder: (paidAmount: number, paymentMethod: PaymentMethod, isDebt: boolean) => void;
+  initialIsDebtMarked?: boolean;
+  onSaveOrder: (paidAmount: number, paymentMethod: PaymentMethod, isDebtMarked: boolean) => void;
   onPrintInvoice: () => void;
   onPrintOrder: (selectedLineIds: string[]) => void;
   disableSave: boolean;
@@ -77,7 +77,7 @@ export default function OrderBillsPanel({
   totalAmount,
   initialPaidAmount,
   initialPaymentMethod,
-  initialIsDebt,
+  initialIsDebtMarked,
   onSaveOrder,
   onPrintInvoice,
   onPrintOrder,
@@ -92,7 +92,7 @@ export default function OrderBillsPanel({
   const [customerPaidInput, setCustomerPaidInput] = useState(String(Math.max(0, Math.trunc(initialPaidAmount ?? totalAmount))));
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initialPaymentMethod ?? 'CASH');
   const [autoFillPaid, setAutoFillPaid] = useState(false);
-  const [isDebt, setIsDebt] = useState(Boolean(initialIsDebt));
+  const [isDebtMarked, setIsDebtMarked] = useState(Boolean(initialIsDebtMarked));
   const [editingTimeField, setEditingTimeField] = useState<{ lineId: string; field: 'startAt' | 'stopAt'; currentValue: Date } | null>(null);
   const [timeEditError, setTimeEditError] = useState<string | null>(null);
   const totalLimit = Math.max(0, Math.trunc(totalAmount));
@@ -117,8 +117,8 @@ export default function OrderBillsPanel({
   }, [initialPaymentMethod]);
 
   useEffect(() => {
-    setIsDebt(Boolean(initialIsDebt));
-  }, [initialIsDebt]);
+    setIsDebtMarked(Boolean(initialIsDebtMarked));
+  }, [initialIsDebtMarked]);
 
   const subtotal = billItems.reduce((sum, item) => sum + getLineAmount(item), 0);
   const discountRaw = discountMode === 'amount' ? toAmountNumber(discountValue) : toPercentNumber(discountValue);
@@ -279,7 +279,7 @@ export default function OrderBillsPanel({
             <button
               type="button"
               className="primary-btn"
-              onClick={() => onSaveOrder(Number(customerPaidInput) || 0, paymentMethod, isDebt)}
+              onClick={() => onSaveOrder(Number(customerPaidInput) || 0, paymentMethod, isDebtMarked)}
               disabled={disableSave}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -443,8 +443,8 @@ export default function OrderBillsPanel({
               <label className="orders-auto-fill-paid-option orders-debt-option">
                 <input
                   type="checkbox"
-                  checked={isDebt}
-                  onChange={(event) => setIsDebt(event.target.checked)}
+                  checked={isDebtMarked}
+                  onChange={(event) => setIsDebtMarked(event.target.checked)}
                 />
                 <span>Ghi nợ</span>
               </label>

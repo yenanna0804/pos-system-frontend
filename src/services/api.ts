@@ -168,7 +168,7 @@ export type OrderPayload = {
   surchargeMode?: 'percent' | 'amount';
   surchargeValue?: number;
   paidAmount?: number;
-  isDebt?: boolean;
+  isDebtMarked?: boolean;
   paymentMethod?: 'CASH' | 'BANKING';
   orderState?: 'DRAFT' | 'PAID' | 'PARTIAL' | 'UNPAID' | 'DELETED';
   billItems: BillItemPayload[];

@@ -35,7 +35,7 @@ type Props = {
     surchargeValue?: number;
     paidAmount?: number;
     paymentMethod?: 'CASH' | 'BANKING';
-    isDebt?: boolean;
+    isDebtMarked?: boolean;
   };
   defaultTab?: 'table' | 'product';
   activeTab?: 'table' | 'product';
@@ -53,7 +53,7 @@ type Props = {
     surchargeValue: number;
     paidAmount: number;
     paymentMethod: 'CASH' | 'BANKING';
-    isDebt: boolean;
+    isDebtMarked: boolean;
     billItemsPatch?: {
       addedItems: BillItem[];
       updatedItems: (Partial<BillItem> & { lineId: string })[];
@@ -216,7 +216,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setBillItems]);
 
-  const executeSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING', isDebt: boolean) => {
+  const executeSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING', isDebtMarked: boolean) => {
     if (billItems.length === 0) return;
 
     setIsSavingOrder(true);
@@ -235,35 +235,35 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
         surchargeValue: surchargeMode === 'amount' ? toAmountNumber(surchargeValue) : toPercentNumber(surchargeValue),
         paidAmount,
         paymentMethod,
-        isDebt,
+        isDebtMarked,
       });
     } finally {
       setIsSavingOrder(false);
     }
   };
 
-  const handleSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING', isDebt: boolean) => {
+  const handleSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING', isDebtMarked: boolean) => {
     if (billItems.length === 0) return;
     if (!selectedTable && mode === 'create') {
       pendingPaidAmountRef.current = paidAmount;
       pendingPaymentMethodRef.current = paymentMethod;
-      pendingIsDebtRef.current = isDebt;
+      pendingIsDebtMarkedRef.current = isDebtMarked;
       setShowTakeawayConfirm(true);
       return;
     }
     if (mode === 'edit') {
       pendingPaidAmountRef.current = paidAmount;
       pendingPaymentMethodRef.current = paymentMethod;
-      pendingIsDebtRef.current = isDebt;
+      pendingIsDebtMarkedRef.current = isDebtMarked;
       setShowEditConfirm(true);
       return;
     }
-    await executeSaveOrder(paidAmount, paymentMethod, isDebt);
+    await executeSaveOrder(paidAmount, paymentMethod, isDebtMarked);
   };
 
   const pendingPaidAmountRef = useRef<number>(Math.max(0, Math.trunc(initialData?.paidAmount ?? totalAmount)));
   const pendingPaymentMethodRef = useRef<'CASH' | 'BANKING'>(initialData?.paymentMethod ?? 'CASH');
-  const pendingIsDebtRef = useRef<boolean>(Boolean(initialData?.isDebt));
+  const pendingIsDebtMarkedRef = useRef<boolean>(Boolean(initialData?.isDebtMarked));
 
   const buildPrintableContent = (items: BillItem[], label: string) => {
     const location = selectedTable
@@ -411,7 +411,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
                 className="primary-btn"
                 onClick={async () => {
                   setShowTakeawayConfirm(false);
-                  await executeSaveOrder(pendingPaidAmountRef.current, pendingPaymentMethodRef.current, pendingIsDebtRef.current);
+                  await executeSaveOrder(pendingPaidAmountRef.current, pendingPaymentMethodRef.current, pendingIsDebtMarkedRef.current);
                 }}
               >
                 Đồng ý
@@ -437,7 +437,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
                 className="primary-btn"
                 onClick={async () => {
                   setShowEditConfirm(false);
-                  await executeSaveOrder(pendingPaidAmountRef.current, pendingPaymentMethodRef.current, pendingIsDebtRef.current);
+                  await executeSaveOrder(pendingPaidAmountRef.current, pendingPaymentMethodRef.current, pendingIsDebtMarkedRef.current);
                 }}
               >
                 Xác nhận sửa
@@ -584,7 +584,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
           totalAmount={totalAmount}
           initialPaidAmount={initialData?.paidAmount}
           initialPaymentMethod={initialData?.paymentMethod}
-          initialIsDebt={initialData?.isDebt}
+          initialIsDebtMarked={initialData?.isDebtMarked}
           onSaveOrder={handleSaveOrder}
           onPrintInvoice={() => onPrintInvoice().catch(() => undefined)}
           onPrintOrder={(selectedLineIds) => onPrintOrder(selectedLineIds).catch(() => undefined)}
