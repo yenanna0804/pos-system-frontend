@@ -1069,7 +1069,14 @@ export default function OrdersPage() {
     }
   };
 
-  const { detailBillDiscountTotal, detailBillSurchargeTotal } = useMemo(() => {
+  const {
+    detailHeaderDiscount,
+    detailHeaderSurcharge,
+    detailLineDiscountTotal,
+    detailLineSurchargeTotal,
+    detailBillDiscountTotal,
+    detailBillSurchargeTotal,
+  } = useMemo(() => {
     const headerDiscount = Math.trunc(Number(detailOrder?.discountAmount || 0));
     const headerSurcharge = Math.trunc(Number(detailOrder?.surchargeAmount || 0));
     const lineDiscount = detailOrder
@@ -1079,6 +1086,10 @@ export default function OrdersPage() {
       ? detailOrder.items.reduce((sum, item) => sum + Number(item.lineSurchargeAmount || 0), 0)
       : 0;
     return {
+      detailHeaderDiscount: headerDiscount,
+      detailHeaderSurcharge: headerSurcharge,
+      detailLineDiscountTotal: lineDiscount,
+      detailLineSurchargeTotal: lineSurcharge,
       detailBillDiscountTotal: headerDiscount + lineDiscount,
       detailBillSurchargeTotal: headerSurcharge + lineSurcharge,
     };
