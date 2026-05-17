@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import ExcelJS from 'exceljs';
 import { useAuth } from '../../contexts/AuthContext';
 import { areaService, diningTableService, orderService, reportService, roomService } from '../../services/api';
 import FilterResetButton from '../../components/FilterResetButton';
 import TooltipInfoButton from '../../components/TooltipInfoButton';
-import { formatDateTimeVN, formatNumberVi, formatUnitPriceDisplay, ORDER_STATE_CLASS, ORDER_STATE_LABEL, paymentMethodLabel, splitDateTimeParts, toDateFromParts, toDateTimeInputValue, toISOWithVNOffset } from '../../utils/formatters';
+import { formatDateTimeVN, formatNumberVi, formatUnitPriceDisplay, ORDER_STATE_CLASS, ORDER_STATE_LABEL, splitDateTimeParts, toDateFromParts, toDateTimeInputValue, toISOWithVNOffset } from '../../utils/formatters';
 import DateTimePicker from '../Orders/components/DateTimePicker';
 import '../Orders/OrdersPage.css';
 import './SalesEndOfDayPage.css';
@@ -238,7 +239,6 @@ export default function SalesEndOfDayPage() {
   };
 
   const colTooltips: [string, string, string, string][] = [
-    ['qty',      'SLSP',           'Số lượng sản phẩm',  'Tổng số lượng món hàng trong tất cả hóa đơn của ngày (cộng dồn số lượng từng dòng món).'],
     ['paid',     'Đã thanh toán',  'Đã thanh toán',       'Số tiền khách hàng đã thực trả cho hóa đơn. Với hóa đơn chưa thanh toán đủ, đây là phần đã thu được.'],
     ['debt',     'Ghi nợ',         'Ghi nợ',              'Phần còn thiếu chưa thu được = Doanh thu − Đã thanh toán. Bằng 0 với hóa đơn đã thanh toán đủ.'],
     ['revenue',  'Doanh thu',      'Doanh thu',           'Số tiền khách cần thanh toán sau tất cả điều chỉnh = Tổng tiền hàng − Giảm giá + Phí dịch vụ.'],
@@ -264,60 +264,64 @@ export default function SalesEndOfDayPage() {
     </span>
   );
 
-  const exportToCsv = () => {
-    const escape = (value: string) => {
-      const str = String(value ?? '');
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
-
-    const rows: string[][] = [];
-    rows.push(['BÁO CÁO BÁN HÀNG']);
-    rows.push([`Từ: ${formatDateTimeFromParts(startDate, startTime)}  Đến: ${formatDateTimeFromParts(endDate, endTime)}`]);
-    rows.push([]);
-    rows.push(['Mã hóa đơn', 'Thời gian', 'Người nhận đơn', 'Phương thức', 'SLSP', 'Đã thanh toán', 'Ghi nợ', 'Doanh thu', 'Tổng tiền hàng', 'Giảm giá HĐ', 'Phí dịch vụ', 'Phòng/Bàn']);
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Bao cao ban hang');
+    sheet.addRow(['BÁO CÁO BÁN HÀNG']);
+    sheet.addRow([`Từ: ${formatDateTimeFromParts(startDate, startTime)}  Đến: ${formatDateTimeFromParts(endDate, endTime)}`]);
+    sheet.addRow([]);
+    sheet.addRow(['Mã hóa đơn', 'Thời gian', 'Phòng/Bàn', 'Đã thanh toán', 'Ghi nợ', 'Doanh thu', 'Tổng tiền hàng', 'Giảm giá HĐ', 'Phí dịch vụ']);
 
     for (const group of groups) {
       const s = group.summary;
-      rows.push([
+      sheet.addRow([
         `Tổng ngày ${toDisplayDate(group.date)} (${s.orderCount} hóa đơn)`,
-        '', '', '',
-        String(Math.trunc(s.totalQuantity)),
-        String(Math.trunc(s.paymentAmount)),
-        String(Math.trunc(s.debtAmount)),
-        String(Math.trunc(s.revenueAmount)),
-        String(Math.trunc(s.grossAmount)),
-        String(Math.trunc(s.discountAmount)),
-        String(Math.trunc(s.serviceAmount)),
+        '', '',
+        Math.trunc(s.paymentAmount),
+        Math.trunc(s.debtAmount),
+        Math.trunc(s.revenueAmount),
+        Math.trunc(s.grossAmount),
+        Math.trunc(s.discountAmount),
+        Math.trunc(s.serviceAmount),
         '',
       ]);
       for (const row of group.rows) {
-        rows.push([
+        sheet.addRow([
           row.code,
           formatDateTimeVN(row.createdAt),
-          row.receiverName || '-',
-          paymentMethodLabel(row.paymentMethod),
-          String(Math.trunc(row.totalQuantity)),
-          String(Math.trunc(row.paymentAmount)),
-          String(Math.trunc(row.debtAmount)),
-          String(Math.trunc(row.revenueAmount)),
-          String(Math.trunc(row.grossAmount)),
-          String(Math.trunc(row.discountAmount)),
-          String(Math.trunc(row.serviceAmount)),
           row.locationLabel,
+          Math.trunc(row.paymentAmount),
+          Math.trunc(row.debtAmount),
+          Math.trunc(row.revenueAmount),
+          Math.trunc(row.grossAmount),
+          Math.trunc(row.discountAmount),
+          Math.trunc(row.serviceAmount),
         ]);
       }
-      rows.push([]);
+      sheet.addRow([]);
     }
 
-    const csv = rows.map((row) => row.map(escape).join(',')).join('\r\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    sheet.getRow(1).font = { bold: true, size: 14 };
+    sheet.getRow(4).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+
+    for (let colIdx = 1; colIdx <= 9; colIdx += 1) {
+      const col = sheet.getColumn(colIdx);
+      let maxLength = 10;
+      col.eachCell({ includeEmpty: true }, (cell) => {
+        const raw = String(cell.value ?? '');
+        const longestLine = raw.split('\n').reduce((m, part) => Math.max(m, part.length), 0);
+        maxLength = Math.max(maxLength, longestLine + 2);
+      });
+      col.width = Math.min(maxLength, colIdx === 1 ? 36 : 30);
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `bao-cao-ban-hang_${formatDateFromInput(startDate).replaceAll('/', '-')}_${formatDateFromInput(endDate).replaceAll('/', '-')}.csv`;
+    link.download = `bao-cao-ban-hang_${formatDateFromInput(startDate).replaceAll('/', '-')}_${formatDateFromInput(endDate).replaceAll('/', '-')}.xlsx`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -368,9 +372,9 @@ export default function SalesEndOfDayPage() {
           <button
             type="button"
             className="ghost-btn sales-export-btn"
-            onClick={exportToCsv}
+            onClick={() => { void exportToExcel(); }}
             disabled={groups.length === 0}
-            title="Xuất báo cáo ra file Excel (CSV)"
+            title="Xuất báo cáo ra file Excel"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
               <path d="M12 15V3m0 12-4-4m4 4 4-4" />
@@ -551,18 +555,16 @@ export default function SalesEndOfDayPage() {
             <tr>
               <th>Mã hóa đơn</th>
               <th>Thời gian</th>
-              <th>Người nhận đơn</th>
-              <th>Phương thức</th>
+              <th>Phòng/Bàn</th>
               {colTooltips.map(([key, label, title]) => (
                 <th key={key} className="num-col">{renderColHeader(key, label, title)}</th>
               ))}
-              <th>Phòng/Bàn</th>
             </tr>
           </thead>
           <tbody>
             {groups.length === 0 ? (
               <tr>
-                <td colSpan={12} className="sales-report-empty">
+                <td colSpan={9} className="sales-report-empty">
                   Chưa có dữ liệu
                 </td>
               </tr>
@@ -577,15 +579,12 @@ export default function SalesEndOfDayPage() {
                           {expanded ? '▼' : '▶'} {toDisplayDate(group.date)} ({group.summary.orderCount} hóa đơn)
                         </button>
                       </td>
-                      <td>-</td>
-                      <td className="num-col">{toMoneyText(group.summary.totalQuantity)}</td>
                       <td className="num-col">{toMoneyText(group.summary.paymentAmount)}</td>
                       <td className="num-col debt-col">{toMoneyText(group.summary.debtAmount)}</td>
                       <td className="num-col">{toMoneyText(group.summary.revenueAmount)}</td>
                       <td className="num-col">{toMoneyText(group.summary.grossAmount)}</td>
                       <td className="num-col">{toMoneyText(group.summary.discountAmount)}</td>
                       <td className="num-col">{toMoneyText(group.summary.serviceAmount)}</td>
-                      <td>-</td>
                     </tr>
                     {expanded &&
                       group.rows.map((row) => (
@@ -596,16 +595,13 @@ export default function SalesEndOfDayPage() {
                             </button>
                           </td>
                           <td>{formatDateTimeVN(row.createdAt)}</td>
-                          <td>{row.receiverName || '-'}</td>
-                          <td>{paymentMethodLabel(row.paymentMethod)}</td>
-                          <td className="num-col">{toMoneyText(row.totalQuantity)}</td>
+                          <td>{row.locationLabel}</td>
                           <td className="num-col">{toMoneyText(row.paymentAmount)}</td>
                           <td className="num-col debt-col">{toMoneyText(row.debtAmount)}</td>
                           <td className="num-col">{toMoneyText(row.revenueAmount)}</td>
                           <td className="num-col">{toMoneyText(row.grossAmount)}</td>
                           <td className="num-col">{toMoneyText(row.discountAmount)}</td>
                           <td className="num-col">{toMoneyText(row.serviceAmount)}</td>
-                          <td>{row.locationLabel}</td>
                         </tr>
                       ))}
                   </Fragment>

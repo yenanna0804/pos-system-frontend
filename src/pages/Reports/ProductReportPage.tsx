@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import ExcelJS from 'exceljs';
 import { useAuth } from '../../contexts/AuthContext';
 import { categoryService, reportService } from '../../services/api';
 import FilterResetButton from '../../components/FilterResetButton';
@@ -157,25 +158,40 @@ export default function ProductReportPage() {
     totalRevenue: acc.totalRevenue + Number(r.netAmount || 0),
   }), { totalQuantity: 0, totalRevenue: 0 }), [rows]);
 
-  const exportToCsv = () => {
-    const esc = (v: string) => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s; };
-    const out: string[][] = [];
-    out.push(['BÁO CÁO HÀNG HÓA']);
-    out.push([`Từ: ${startDate} ${startTime}  Đến: ${endDate} ${endTime}`]);
-    out.push([]);
-    out.push(['Tên nhóm/món', 'ĐVT', 'SL', 'Doanh thu']);
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Bao cao hang hoa');
+    sheet.addRow(['BÁO CÁO HÀNG HÓA']);
+    sheet.addRow([`Từ: ${startDate} ${startTime}  Đến: ${endDate} ${endTime}`]);
+    sheet.addRow([]);
+    sheet.addRow(['Tên nhóm/món', 'ĐVT', 'SL', 'Doanh thu']);
     for (const group of groupedRows) {
-      out.push([`Nhóm: ${group.categoryName}`, '', String(Math.trunc(group.totalQuantity)), String(Math.trunc(group.totalRevenue))]);
+      sheet.addRow([`Nhóm: ${group.categoryName}`, '', Math.trunc(group.totalQuantity), Math.trunc(group.totalRevenue)]);
       for (const product of group.products) {
-        out.push([`  ${product.productName}`, product.unit || '-', String(Math.trunc(product.totalQuantity)), String(Math.trunc(product.netAmount))]);
+        sheet.addRow([`  ${product.productName}`, product.unit || '-', Math.trunc(product.totalQuantity), Math.trunc(product.netAmount)]);
       }
     }
-    out.push(['TỔNG CỘNG', '', String(Math.trunc(totals.totalQuantity)), String(Math.trunc(totals.totalRevenue))]);
-    const csv = out.map((r) => r.map(esc).join(',')).join('\r\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    sheet.addRow(['TỔNG CỘNG', '', Math.trunc(totals.totalQuantity), Math.trunc(totals.totalRevenue)]);
+    sheet.getRow(1).font = { bold: true, size: 14 };
+    sheet.getRow(4).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(4).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+
+    for (let colIdx = 1; colIdx <= 4; colIdx += 1) {
+      const col = sheet.getColumn(colIdx);
+      let maxLength = 10;
+      col.eachCell({ includeEmpty: true }, (cell) => {
+        const raw = String(cell.value ?? '');
+        const longestLine = raw.split('\n').reduce((m, part) => Math.max(m, part.length), 0);
+        maxLength = Math.max(maxLength, longestLine + 2);
+      });
+      col.width = Math.min(maxLength, colIdx === 1 ? 46 : 24);
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `bao-cao-hang-hoa_${startDate}_${endDate}.csv`;
+    a.href = url; a.download = `bao-cao-hang-hoa_${startDate}_${endDate}.xlsx`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
@@ -185,7 +201,7 @@ export default function ProductReportPage() {
       <div className="sales-report-header">
         <h2>Báo cáo hàng hóa</h2>
         <div className="sales-report-header-actions">
-          <button type="button" className="ghost-btn sales-export-btn" onClick={exportToCsv} disabled={rows.length === 0} title="Xuất Excel (CSV)">
+          <button type="button" className="ghost-btn sales-export-btn" onClick={() => { void exportToExcel(); }} disabled={rows.length === 0} title="Xuất Excel">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
               <path d="M12 15V3m0 12-4-4m4 4 4-4" />
               <path d="M2 17l.621 2.485A2 2 0 0 0 4.561 21h14.878a2 2 0 0 0 1.94-1.515L22 17" />
