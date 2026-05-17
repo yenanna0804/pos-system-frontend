@@ -214,8 +214,9 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   let canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  let ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Khong tao duoc canvas bitmap');
+  const initialCtx = canvas.getContext('2d');
+  if (!initialCtx) throw new Error('Khong tao duoc canvas bitmap');
+  let ctx: CanvasRenderingContext2D = initialCtx;
 
   const ensureSpace = (neededHeight: number) => {
     if (neededHeight <= canvas.height) return;
