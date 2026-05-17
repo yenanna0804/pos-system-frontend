@@ -249,6 +249,8 @@ const buildReceipt80mmData = (order: OrderDetail, fullName?: string): Receipt80m
     surcharge: surchargeTotal,
     surchargeMode: order.surchargeMode,
     surchargeValue: Number(order.surchargeValue ?? order.surchargeAmount ?? 0),
+    paymentMethod: order.paymentMethod,
+    paidAmount: Number(order.paidAmount || 0),
     total: Number(order.finalAmount ?? order.totalAmount ?? 0),
   });
 };

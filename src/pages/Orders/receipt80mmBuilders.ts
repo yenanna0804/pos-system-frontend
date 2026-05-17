@@ -35,6 +35,8 @@ type BuildReceipt80mmParams = {
   surcharge: number;
   surchargeMode?: 'percent' | 'amount';
   surchargeValue?: number;
+  paymentMethod?: 'CASH' | 'BANKING' | null;
+  paidAmount?: number;
   total: number;
 };
 
@@ -117,5 +119,7 @@ export const buildReceipt80mmData = (params: BuildReceipt80mmParams): Receipt80m
   surcharge: Math.max(0, Math.trunc(Number(params.surcharge || 0))),
   surchargeMode: params.surchargeMode,
   surchargeValue: Number(params.surchargeValue ?? 0),
+  paymentMethod: params.paymentMethod,
+  paidAmount: Math.max(0, Math.trunc(Number(params.paidAmount || 0))),
   total: Math.max(0, Math.trunc(Number(params.total || 0))),
 });

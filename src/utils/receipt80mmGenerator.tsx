@@ -25,6 +25,8 @@ export type Receipt80mmData = {
   surcharge: number;
   surchargeMode?: 'percent' | 'amount';
   surchargeValue?: number;
+  paymentMethod?: 'CASH' | 'BANKING' | null;
+  paidAmount?: number;
   total: number;
 };
 
@@ -59,6 +61,8 @@ export const DEFAULT_RECEIPT_80MM_DATA: Receipt80mmData = {
   surcharge: 0,
   surchargeMode: 'amount',
   surchargeValue: 0,
+  paymentMethod: 'CASH',
+  paidAmount: 3500000,
   total: 3200000,
 };
 
@@ -177,7 +181,9 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   if (!sampleCtx) throw new Error('Khong tao duoc canvas bitmap');
   sampleCtx.font = `${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
 
-  let estimatedRows = 16;
+  // Base rows for header, table summary, totals, payment/debt block and footer.
+  // Keep this in sync with the summary section so canvas height is not clipped.
+  let estimatedRows = 22;
   for (let itemIdx = 0; itemIdx < data.items.length; itemIdx += 1) {
     const item = data.items[itemIdx];
     const nameRows = wrapByWidth(sampleCtx, item.name, nameColumnWidth).length;
@@ -199,18 +205,44 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     if (itemIdx < data.items.length - 1) estimatedRows += 1;
   }
   const estimatedHeight = 86 + estimatedRows * tableLineHeight;
-  const height = Math.max(320, Math.min(1700, estimatedHeight));
+  // Keep a generous upper bound to avoid clipping when receipt has many items
+  // plus extended summary/footer blocks.
+  const height = Math.max(320, Math.min(6000, estimatedHeight));
 
-  const canvas = document.createElement('canvas');
+  let canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const ctx = canvas.getContext('2d');
+  let ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Khong tao duoc canvas bitmap');
+
+  const ensureSpace = (neededHeight: number) => {
+    if (neededHeight <= canvas.height) return;
+    const prevFont = ctx.font;
+    const prevTextAlign = ctx.textAlign;
+    const prevTextBaseline = ctx.textBaseline;
+    const prevFillStyle = ctx.fillStyle;
+    const expandedHeight = Math.max(neededHeight, Math.ceil(canvas.height * 1.5));
+    const nextCanvas = document.createElement('canvas');
+    nextCanvas.width = width;
+    nextCanvas.height = expandedHeight;
+    const nextCtx = nextCanvas.getContext('2d');
+    if (!nextCtx) return;
+    nextCtx.imageSmoothingEnabled = false;
+    nextCtx.fillStyle = '#ffffff';
+    nextCtx.fillRect(0, 0, width, expandedHeight);
+    nextCtx.drawImage(canvas, 0, 0);
+    canvas = nextCanvas;
+    ctx = nextCtx;
+    ctx.font = prevFont;
+    ctx.textAlign = prevTextAlign;
+    ctx.textBaseline = prevTextBaseline;
+    ctx.fillStyle = prevFillStyle;
+  };
 
   const finalizeCanvasHeight = (usedHeight: number) => {
     const minFinalHeight = 260;
-    const trimmedHeight = Math.max(minFinalHeight, Math.min(height, Math.ceil(usedHeight)));
-    if (trimmedHeight >= height) return canvas;
+    const trimmedHeight = Math.max(minFinalHeight, Math.ceil(usedHeight));
+    if (trimmedHeight >= canvas.height) return canvas;
     const trimmedCanvas = document.createElement('canvas');
     trimmedCanvas.width = width;
     trimmedCanvas.height = trimmedHeight;
@@ -240,7 +272,8 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   ctx.font = `${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
   ctx.textAlign = 'left';
 
-  const drawLabelValue = (label: string, value: string) => {
+    const drawLabelValue = (label: string, value: string) => {
+    ensureSpace(y + contentLineHeight + 20);
     ctx.textAlign = 'left';
     const labelText = `${label}: `;
     ctx.font = `bold ${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
@@ -308,6 +341,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
 
     for (let rowLineIdx = 0; rowLineIdx < rowLineCount; rowLineIdx += 1) {
       const nameLine = nameLines[rowLineIdx];
+      ensureSpace(y + tableLineHeight + 20);
       ctx.textAlign = 'left';
       if (nameLine) ctx.fillText(nameLine, xName, y);
       if (!isOrderPrint) {
@@ -337,6 +371,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
       for (const segment of noteSegments) {
         const noteLines = wrapByWidth(ctx, segment, noteColumnWidth);
         for (const noteLine of noteLines) {
+          ensureSpace(y + noteLineHeight + 20);
           ctx.textAlign = 'left';
           ctx.fillText(noteLine, noteX, y);
           y += noteLineHeight;
@@ -388,6 +423,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
 
   if (isOrderPrint) {
     y += 8;
+    ensureSpace(y + contentLineHeight * 3 + 32);
     ctx.textAlign = 'center';
     ctx.fillText('Vui lòng kiểm tra kỹ lại nội dung', width / 2, y);
     y += contentLineHeight;
@@ -396,6 +432,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   }
 
   const drawSummary = (label: string, value: string) => {
+    ensureSpace(y + contentLineHeight + 20);
     ctx.textAlign = 'left';
     ctx.fillText(label, xName, y);
     ctx.textAlign = 'right';
@@ -411,18 +448,33 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     data.surchargeMode === 'percent'
       ? `Phí dịch vụ (${toPercentVi(Number(data.surchargeValue || 0))}%)`
       : 'Phí dịch vụ';
+  const paidAmount = Math.max(0, Math.trunc(Number(data.paidAmount || 0)));
+  const changeAmount = Math.max(0, paidAmount - Math.max(0, Math.trunc(Number(data.total || 0))));
+  const debtAmount = Math.max(0, Math.max(0, Math.trunc(Number(data.total || 0))) - paidAmount);
+  const paymentMethodLabel = data.paymentMethod === 'BANKING' ? 'Chuyển khoản' : 'Tiền mặt';
 
-  drawSummary('Tạm tính', toNumberVi(data.subtotal));
-  drawSummary(discountLabel, toNumberVi(Math.abs(data.discount)));
-  drawSummary(surchargeLabel, toNumberVi(data.surcharge));
+  drawSummary('Tạm tính', toMoney(data.subtotal));
+  drawSummary(discountLabel, toMoney(Math.abs(data.discount)));
+  drawSummary(surchargeLabel, toMoney(data.surcharge));
 
-  ctx.fillRect(marginX, y, contentWidth, 2);
-  y += 22;
+  y += 10;
   ctx.font = `bold ${totalAmountSize}px '${RECEIPT_FONT_FAMILY}'`;
   drawSummary('THANH TOÁN', toMoney(data.total));
   ctx.font = `${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
 
+  ctx.fillRect(marginX, y, contentWidth, 2);
+  y += 14;
+  drawSummary(paymentMethodLabel, toMoney(paidAmount));
+  ctx.font = `bold ${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
+  drawSummary('Trả lại khách', toMoney(changeAmount));
+  ctx.fillRect(marginX, y, contentWidth, 2);
+  y += 14;
+  ctx.font = `bold ${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
+  drawSummary('Khách nợ', toMoney(debtAmount));
+  ctx.font = `${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
+
   y += 32;
+  ensureSpace(y + contentLineHeight * 3 + 32);
   ctx.textAlign = 'center';
   ctx.fillText('Vui lòng kiểm tra kỹ lại nội dung', width / 2, y);
   y += contentLineHeight;

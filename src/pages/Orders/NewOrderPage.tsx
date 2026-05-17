@@ -338,6 +338,8 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
       surchargeValue: useFullTotals
         ? (surchargeMode === 'amount' ? toAmountNumber(surchargeValue) : toPercentNumber(surchargeValue))
         : 0,
+      paymentMethod: pendingPaymentMethodRef.current,
+      paidAmount: pendingPaidAmountRef.current,
       total: useFullTotals ? Math.max(0, Math.trunc(totalAmount)) : Math.max(0, Math.trunc(subtotalSelected)),
     });
   };
