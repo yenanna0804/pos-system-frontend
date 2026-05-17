@@ -28,6 +28,7 @@ type BuildReceipt80mmParams = {
   fullName?: string | null;
   location?: string;
   items: ReceiptSourceItem[];
+  itemDiscountTotal?: number;
   subtotal: number;
   discount: number;
   discountMode?: 'percent' | 'amount';
@@ -112,6 +113,7 @@ export const buildReceipt80mmData = (params: BuildReceipt80mmParams): Receipt80m
       lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)))),
     };
   }),
+  itemDiscountTotal: Math.max(0, Math.trunc(Number(params.itemDiscountTotal || 0))),
   subtotal: Math.max(0, Math.trunc(Number(params.subtotal || 0))),
   discount: Math.max(0, Math.trunc(Number(params.discount || 0))),
   discountMode: params.discountMode,

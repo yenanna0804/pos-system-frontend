@@ -315,6 +315,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
       : '-';
 
     const subtotalSelected = items.reduce((sum, item) => sum + (item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)), 0);
+    const itemDiscountTotal = items.reduce((sum, item) => sum + Number(item.lineDiscountAmount || 0), 0);
     const useFullTotals = items.length === billItems.length;
 
     return buildReceipt80mmPayload({
@@ -325,6 +326,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
       fullName: user?.fullName || user?.username,
       location,
       items,
+      itemDiscountTotal,
       subtotal: useFullTotals
         ? Math.max(0, Math.trunc(totalAmount + discountAmount - surchargeAmount))
         : Math.max(0, Math.trunc(subtotalSelected)),

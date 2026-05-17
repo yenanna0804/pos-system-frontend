@@ -66,11 +66,10 @@ export function useOrderPricing(params: {
 
   const surchargeAmount = useMemo(() => {
     const surchargeRaw = surchargeMode === 'amount' ? toAmountNumber(surchargeValue) : toPercentNumber(surchargeValue);
-    const subtotalAfterDiscount = Math.max(0, toMoney(subtotal) - toMoney(discountAmount));
     return surchargeMode === 'percent'
-      ? toMoney((subtotalAfterDiscount * Math.max(0, surchargeRaw)) / 100)
+      ? toMoney((toMoney(subtotal) * Math.max(0, surchargeRaw)) / 100)
       : toMoney(surchargeRaw);
-  }, [surchargeMode, surchargeValue, subtotal, discountAmount]);
+  }, [surchargeMode, surchargeValue, subtotal]);
 
   const totalAmount = useMemo(
     () => Math.max(0, toMoney(subtotal) - toMoney(discountAmount) + toMoney(surchargeAmount)),

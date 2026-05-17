@@ -18,6 +18,7 @@ export type Receipt80mmData = {
   location?: string;
   fullName?: string;
   items: Receipt80mmItem[];
+  itemDiscountTotal?: number;
   subtotal: number;
   discount: number;
   discountMode?: 'percent' | 'amount';
@@ -54,6 +55,7 @@ export const DEFAULT_RECEIPT_80MM_DATA: Receipt80mmData = {
       lineTotal: 2000000
     },
   ],
+  itemDiscountTotal: 100000,
   subtotal: 3500000,
   discount: 300000,
   discountMode: 'percent',
@@ -272,7 +274,7 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   ctx.font = `${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
   ctx.textAlign = 'left';
 
-    const drawLabelValue = (label: string, value: string) => {
+  const drawLabelValue = (label: string, value: string) => {
     ensureSpace(y + contentLineHeight + 20);
     ctx.textAlign = 'left';
     const labelText = `${label}: `;
@@ -440,10 +442,15 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     y += contentLineHeight;
   };
 
+  drawSummary('Giảm giá theo món', toMoney(Math.abs(Number(data.itemDiscountTotal || 0))));
+  ctx.font = `bold ${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
+  drawSummary('Tạm tính', toMoney(data.subtotal));
+  ctx.font = `${bodySize}px '${RECEIPT_FONT_FAMILY}'`;
+
   const discountLabel =
     data.discountMode === 'percent'
-      ? `Giảm giá (${toPercentVi(Number(data.discountValue || 0))}%)`
-      : 'Giảm giá';
+      ? `Giảm giá hoá đơn (${toPercentVi(Number(data.discountValue || 0))}%)`
+      : 'Giảm giá hoá đơn';
   const surchargeLabel =
     data.surchargeMode === 'percent'
       ? `Phí dịch vụ (${toPercentVi(Number(data.surchargeValue || 0))}%)`
@@ -453,7 +460,6 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
   const debtAmount = Math.max(0, Math.max(0, Math.trunc(Number(data.total || 0))) - paidAmount);
   const paymentMethodLabel = data.paymentMethod === 'BANKING' ? 'Chuyển khoản' : 'Tiền mặt';
 
-  drawSummary('Tạm tính', toMoney(data.subtotal));
   drawSummary(discountLabel, toMoney(Math.abs(data.discount)));
   drawSummary(surchargeLabel, toMoney(data.surcharge));
 

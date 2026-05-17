@@ -216,12 +216,18 @@ const buildOrderA4Content = (order: OrderDetail) => {
     }
   });
 
-  const discountTotal = Number(order.discountAmount || 0) + order.items.reduce((sum, item) => sum + Number(item.lineDiscountAmount || 0), 0);
+  const itemDiscountTotal = order.items.reduce((sum, item) => sum + Number(item.lineDiscountAmount || 0), 0);
+  const subtotalAmount = Math.max(0, Number(order.totalAmount || 0));
+  const discountValue = Math.max(0, Number(order.discountValue ?? 0));
+  const invoiceDiscount = (order.discountMode || 'amount') === 'percent'
+    ? Math.min(subtotalAmount, (subtotalAmount * discountValue) / 100)
+    : Math.min(subtotalAmount, discountValue);
   const surchargeTotal = Number(order.surchargeAmount || 0) + order.items.reduce((sum, item) => sum + Number(item.lineSurchargeAmount || 0), 0);
 
   lines.push('');
   lines.push(`Tạm tính: ${formatNumberVi(Number(order.totalAmount || 0))}`);
-  lines.push(`Giảm giá: ${formatNumberVi(discountTotal)}`);
+  lines.push(`Giảm giá theo món: ${formatNumberVi(itemDiscountTotal)}`);
+  lines.push(`Giảm giá hoá đơn: ${formatNumberVi(invoiceDiscount)}`);
   lines.push(`Phí dịch vụ: ${formatNumberVi(surchargeTotal)}`);
   lines.push(`Phải thanh toán: ${formatNumberVi(Number(order.finalAmount ?? order.totalAmount ?? 0))}`);
   lines.push(`Đã thanh toán: ${formatNumberVi(Number(order.paidAmount || 0))}`);
@@ -231,7 +237,12 @@ const buildOrderA4Content = (order: OrderDetail) => {
 };
 
 const buildReceipt80mmData = (order: OrderDetail, fullName?: string): Receipt80mmData => {
-  const discountTotal = Number(order.discountAmount || 0);
+  const itemDiscountTotal = order.items.reduce((sum, item) => sum + Number(item.lineDiscountAmount || 0), 0);
+  const subtotalAmount = Math.max(0, Number(order.totalAmount || 0));
+  const discountValue = Math.max(0, Number(order.discountValue ?? 0));
+  const discountTotal = (order.discountMode || 'amount') === 'percent'
+    ? Math.min(subtotalAmount, (subtotalAmount * discountValue) / 100)
+    : Math.min(subtotalAmount, discountValue);
   const surchargeTotal = Number(order.surchargeAmount || 0) + order.items.reduce((sum, item) => sum + Number(item.lineSurchargeAmount || 0), 0);
 
   return buildReceipt80mmPayload({
@@ -242,6 +253,7 @@ const buildReceipt80mmData = (order: OrderDetail, fullName?: string): Receipt80m
     fullName,
     location: order.locationLabel || '-',
     items: order.items,
+    itemDiscountTotal,
     subtotal: Number(order.totalAmount || 0),
     discount: discountTotal,
     discountMode: order.discountMode,

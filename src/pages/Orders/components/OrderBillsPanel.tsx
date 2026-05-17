@@ -127,9 +127,8 @@ export default function OrderBillsPanel({
   const discountAmount = discountMode === 'percent'
     ? toMoney(Math.min(subtotalAmount, (subtotalAmount * Math.max(0, discountRaw)) / 100))
     : Math.min(subtotalAmount, toMoney(discountRaw));
-  const subtotalAfterDiscount = Math.max(0, subtotalAmount - discountAmount);
   const surchargeAmount = surchargeMode === 'percent'
-    ? toMoney((subtotalAfterDiscount * Math.max(0, surchargeRaw)) / 100)
+    ? toMoney((subtotalAmount * Math.max(0, surchargeRaw)) / 100)
     : toMoney(surchargeRaw);
   const editingPriceItem = editingPriceLineId ? billItems.find((item) => item.lineId === editingPriceLineId) || null : null;
   const oldUnitPrice = Math.max(0, Math.trunc(Number(editingPriceItem?.baseUnitPrice ?? editingPriceItem?.unitPrice ?? 0)));
@@ -296,13 +295,13 @@ export default function OrderBillsPanel({
       <div className="orders-bills-card">
         <div className="orders-bills-head">
           <div className="orders-customer-row">
-            <span className="orders-row-label">Tên khách hàng</span>
+            <span className="orders-row-label orders-row-label-wide">Thông tin khách hàng</span>
             <div className="orders-customer-main">
               <input
                 className="orders-customer-input"
                 value={customerName}
                 onChange={(event) => onCustomerNameChange(event.target.value)}
-                placeholder="Nhập tên khách hàng"
+                placeholder="Nhập thông tin khách hàng"
               />
             </div>
           </div>
