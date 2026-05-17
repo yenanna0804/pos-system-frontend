@@ -231,7 +231,7 @@ const buildOrderA4Content = (order: OrderDetail) => {
 };
 
 const buildReceipt80mmData = (order: OrderDetail, fullName?: string): Receipt80mmData => {
-  const discountTotal = Number(order.discountAmount || 0) + order.items.reduce((sum, item) => sum + Number(item.lineDiscountAmount || 0), 0);
+  const discountTotal = Number(order.discountAmount || 0);
   const surchargeTotal = Number(order.surchargeAmount || 0) + order.items.reduce((sum, item) => sum + Number(item.lineSurchargeAmount || 0), 0);
 
   return buildReceipt80mmPayload({
@@ -244,7 +244,11 @@ const buildReceipt80mmData = (order: OrderDetail, fullName?: string): Receipt80m
     items: order.items,
     subtotal: Number(order.totalAmount || 0),
     discount: discountTotal,
+    discountMode: order.discountMode,
+    discountValue: Number(order.discountValue ?? order.discountAmount ?? 0),
     surcharge: surchargeTotal,
+    surchargeMode: order.surchargeMode,
+    surchargeValue: Number(order.surchargeValue ?? order.surchargeAmount ?? 0),
     total: Number(order.finalAmount ?? order.totalAmount ?? 0),
   });
 };

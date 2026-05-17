@@ -20,7 +20,11 @@ export type Receipt80mmData = {
   items: Receipt80mmItem[];
   subtotal: number;
   discount: number;
+  discountMode?: 'percent' | 'amount';
+  discountValue?: number;
   surcharge: number;
+  surchargeMode?: 'percent' | 'amount';
+  surchargeValue?: number;
   total: number;
 };
 
@@ -50,7 +54,11 @@ export const DEFAULT_RECEIPT_80MM_DATA: Receipt80mmData = {
   ],
   subtotal: 3500000,
   discount: 300000,
+  discountMode: 'percent',
+  discountValue: 10,
   surcharge: 0,
+  surchargeMode: 'amount',
+  surchargeValue: 0,
   total: 3200000,
 };
 
@@ -395,9 +403,18 @@ const buildReceiptCanvas = (data: Receipt80mmData) => {
     y += contentLineHeight;
   };
 
+  const discountLabel =
+    data.discountMode === 'percent'
+      ? `Giảm giá (${toPercentVi(Number(data.discountValue || 0))}%)`
+      : 'Giảm giá';
+  const surchargeLabel =
+    data.surchargeMode === 'percent'
+      ? `Phí dịch vụ (${toPercentVi(Number(data.surchargeValue || 0))}%)`
+      : 'Phí dịch vụ';
+
   drawSummary('Tạm tính', toNumberVi(data.subtotal));
-  drawSummary('Giảm giá', toNumberVi(Math.abs(data.discount)));
-  drawSummary('Phí dịch vụ', toNumberVi(data.surcharge));
+  drawSummary(discountLabel, toNumberVi(Math.abs(data.discount)));
+  drawSummary(surchargeLabel, toNumberVi(data.surcharge));
 
   ctx.fillRect(marginX, y, contentWidth, 2);
   y += 22;

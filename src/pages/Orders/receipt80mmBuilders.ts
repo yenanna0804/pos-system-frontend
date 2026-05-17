@@ -30,7 +30,11 @@ type BuildReceipt80mmParams = {
   items: ReceiptSourceItem[];
   subtotal: number;
   discount: number;
+  discountMode?: 'percent' | 'amount';
+  discountValue?: number;
   surcharge: number;
+  surchargeMode?: 'percent' | 'amount';
+  surchargeValue?: number;
   total: number;
 };
 
@@ -108,6 +112,10 @@ export const buildReceipt80mmData = (params: BuildReceipt80mmParams): Receipt80m
   }),
   subtotal: Math.max(0, Math.trunc(Number(params.subtotal || 0))),
   discount: Math.max(0, Math.trunc(Number(params.discount || 0))),
+  discountMode: params.discountMode,
+  discountValue: Number(params.discountValue ?? 0),
   surcharge: Math.max(0, Math.trunc(Number(params.surcharge || 0))),
+  surchargeMode: params.surchargeMode,
+  surchargeValue: Number(params.surchargeValue ?? 0),
   total: Math.max(0, Math.trunc(Number(params.total || 0))),
 });

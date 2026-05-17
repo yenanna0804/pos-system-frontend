@@ -307,26 +307,44 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     return lines.join('\n');
   };
 
-  const onPrintInvoice = async () => {
-    if (billItems.length === 0) return;
+  const buildReceiptDataFromItems = (items: BillItem[], title: 'PHIẾU TẠM TÍNH' | 'PHIẾU ORDER'): Receipt80mmData => {
     const location = selectedTable
       ? selectedTable.entityType === 'ROOM'
         ? `${selectedTable.areaName} / ${selectedTable.roomName || selectedTable.name}`
         : `${selectedTable.areaName}${selectedTable.roomName ? ` / ${selectedTable.roomName}` : ''} / ${selectedTable.name}`
       : '-';
-    const receiptData = buildReceipt80mmPayload({
-      title: 'PHIẾU TẠM TÍNH',
+
+    const subtotalSelected = items.reduce((sum, item) => sum + (item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)), 0);
+    const useFullTotals = items.length === billItems.length;
+
+    return buildReceipt80mmPayload({
+      title,
       orderCode: orderCode || 'TAM',
       datetime: formatDateTimeVN(new Date().toISOString()),
       customerName: customerName || '-',
       fullName: user?.fullName || user?.username,
       location,
-      items: billItems,
-      subtotal: Math.max(0, totalAmount + discountAmount - surchargeAmount),
-      discount: discountAmount,
-      surcharge: surchargeAmount,
-      total: totalAmount,
+      items,
+      subtotal: useFullTotals
+        ? Math.max(0, Math.trunc(totalAmount + discountAmount - surchargeAmount))
+        : Math.max(0, Math.trunc(subtotalSelected)),
+      discount: useFullTotals ? Math.max(0, Math.trunc(discountAmount)) : 0,
+      discountMode: useFullTotals ? discountMode : 'amount',
+      discountValue: useFullTotals
+        ? (discountMode === 'amount' ? toAmountNumber(discountValue) : toPercentNumber(discountValue))
+        : 0,
+      surcharge: useFullTotals ? Math.max(0, Math.trunc(surchargeAmount)) : 0,
+      surchargeMode: useFullTotals ? surchargeMode : 'amount',
+      surchargeValue: useFullTotals
+        ? (surchargeMode === 'amount' ? toAmountNumber(surchargeValue) : toPercentNumber(surchargeValue))
+        : 0,
+      total: useFullTotals ? Math.max(0, Math.trunc(totalAmount)) : Math.max(0, Math.trunc(subtotalSelected)),
     });
+  };
+
+  const onPrintInvoice = async () => {
+    if (billItems.length === 0) return;
+    const receiptData = buildReceiptDataFromItems(billItems, 'PHIẾU TẠM TÍNH');
     await printUsingConfiguredRoute('Hóa đơn tạm', buildPrintableContent(billItems, 'Hóa đơn'), {
       templateKey: resolveTemplateKeyForPrintFamily('invoice'),
       receipt80mmData: receiptData,
@@ -337,63 +355,14 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     const selectedItems = billItems.filter((item) => selectedLineIds.includes(item.lineId));
     const itemsToPrint = selectedItems.length > 0 ? selectedItems : billItems;
     if (itemsToPrint.length === 0) return;
-    const receiptData = buildOrderSlip80mmData(itemsToPrint, 'Order');
+    const receiptData = buildReceiptDataFromItems(itemsToPrint, 'PHIẾU ORDER');
     await printUsingConfiguredRoute('Order tạm', buildPrintableContent(itemsToPrint, 'Order'), {
       templateKey: resolveTemplateKeyForPrintFamily('order_slip'),
       receipt80mmData: receiptData,
     });
   };
 
-  const buildOrderComboNote = (item: BillItem) => {
-    const comboItems = Array.isArray(item.comboItems) ? item.comboItems : [];
-    if (comboItems.length === 0) return '';
-    const details = comboItems
-      .map((comboItem) => {
-        const name = (comboItem.itemName || '').trim() || '-';
-        const quantity = Math.max(0, Number(comboItem.quantity || 0));
-        const unit = (comboItem.itemUnit || '').trim();
-        return `${name}: ${quantity} ${unit}`.trim();
-      })
-      .filter(Boolean)
-      .join(', ');
-    return details ? `Combo bao gồm: (${details})` : '';
-  };
-
-  const buildOrderSlip80mmData = (items: BillItem[], label: string): Receipt80mmData => {
-    const location = selectedTable
-      ? selectedTable.entityType === 'ROOM'
-        ? `${selectedTable.areaName} / ${selectedTable.roomName || selectedTable.name}`
-        : `${selectedTable.areaName}${selectedTable.roomName ? ` / ${selectedTable.roomName}` : ''} / ${selectedTable.name}`
-      : '-';
-
-    const subtotalSelected = items.reduce((sum, item) => sum + (item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)), 0);
-    const useFullTotals = items.length === billItems.length;
-
-    return {
-      title: label === 'Order' ? 'PHIẾU ORDER' : 'PHIẾU TẠM TÍNH',
-      orderCode: orderCode || 'TAM',
-      datetime: formatDateTimeVN(new Date().toISOString()),
-      customerName: customerName || '-',
-      fullName: user?.fullName || user?.username,
-      location,
-      items: items.map((item) => {
-        const note = (item.note || '').trim();
-        const comboNote = buildOrderComboNote(item);
-        return {
-          name: item.productName,
-          unit: item.unit || '-',
-          quantity: Math.max(0, Math.trunc(Number(item.quantity || 0))),
-          unitPrice: Math.max(0, Math.trunc(Number(item.unitPrice || 0))),
-          lineTotal: Math.max(0, Math.trunc(Number(item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)))),
-          note: [note ? `* ${note}` : '', comboNote].filter(Boolean).join('\n').trim(),
-        };
-      }),
-      subtotal: Math.max(0, Math.trunc(subtotalSelected)),
-      discount: useFullTotals ? Math.max(0, Math.trunc(discountAmount)) : 0,
-      surcharge: useFullTotals ? Math.max(0, Math.trunc(surchargeAmount)) : 0,
-      total: useFullTotals ? Math.max(0, Math.trunc(totalAmount)) : Math.max(0, Math.trunc(subtotalSelected)),
-    };
-  };
+  
 
   return (
     <section className="orders-create-page">
