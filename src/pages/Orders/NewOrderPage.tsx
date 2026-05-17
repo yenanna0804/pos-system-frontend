@@ -60,6 +60,7 @@ type Props = {
       removedItemIds: string[];
       hasChanges: boolean;
     };
+    saveBehavior?: 'exit' | 'stay';
   }) => Promise<void>;
   onToggleTimeLineTimer?: (lineId: string, action: 'start' | 'stop') => Promise<{ usedMinutes: number; lineTotal: number; timerStatus: 'RUNNING' | 'STOPPED'; startAt?: string | null; stopAt?: string | null }>;
   onUpdateTimeLineTimestamp?: (lineId: string, field: 'startAt' | 'stopAt', isoValue: string) => Promise<void>;
@@ -76,9 +77,20 @@ type Props = {
     paidAmount?: number;
     paymentMethod?: 'CASH' | 'BANKING';
   }) => void;
+  transferFilterRange?: {
+    startIso?: string;
+    endIso?: string;
+  };
+  onFetchTransferCandidateOrders?: (payload: { currentOrderId: string; startIso?: string; endIso?: string }) => Promise<Array<{ id: string; code: string; label: string }>>;
+  onTransferOrderItems?: (payload: {
+    sourceOrderId: string;
+    targetOrderId: string;
+    transferAll: boolean;
+    transferItems: Array<{ lineId: string; quantity: number }>;
+  }) => Promise<void>;
 };
 
-export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', orderCode, orderId, initialData, defaultTab = 'table', activeTab: controlledActiveTab, onActiveTabChange, onToggleTimeLineTimer, onUpdateTimeLineTimestamp, onBillItemsChange, onDraftChange }: Props) {
+export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', orderCode, orderId, initialData, defaultTab = 'table', activeTab: controlledActiveTab, onActiveTabChange, onToggleTimeLineTimer, onUpdateTimeLineTimestamp, onBillItemsChange, onDraftChange, transferFilterRange, onFetchTransferCandidateOrders, onTransferOrderItems }: Props) {
   const { branchId, user } = useAuth();
   const [internalActiveTab, setInternalActiveTab] = useState<'table' | 'product'>(defaultTab);
   const activeTab = controlledActiveTab ?? internalActiveTab;
@@ -98,6 +110,14 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [showEditConfirm, setShowEditConfirm] = useState(false);
   const [showTakeawayConfirm, setShowTakeawayConfirm] = useState(false);
+  const [showTransferSaveConfirm, setShowTransferSaveConfirm] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferCandidates, setTransferCandidates] = useState<Array<{ id: string; code: string; label: string }>>([]);
+  const [isLoadingTransferCandidates, setIsLoadingTransferCandidates] = useState(false);
+  const [targetOrderId, setTargetOrderId] = useState('');
+  const [transferMode, setTransferMode] = useState<'ALL' | 'PARTIAL'>('PARTIAL');
+  const [transferQuantities, setTransferQuantities] = useState<Record<string, string>>({});
+  const [isTransferringOrder, setIsTransferringOrder] = useState(false);
   const { timerLoadingLineIds, timerErrorLineIds, timerUnsyncedLineIds, markLineUnsynced, markLineSynced, createToggleHandler } = useOrderTimer();
 
   useEffect(() => {
@@ -216,9 +236,8 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setBillItems]);
 
-  const executeSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING', isDebtMarked: boolean) => {
+  const executeSaveOrderWithBehavior = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING', isDebtMarked: boolean, saveBehavior: 'exit' | 'stay' = 'exit') => {
     if (billItems.length === 0) return;
-
     setIsSavingOrder(true);
     try {
       await onSaveOrder({
@@ -236,11 +255,22 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
         paidAmount,
         paymentMethod,
         isDebtMarked,
+        saveBehavior,
       });
     } finally {
       setIsSavingOrder(false);
     }
   };
+
+  const hasUnsavedChanges = mode === 'edit' && (
+    Boolean(billItemsPatch?.hasChanges)
+    || (customerName || '') !== (initialData?.customerName || '')
+    || (selectedTable?.id || '') !== (initialData?.selectedTable?.id || '')
+    || discountMode !== (initialData?.discountMode || 'percent')
+    || surchargeMode !== (initialData?.surchargeMode || 'percent')
+    || Number(discountValue || 0) !== Number(initialData?.discountValue ?? initialData?.discountAmount ?? 0)
+    || Number(surchargeValue || 0) !== Number(initialData?.surchargeValue ?? initialData?.surchargeAmount ?? 0)
+  );
 
   const handleSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING', isDebtMarked: boolean) => {
     if (billItems.length === 0) return;
@@ -258,7 +288,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
       setShowEditConfirm(true);
       return;
     }
-    await executeSaveOrder(paidAmount, paymentMethod, isDebtMarked);
+    await executeSaveOrderWithBehavior(paidAmount, paymentMethod, isDebtMarked, 'stay');
   };
 
   const pendingPaidAmountRef = useRef<number>(Math.max(0, Math.trunc(initialData?.paidAmount ?? totalAmount)));
@@ -366,6 +396,65 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     });
   };
 
+  const openTransferModal = async (skipUnsavedCheck = false) => {
+    if (mode !== 'edit' || !orderId || !onFetchTransferCandidateOrders) return;
+    if (!skipUnsavedCheck && hasUnsavedChanges) {
+      setShowTransferSaveConfirm(true);
+      return;
+    }
+    setShowTransferModal(true);
+    setTransferMode('PARTIAL');
+    setTargetOrderId('');
+    setTransferQuantities({});
+    setIsLoadingTransferCandidates(true);
+    try {
+      const rows = await onFetchTransferCandidateOrders({
+        currentOrderId: orderId,
+        startIso: transferFilterRange?.startIso,
+        endIso: transferFilterRange?.endIso,
+      });
+      setTransferCandidates(rows);
+    } finally {
+      setIsLoadingTransferCandidates(false);
+    }
+  };
+
+  const saveThenOpenTransferModal = async () => {
+    setShowTransferSaveConfirm(false);
+    await executeSaveOrderWithBehavior(
+      pendingPaidAmountRef.current,
+      pendingPaymentMethodRef.current,
+      pendingIsDebtMarkedRef.current,
+      'stay',
+    );
+    await openTransferModal(true);
+  };
+
+  const partialTransferItems = billItems
+    .map((item) => ({
+      lineId: item.lineId,
+      quantity: Math.max(0, Math.trunc(Number(transferQuantities[item.lineId] || 0))),
+    }))
+    .filter((item) => item.quantity > 0);
+  const canConfirmTransfer = Boolean(targetOrderId) && (transferMode === 'ALL' || partialTransferItems.length > 0);
+
+  const handleConfirmTransfer = async () => {
+    if (!onTransferOrderItems || !orderId || !targetOrderId) return;
+    if (transferMode === 'PARTIAL' && partialTransferItems.length === 0) return;
+    setIsTransferringOrder(true);
+    try {
+      await onTransferOrderItems({
+        sourceOrderId: orderId,
+        targetOrderId,
+        transferAll: transferMode === 'ALL',
+        transferItems: transferMode === 'ALL' ? [] : partialTransferItems,
+      });
+      setShowTransferModal(false);
+    } finally {
+      setIsTransferringOrder(false);
+    }
+  };
+
   
 
   return (
@@ -384,7 +473,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
                 className="primary-btn"
                 onClick={async () => {
                   setShowTakeawayConfirm(false);
-                  await executeSaveOrder(pendingPaidAmountRef.current, pendingPaymentMethodRef.current, pendingIsDebtMarkedRef.current);
+                  await executeSaveOrderWithBehavior(pendingPaidAmountRef.current, pendingPaymentMethodRef.current, pendingIsDebtMarkedRef.current, 'stay');
                 }}
               >
                 Đồng ý
@@ -410,11 +499,98 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
                 className="primary-btn"
                 onClick={async () => {
                   setShowEditConfirm(false);
-                  await executeSaveOrder(pendingPaidAmountRef.current, pendingPaymentMethodRef.current, pendingIsDebtMarkedRef.current);
+                  await executeSaveOrderWithBehavior(pendingPaidAmountRef.current, pendingPaymentMethodRef.current, pendingIsDebtMarkedRef.current, 'stay');
                 }}
               >
                 Xác nhận sửa
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showTransferSaveConfirm && (
+        <div className="orders-confirm-overlay" onClick={() => setShowTransferSaveConfirm(false)}>
+          <div className="orders-confirm-modal" onClick={(event) => event.stopPropagation()}>
+            <h3>Có thay đổi chưa lưu</h3>
+            <p>Bạn cần lưu hóa đơn trước khi tách để đảm bảo dữ liệu chuyển món chính xác.</p>
+            <div className="orders-confirm-actions">
+              <button type="button" className="ghost-btn" onClick={() => setShowTransferSaveConfirm(false)}>
+                Huỷ
+              </button>
+              <button type="button" className="primary-btn" onClick={() => saveThenOpenTransferModal().catch(() => undefined)}>
+                Lưu rồi tách
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showTransferModal && (
+        <div className="orders-confirm-overlay" onClick={() => setShowTransferModal(false)}>
+          <div className="orders-confirm-modal" onClick={(event) => event.stopPropagation()}>
+            <h3>Tách hóa đơn</h3>
+            <p>Chọn hóa đơn đích trong cùng khung ngày lọc và chọn số lượng món cần chuyển.</p>
+            <div style={{ display: 'grid', gap: 8 }}>
+              <select
+                className="orders-transfer-target-select"
+                value={targetOrderId}
+                onChange={(event) => setTargetOrderId(event.target.value)}
+                disabled={isLoadingTransferCandidates || isTransferringOrder}
+              >
+                <option value="">Chọn hóa đơn đích</option>
+                {transferCandidates.map((order) => (
+                  <option key={order.id} value={order.id}>{order.code} - {order.label}</option>
+                ))}
+              </select>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className={transferMode === 'PARTIAL' ? 'primary-btn' : 'ghost-btn'} onClick={() => setTransferMode('PARTIAL')}>Theo món</button>
+                <button type="button" className={transferMode === 'ALL' ? 'primary-btn' : 'ghost-btn'} onClick={() => setTransferMode('ALL')}>Tất cả</button>
+              </div>
+              {transferMode === 'PARTIAL' && (
+                <div style={{ maxHeight: 280, overflow: 'auto', border: '1px solid #ddd', borderRadius: 8, padding: 8 }}>
+                  {billItems.map((item) => (
+                    <div key={item.lineId} style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                      <div>{item.productName} (Tối đa: {formatNumberVi(item.quantity)})</div>
+                      <div className="orders-bill-qty-wrap">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentQty = Math.max(0, Math.trunc(Number(transferQuantities[item.lineId] || 0)));
+                            const nextQty = Math.max(0, currentQty - 1);
+                            setTransferQuantities((prev) => ({ ...prev, [item.lineId]: String(nextQty) }));
+                          }}
+                        >
+                          -
+                        </button>
+                        <input
+                          className="orders-qty-inline-input orders-transfer-qty-input"
+                          inputMode="numeric"
+                          value={transferQuantities[item.lineId] || '0'}
+                          onFocus={(event) => event.target.select()}
+                          onChange={(event) => {
+                            const digits = event.target.value.replace(/\D/g, '');
+                            const nextQty = Math.max(0, Math.min(item.quantity, Math.trunc(Number(digits || 0))));
+                            setTransferQuantities((prev) => ({ ...prev, [item.lineId]: String(nextQty) }));
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentQty = Math.max(0, Math.trunc(Number(transferQuantities[item.lineId] || 0)));
+                            const nextQty = Math.min(item.quantity, currentQty + 1);
+                            setTransferQuantities((prev) => ({ ...prev, [item.lineId]: String(nextQty) }));
+                          }}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="orders-confirm-actions">
+              <button type="button" className="ghost-btn" onClick={() => setShowTransferModal(false)} disabled={isTransferringOrder}>Huỷ</button>
+              <button type="button" className="primary-btn" onClick={() => handleConfirmTransfer().catch(() => undefined)} disabled={!canConfirmTransfer || isTransferringOrder}>Chuyển</button>
             </div>
           </div>
         </div>
@@ -561,6 +737,8 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
           onSaveOrder={handleSaveOrder}
           onPrintInvoice={() => onPrintInvoice().catch(() => undefined)}
           onPrintOrder={(selectedLineIds) => onPrintOrder(selectedLineIds).catch(() => undefined)}
+          showTransferButton={mode === 'edit' && Boolean(onTransferOrderItems)}
+          onOpenTransferModal={() => openTransferModal().catch(() => undefined)}
           disableSave={billItems.length === 0 || isSavingOrder}
         />
       </div>

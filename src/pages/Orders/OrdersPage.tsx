@@ -748,14 +748,161 @@ export default function OrdersPage() {
         if (!finalOrderId) throw new Error('Không nhận được mã hóa đơn nháp');
         await orderService.update(finalOrderId, savePayload);
       }
+      if (finalOrderId) {
+        const latestDetailResponse = await orderService.getById(finalOrderId);
+        const latestDraftState = mapOrderDetailToEditingState(latestDetailResponse.data as OrderDetail);
+        setCreateDraft({
+          activeTab: 'product',
+          selectedTable: latestDraftState.selectedTable,
+          customerName: latestDraftState.customerName,
+          billItems: latestDraftState.billItems as BillItem[],
+          discountMode: latestDraftState.discountMode || 'amount',
+          discountValue: String(latestDraftState.discountValue ?? latestDraftState.discountAmount ?? 0),
+          surchargeMode: latestDraftState.surchargeMode || 'amount',
+          surchargeValue: String(latestDraftState.surchargeValue ?? latestDraftState.surchargeAmount ?? 0),
+          paidAmount: latestDraftState.paidAmount,
+          paymentMethod: latestDraftState.paymentMethod,
+        });
+        setCreateDraftOrderId(latestDraftState.id);
+      }
       await loadOrders();
-      setCreateDraft(null);
-      setCreateDraftOrderId(null);
-      navigate('/orders');
       showToast('success', 'Lưu hóa đơn thành công');
     } catch (error) {
       showToast('error', getErrorMessage(error));
     }
+  };
+
+  const fetchTransferCandidateOrders = async (payload: { currentOrderId: string; startIso?: string; endIso?: string }) => {
+    const response = await orderService.list({
+      branchId: branchId || undefined,
+      page: 1,
+      pageSize: 200,
+      orderStates: 'DRAFT,UNPAID',
+      startDate: payload.startIso,
+      endDate: payload.endIso,
+    });
+    const rows = Array.isArray(response.data)
+      ? response.data
+      : Array.isArray(response.data?.items)
+        ? response.data.items
+        : [];
+    return (rows as OrderRowApi[])
+      .filter((row) => row.id !== payload.currentOrderId)
+      .map((row) => ({
+        id: row.id,
+        code: row.code,
+        label: `${row.tableName || '-'} | ${formatDateTimeVN(row.createdAt)}`,
+      }));
+  };
+
+  const transferOrderItems = async (payload: {
+    sourceOrderId: string;
+    targetOrderId: string;
+    transferAll: boolean;
+    transferItems: Array<{ lineId: string; quantity: number }>;
+  }) => {
+    const sourceRes = await orderService.getById(payload.sourceOrderId);
+    const targetRes = await orderService.getById(payload.targetOrderId);
+    const source = mapOrderDetailToEditingState(sourceRes.data as OrderDetail);
+    const target = mapOrderDetailToEditingState(targetRes.data as OrderDetail);
+    const targetState = String((targetRes.data as { orderState?: string })?.orderState || '').toUpperCase();
+    if (targetState !== 'DRAFT' && targetState !== 'UNPAID') {
+      throw new Error('Chỉ được chuyển vào hóa đơn Nháp hoặc Chưa thanh toán');
+    }
+
+    const qtyMap = new Map(payload.transferItems.map((item) => [item.lineId, Math.max(0, Math.trunc(item.quantity))]));
+    const itemsToTransfer = payload.transferAll
+      ? source.billItems.map((item) => ({ ...item, quantity: Math.max(0, Math.trunc(Number(item.quantity || 0))) }))
+      : source.billItems
+        .map((item) => ({ ...item, quantity: Math.min(Math.max(0, Math.trunc(Number(item.quantity || 0))), qtyMap.get(item.lineId) || 0) }))
+        .filter((item) => item.quantity > 0);
+
+    if (itemsToTransfer.length === 0) throw new Error('Không có món nào để chuyển');
+
+    const toLineTotal = (item: { quantity: number; unitPrice: number; lineTotal?: number; pricingTypeSnapshot?: 'FIXED' | 'TIME'; usedMinutes?: number; timeRateMinutesSnapshot?: number }) => {
+      if (item.pricingTypeSnapshot === 'TIME') {
+        const usedMinutes = Math.max(0, Math.trunc(Number(item.usedMinutes || 0)));
+        const unitPrice = Math.max(0, Math.trunc(Number(item.unitPrice || 0)));
+        const rateMinutes = Math.max(1, Math.trunc(Number(item.timeRateMinutesSnapshot || 1)));
+        return Math.max(0, Math.floor((unitPrice * usedMinutes) / rateMinutes));
+      }
+      return Math.max(0, Math.trunc(Number(item.lineTotal ?? item.quantity * item.unitPrice)));
+    };
+    const nextLineId = () => {
+      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+      return `line-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    };
+
+    if (!payload.transferAll) {
+      const partialTimeLine = itemsToTransfer.find((item) => item.pricingTypeSnapshot === 'TIME' && item.quantity < Math.max(0, Math.trunc(Number(source.billItems.find((s) => s.lineId === item.lineId)?.quantity || 0))));
+      if (partialTimeLine) {
+        throw new Error('Dịch vụ thời gian chỉ hỗ trợ chuyển toàn bộ dòng, không hỗ trợ tách một phần');
+      }
+    }
+
+    const transferredAsNewLines = itemsToTransfer.map((incoming) => ({
+      ...incoming,
+      lineId: nextLineId(),
+      orderItemId: undefined,
+      lineTotal: toLineTotal(incoming),
+    }));
+    const mergedTarget = [...target.billItems, ...transferredAsNewLines];
+
+    const sourceRemaining = source.billItems
+      .map((item) => {
+        if (payload.transferAll) return { ...item, quantity: 0 };
+        const movedQty = qtyMap.get(item.lineId) || 0;
+        const nextQty = Math.max(0, Math.trunc(Number(item.quantity || 0)) - movedQty);
+        return { ...item, quantity: nextQty, lineTotal: Math.max(0, Math.trunc(nextQty * Number(item.unitPrice || 0))) };
+      })
+      .filter((item) => item.quantity > 0);
+
+    const toTotal = (items: Array<{ quantity: number; unitPrice: number; lineTotal?: number }>) => Math.max(0, items.reduce((sum, item) => sum + toLineTotal(item), 0));
+    const targetTotal = toTotal(mergedTarget);
+    await orderService.update(target.id, {
+      entityType: target.selectedTable?.entityType,
+      tableId: target.selectedTable?.entityType === 'TABLE' ? target.selectedTable?.id : undefined,
+      roomId: target.selectedTable?.entityType === 'ROOM' ? target.selectedTable?.id : target.selectedTable?.roomId || undefined,
+      customerName: target.customerName,
+      billItems: mergedTarget,
+      totalAmount: targetTotal,
+      discountAmount: target.discountAmount ?? 0,
+      discountMode: target.discountMode || 'amount',
+      discountValue: Number(target.discountValue ?? target.discountAmount ?? 0),
+      surchargeAmount: target.surchargeAmount ?? 0,
+      surchargeMode: target.surchargeMode || 'amount',
+      surchargeValue: Number(target.surchargeValue ?? target.surchargeAmount ?? 0),
+      paidAmount: Math.max(0, Math.trunc(Number(target.paidAmount || 0))),
+      isDebtMarked: Boolean(target.isDebtMarked),
+      paymentMethod: target.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
+    });
+
+    if (payload.transferAll || sourceRemaining.length === 0) {
+      await orderService.hardRemove(source.id);
+    } else {
+      await orderService.update(source.id, {
+        entityType: source.selectedTable?.entityType,
+        tableId: source.selectedTable?.entityType === 'TABLE' ? source.selectedTable?.id : undefined,
+        roomId: source.selectedTable?.entityType === 'ROOM' ? source.selectedTable?.id : source.selectedTable?.roomId || undefined,
+        customerName: source.customerName,
+        billItems: sourceRemaining,
+        totalAmount: toTotal(sourceRemaining),
+        discountAmount: source.discountAmount ?? 0,
+        discountMode: source.discountMode || 'amount',
+        discountValue: Number(source.discountValue ?? source.discountAmount ?? 0),
+        surchargeAmount: source.surchargeAmount ?? 0,
+        surchargeMode: source.surchargeMode || 'amount',
+        surchargeValue: Number(source.surchargeValue ?? source.surchargeAmount ?? 0),
+        paidAmount: Math.max(0, Math.trunc(Number(source.paidAmount || 0))),
+        isDebtMarked: Boolean(source.isDebtMarked),
+        paymentMethod: source.paymentMethod === 'BANKING' ? 'BANKING' : 'CASH',
+      });
+    }
+    await loadOrders();
+    navigate('/orders');
+    setEditingOrder(null);
+    setEditingDraftBillItems([]);
+    showToast('success', 'Chuyển món thành công');
   };
 
   const openHistory = async (order: OrderRow) => {
@@ -1376,6 +1523,19 @@ export default function OrdersPage() {
             setEditingDraftBillItems([]);
           }}
           onBillItemsChange={setEditingDraftBillItems as (items: BillItem[]) => void}
+          transferFilterRange={{
+            startIso: startDate && startTime ? toISOWithVNOffset(startDate, startTime) : undefined,
+            endIso: endDate && endTime ? toISOWithVNOffset(endDate, endTime, true) : undefined,
+          }}
+          onFetchTransferCandidateOrders={fetchTransferCandidateOrders}
+          onTransferOrderItems={async (payload) => {
+            try {
+              await transferOrderItems(payload);
+            } catch (error) {
+              showToast('error', getErrorMessage(error));
+              throw error;
+            }
+          }}
           onSaveOrder={async (payload) => {
           try {
             const entityType = payload.table?.entityType;
@@ -1408,10 +1568,18 @@ export default function OrdersPage() {
             };
             await orderService.update(editingOrder.id, updatePayload);
             await loadOrders();
-            navigate('/orders');
-            setEditingOrder(null);
-            setEditingDraftBillItems([]);
-            showToast('success', 'Cập nhật hóa đơn thành công');
+            const saveBehavior = payload.saveBehavior || 'exit';
+            if (saveBehavior === 'exit') {
+              navigate('/orders');
+              setEditingOrder(null);
+              setEditingDraftBillItems([]);
+            } else {
+              const latestDetailResponse = await orderService.getById(editingOrder.id);
+              const latestEditingState = mapOrderDetailToEditingState(latestDetailResponse.data as OrderDetail);
+              setEditingOrder(latestEditingState);
+              setEditingDraftBillItems(latestEditingState.billItems);
+            }
+            showToast('success', saveBehavior === 'exit' ? 'Cập nhật hóa đơn thành công' : 'Đã lưu hóa đơn');
           } catch (error) {
             const message = getErrorMessage(error);
             if (String(message).includes('IMMUTABLE_TIME_SNAPSHOT')) {

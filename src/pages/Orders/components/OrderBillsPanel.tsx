@@ -43,6 +43,8 @@ type Props = {
   onSaveOrder: (paidAmount: number, paymentMethod: PaymentMethod, isDebtMarked: boolean) => void;
   onPrintInvoice: () => void;
   onPrintOrder: (selectedLineIds: string[]) => void;
+  onOpenTransferModal?: () => void;
+  showTransferButton?: boolean;
   disableSave: boolean;
 };
 
@@ -81,6 +83,8 @@ export default function OrderBillsPanel({
   onSaveOrder,
   onPrintInvoice,
   onPrintOrder,
+  onOpenTransferModal,
+  showTransferButton = false,
   disableSave,
 }: Props) {
   const [editingNoteLineId, setEditingNoteLineId] = useState<string | null>(null);
@@ -275,6 +279,16 @@ export default function OrderBillsPanel({
               </svg>
               In order
             </button>
+            {showTransferButton && onOpenTransferModal && (
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={onOpenTransferModal}
+                disabled={billItems.length === 0}
+              >
+                Tách HĐ
+              </button>
+            )}
             <button
               type="button"
               className="primary-btn"

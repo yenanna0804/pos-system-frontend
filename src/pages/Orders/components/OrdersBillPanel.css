@@ -130,6 +130,14 @@
   width: 130px;
 }
 
+.orders-transfer-target-select {
+  border-radius: var(--ui-radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  width: 100%;
+}
+
 .orders-bill-lines {
   border: 0px solid #e4e7ec;
   border-radius: 10px;
@@ -322,6 +330,19 @@
   min-width: 32px;
   padding: 0 4px;
   text-align: center;
+}
+
+.orders-transfer-qty-input {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  height: auto;
+  min-width: 24px;
+  padding: 0;
+}
+
+.orders-transfer-qty-input:focus {
+  outline: none;
 }
 
 .orders-bill-price,
@@ -719,10 +740,10 @@
 }
 
 .orders-bill-actions {
-  display: grid;
+  display: flex;
   flex: 0 0 auto;
   gap: 12px;
-  grid-template-columns: 1fr 1fr 1fr;
+  flex-wrap: nowrap;
   margin-left: auto;
   margin-top: 0;
 }
