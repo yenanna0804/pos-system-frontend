@@ -288,7 +288,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
       setShowEditConfirm(true);
       return;
     }
-    await executeSaveOrderWithBehavior(paidAmount, paymentMethod, isDebtMarked, 'stay');
+    await executeSaveOrderWithBehavior(paidAmount, paymentMethod, isDebtMarked, 'exit');
   };
 
   const pendingPaidAmountRef = useRef<number>(Math.max(0, Math.trunc(initialData?.paidAmount ?? totalAmount)));
@@ -473,7 +473,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
                 className="primary-btn"
                 onClick={async () => {
                   setShowTakeawayConfirm(false);
-                  await executeSaveOrderWithBehavior(pendingPaidAmountRef.current, pendingPaymentMethodRef.current, pendingIsDebtMarkedRef.current, 'stay');
+                  await executeSaveOrderWithBehavior(pendingPaidAmountRef.current, pendingPaymentMethodRef.current, pendingIsDebtMarkedRef.current, 'exit');
                 }}
               >
                 Đồng ý
@@ -499,7 +499,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
                 className="primary-btn"
                 onClick={async () => {
                   setShowEditConfirm(false);
-                  await executeSaveOrderWithBehavior(pendingPaidAmountRef.current, pendingPaymentMethodRef.current, pendingIsDebtMarkedRef.current, 'stay');
+                  await executeSaveOrderWithBehavior(pendingPaidAmountRef.current, pendingPaymentMethodRef.current, pendingIsDebtMarkedRef.current, 'exit');
                 }}
               >
                 Xác nhận sửa

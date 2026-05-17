@@ -733,6 +733,7 @@ export default function OrdersPage() {
     paidAmount: number;
     isDebtMarked: boolean;
     paymentMethod: 'CASH' | 'BANKING';
+    saveBehavior?: 'exit' | 'stay';
   }) => {
     try {
       const savePayload = buildCreateOrderPayload(payload);
@@ -748,7 +749,8 @@ export default function OrdersPage() {
         if (!finalOrderId) throw new Error('Không nhận được mã hóa đơn nháp');
         await orderService.update(finalOrderId, savePayload);
       }
-      if (finalOrderId) {
+      const saveBehavior = payload.saveBehavior || 'exit';
+      if (finalOrderId && saveBehavior === 'stay') {
         const latestDetailResponse = await orderService.getById(finalOrderId);
         const latestDraftState = mapOrderDetailToEditingState(latestDetailResponse.data as OrderDetail);
         setCreateDraft({
@@ -766,6 +768,11 @@ export default function OrdersPage() {
         setCreateDraftOrderId(latestDraftState.id);
       }
       await loadOrders();
+      if (saveBehavior === 'exit') {
+        setCreateDraft(null);
+        setCreateDraftOrderId(null);
+        navigate('/orders');
+      }
       showToast('success', 'Lưu hóa đơn thành công');
     } catch (error) {
       showToast('error', getErrorMessage(error));
