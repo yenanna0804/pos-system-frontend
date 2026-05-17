@@ -419,7 +419,7 @@ export default function OrderBillsPanel({
               onChange={(event) => {
                 const digits = event.target.value.replace(/\D/g, '');
                 const nextValue = digits ? Number(digits) : 0;
-                setCustomerPaidInput(String(Math.min(totalLimit, Math.max(0, nextValue))));
+                setCustomerPaidInput(String(Math.max(0, nextValue)));
               }}
               inputMode="numeric"
               placeholder="0"

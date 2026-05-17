@@ -1380,7 +1380,7 @@ export default function OrdersPage() {
               surchargeAmount: payload.surchargeAmount,
               surchargeMode: payload.surchargeMode,
               surchargeValue: payload.surchargeValue,
-              paidAmount: Math.min(Math.trunc(payload.paidAmount), Math.max(0, Math.trunc(payload.totalAmount))),
+              paidAmount: Math.max(0, Math.trunc(payload.paidAmount)),
               isDebtMarked: Boolean(payload.isDebtMarked),
               paymentMethod: payload.paymentMethod,
               orderState: payload.isDebtMarked ? ('PARTIAL' as const) : undefined,
