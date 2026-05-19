@@ -4,13 +4,10 @@ import OrderBillsPanel from './components/OrderBillsPanel';
 import OrdersProductPicker from './components/OrdersProductPicker';
 import OrdersTablePicker from './components/OrdersTablePicker';
 import type { BillItem, DuplicateHandling, SelectableTable } from './types';
-import { printUsingConfiguredRoute, resolveTemplateKeyForPrintFamily } from '../../utils/printerRouting';
-import { formatDateTimeVN, formatNumberVi } from '../../utils/formatters';
-import type { Receipt80mmData } from '../../utils/receipt80mmGenerator';
+import { formatNumberVi } from '../../utils/formatters';
 import { useOrderEditor } from './hooks/useOrderEditor';
 import { toAmountNumber, toPercentNumber, useOrderPricing } from './hooks/useOrderPricing';
 import { useOrderTimer } from './hooks/useOrderTimer';
-import { buildReceipt80mmData as buildReceipt80mmPayload } from './receipt80mmBuilders';
 
 type Props = {
   onBack: () => void;
@@ -88,9 +85,11 @@ type Props = {
     transferAll: boolean;
     transferItems: Array<{ lineId: string; quantity: number }>;
   }) => Promise<void>;
+  onPrintSavedInvoice?: (payload: { orderId: string }) => Promise<void>;
+  onPrintSavedOrderSlip?: (payload: { orderId: string; selectedLineIds: string[] }) => Promise<void>;
 };
 
-export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', orderCode, orderId, initialData, defaultTab = 'table', activeTab: controlledActiveTab, onActiveTabChange, onToggleTimeLineTimer, onUpdateTimeLineTimestamp, onBillItemsChange, onDraftChange, transferFilterRange, onFetchTransferCandidateOrders, onTransferOrderItems }: Props) {
+export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', orderCode, orderId, initialData, defaultTab = 'table', activeTab: controlledActiveTab, onActiveTabChange, onToggleTimeLineTimer, onUpdateTimeLineTimestamp, onBillItemsChange, onDraftChange, transferFilterRange, onFetchTransferCandidateOrders, onTransferOrderItems, onPrintSavedInvoice, onPrintSavedOrderSlip }: Props) {
   const { branchId, user } = useAuth();
   const [internalActiveTab, setInternalActiveTab] = useState<'table' | 'product'>(defaultTab);
   const activeTab = controlledActiveTab ?? internalActiveTab;
@@ -111,6 +110,9 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
   const [showEditConfirm, setShowEditConfirm] = useState(false);
   const [showTakeawayConfirm, setShowTakeawayConfirm] = useState(false);
   const [showTransferSaveConfirm, setShowTransferSaveConfirm] = useState(false);
+  const [showPrintSaveConfirm, setShowPrintSaveConfirm] = useState(false);
+  const [pendingPrintAction, setPendingPrintAction] = useState<{ type: 'invoice' } | { type: 'order_slip'; selectedLineIds: string[] } | null>(null);
+  const [printSavedSnapshot, setPrintSavedSnapshot] = useState<string | null>(null);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferCandidates, setTransferCandidates] = useState<Array<{ id: string; code: string; label: string }>>([]);
   const [isLoadingTransferCandidates, setIsLoadingTransferCandidates] = useState(false);
@@ -118,6 +120,9 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
   const [transferMode, setTransferMode] = useState<'ALL' | 'PARTIAL'>('PARTIAL');
   const [transferQuantities, setTransferQuantities] = useState<Record<string, string>>({});
   const [isTransferringOrder, setIsTransferringOrder] = useState(false);
+  const [paidAmountDraft, setPaidAmountDraft] = useState<number>(Math.max(0, Math.trunc(initialData?.paidAmount ?? totalAmount)));
+  const [paymentMethodDraft, setPaymentMethodDraft] = useState<'CASH' | 'BANKING'>(initialData?.paymentMethod ?? 'CASH');
+  const [isDebtMarkedDraft, setIsDebtMarkedDraft] = useState<boolean>(Boolean(initialData?.isDebtMarked));
   const { timerLoadingLineIds, timerErrorLineIds, timerUnsyncedLineIds, markLineUnsynced, markLineSynced, createToggleHandler } = useOrderTimer();
 
   useEffect(() => {
@@ -262,7 +267,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     }
   };
 
-  const hasUnsavedChanges = mode === 'edit' && (
+  const hasUnsavedChangesRaw = mode === 'edit' && (
     Boolean(billItemsPatch?.hasChanges)
     || (customerName || '') !== (initialData?.customerName || '')
     || (selectedTable?.id || '') !== (initialData?.selectedTable?.id || '')
@@ -270,7 +275,36 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
     || surchargeMode !== (initialData?.surchargeMode || 'percent')
     || Number(discountValue || 0) !== Number(initialData?.discountValue ?? initialData?.discountAmount ?? 0)
     || Number(surchargeValue || 0) !== Number(initialData?.surchargeValue ?? initialData?.surchargeAmount ?? 0)
+    || Math.max(0, Math.trunc(Number(paidAmountDraft || 0))) !== Math.max(0, Math.trunc(Number(initialData?.paidAmount ?? totalAmount)))
+    || paymentMethodDraft !== (initialData?.paymentMethod ?? 'CASH')
+    || isDebtMarkedDraft !== Boolean(initialData?.isDebtMarked)
   );
+  const currentEditSnapshot = JSON.stringify({
+    hasPatchChanges: Boolean(billItemsPatch?.hasChanges),
+    billItems: billItems.map((item) => ({
+      lineId: item.lineId,
+      orderItemId: item.orderItemId || '',
+      quantity: Number(item.quantity || 0),
+      unitPrice: Number(item.unitPrice || 0),
+      lineTotal: Number(item.lineTotal || 0),
+      lineDiscountAmount: Number(item.lineDiscountAmount || 0),
+      lineSurchargeAmount: Number(item.lineSurchargeAmount || 0),
+      note: item.note || '',
+      startAt: item.startAt || '',
+      stopAt: item.stopAt || '',
+      usedMinutes: Number(item.usedMinutes || 0),
+    })),
+    customerName: customerName || '',
+    selectedTableId: selectedTable?.id || '',
+    discountMode,
+    surchargeMode,
+    discountValue: Number(discountValue || 0),
+    surchargeValue: Number(surchargeValue || 0),
+    paidAmount: paidAmountDraft,
+    paymentMethod: paymentMethodDraft,
+    isDebtMarked: isDebtMarkedDraft,
+  });
+  const hasUnsavedChanges = hasUnsavedChangesRaw && printSavedSnapshot !== currentEditSnapshot;
 
   const handleSaveOrder = async (paidAmount: number, paymentMethod: 'CASH' | 'BANKING', isDebtMarked: boolean) => {
     if (billItems.length === 0) return;
@@ -295,105 +329,56 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
   const pendingPaymentMethodRef = useRef<'CASH' | 'BANKING'>(initialData?.paymentMethod ?? 'CASH');
   const pendingIsDebtMarkedRef = useRef<boolean>(Boolean(initialData?.isDebtMarked));
 
-  const buildPrintableContent = (items: BillItem[], label: string) => {
-    const location = selectedTable
-      ? selectedTable.entityType === 'ROOM'
-        ? `${selectedTable.areaName} / ${selectedTable.roomName || selectedTable.name}`
-        : `${selectedTable.areaName}${selectedTable.roomName ? ` / ${selectedTable.roomName}` : ''} / ${selectedTable.name}`
-      : '-';
-
-    const lines: string[] = [];
-    lines.push(`Thời gian: ${formatDateTimeVN(new Date().toISOString())}`);
-    lines.push(`Mã HĐ: ${orderCode || 'Tạm thời (chưa lưu)'}`);
-    lines.push(`Loại phiếu in: ${label}`);
-    lines.push(`Khách hàng: ${customerName || '-'}`);
-    lines.push(`Khu vực/Vị trí: ${location}`);
-    lines.push('');
-    lines.push('Danh sách món:');
-
-    items.forEach((item, index) => {
-      const lineTotal = item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0);
-      lines.push(`${index + 1}. ${item.productName}`);
-      const quantityLabel = formatNumberVi(Number(item.quantity || 0));
-      if (label === 'Order') {
-        lines.push(`   SL: ${quantityLabel} | ĐVT: ${item.unit || '-'}`);
-      } else {
-        lines.push(`   SL: ${quantityLabel} | Đơn giá: ${formatNumberVi(Number(item.unitPrice || 0))} | Thành tiền: ${formatNumberVi(lineTotal)}`);
-      }
-      if (item.note?.trim()) {
-        lines.push(`   Ghi chú: ${item.note.trim()}`);
-      }
-    });
-
-    lines.push('');
-    const subtotalSelected = items.reduce((sum, item) => sum + (item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)), 0);
-    lines.push(`Tạm tính: ${formatNumberVi(subtotalSelected)}`);
-    if (items.length === billItems.length) {
-      lines.push(`Giảm giá: ${formatNumberVi(discountAmount)}`);
-      lines.push(`Phí dịch vụ: ${formatNumberVi(surchargeAmount)}`);
-      lines.push(`Phải thanh toán: ${formatNumberVi(totalAmount)}`);
-    }
-
-    return lines.join('\n');
+  const ensureSavedBeforePrint = async () => {
+    if (mode !== 'edit' || !orderId) throw new Error('Vui lòng lưu hóa đơn trước khi in');
+    if (!hasUnsavedChanges) return;
+    throw new Error('Vui lòng lưu thay đổi trước khi in');
   };
 
-  const buildReceiptDataFromItems = (items: BillItem[], title: 'PHIẾU TẠM TÍNH' | 'PHIẾU ORDER'): Receipt80mmData => {
-    const location = selectedTable
-      ? selectedTable.entityType === 'ROOM'
-        ? `${selectedTable.areaName} / ${selectedTable.roomName || selectedTable.name}`
-        : `${selectedTable.areaName}${selectedTable.roomName ? ` / ${selectedTable.roomName}` : ''} / ${selectedTable.name}`
-      : '-';
+  const runPrintAction = async (action: { type: 'invoice' } | { type: 'order_slip'; selectedLineIds: string[] }, skipUnsavedCheck = false) => {
+    if (!skipUnsavedCheck) await ensureSavedBeforePrint();
+    if (!orderId) throw new Error('Không thể in khi chưa lưu');
+    if (action.type === 'invoice') {
+      if (!onPrintSavedInvoice) throw new Error('Không thể in hóa đơn khi chưa lưu');
+      await onPrintSavedInvoice({ orderId });
+      return;
+    }
+    if (!onPrintSavedOrderSlip) throw new Error('Không thể in phiếu order khi chưa lưu');
+    await onPrintSavedOrderSlip({ orderId, selectedLineIds: action.selectedLineIds });
+  };
 
-    const subtotalSelected = items.reduce((sum, item) => sum + (item.lineTotal ?? Number(item.quantity || 0) * Number(item.unitPrice || 0)), 0);
-    const itemDiscountTotal = items.reduce((sum, item) => sum + Number(item.lineDiscountAmount || 0), 0);
-    const useFullTotals = items.length === billItems.length;
+  const requestPrintAction = async (action: { type: 'invoice' } | { type: 'order_slip'; selectedLineIds: string[] }) => {
+    if (mode !== 'edit' || !orderId) throw new Error('Vui lòng lưu hóa đơn trước khi in');
+    if (hasUnsavedChanges) {
+      setPendingPrintAction(action);
+      setShowPrintSaveConfirm(true);
+      return;
+    }
+    await runPrintAction(action);
+  };
 
-    return buildReceipt80mmPayload({
-      title,
-      orderCode: orderCode || 'TAM',
-      datetime: formatDateTimeVN(new Date().toISOString()),
-      customerName: customerName || '-',
-      fullName: user?.fullName || user?.username,
-      location,
-      items,
-      itemDiscountTotal,
-      subtotal: useFullTotals
-        ? Math.max(0, Math.trunc(totalAmount + discountAmount - surchargeAmount))
-        : Math.max(0, Math.trunc(subtotalSelected)),
-      discount: useFullTotals ? Math.max(0, Math.trunc(discountAmount)) : 0,
-      discountMode: useFullTotals ? discountMode : 'amount',
-      discountValue: useFullTotals
-        ? (discountMode === 'amount' ? toAmountNumber(discountValue) : toPercentNumber(discountValue))
-        : 0,
-      surcharge: useFullTotals ? Math.max(0, Math.trunc(surchargeAmount)) : 0,
-      surchargeMode: useFullTotals ? surchargeMode : 'amount',
-      surchargeValue: useFullTotals
-        ? (surchargeMode === 'amount' ? toAmountNumber(surchargeValue) : toPercentNumber(surchargeValue))
-        : 0,
-      paymentMethod: pendingPaymentMethodRef.current,
-      paidAmount: pendingPaidAmountRef.current,
-      total: useFullTotals ? Math.max(0, Math.trunc(totalAmount)) : Math.max(0, Math.trunc(subtotalSelected)),
-    });
+  const saveThenPrint = async () => {
+    if (!pendingPrintAction) return;
+    await executeSaveOrderWithBehavior(
+      pendingPaidAmountRef.current,
+      pendingPaymentMethodRef.current,
+      pendingIsDebtMarkedRef.current,
+      'stay',
+    );
+    setPrintSavedSnapshot(currentEditSnapshot);
+    const action = pendingPrintAction;
+    setPendingPrintAction(null);
+    await runPrintAction(action, true);
   };
 
   const onPrintInvoice = async () => {
     if (billItems.length === 0) return;
-    const receiptData = buildReceiptDataFromItems(billItems, 'PHIẾU TẠM TÍNH');
-    await printUsingConfiguredRoute('Hóa đơn tạm', buildPrintableContent(billItems, 'Hóa đơn'), {
-      templateKey: resolveTemplateKeyForPrintFamily('invoice'),
-      receipt80mmData: receiptData,
-    });
+    await requestPrintAction({ type: 'invoice' });
   };
 
   const onPrintOrder = async (selectedLineIds: string[]) => {
-    const selectedItems = billItems.filter((item) => selectedLineIds.includes(item.lineId));
-    const itemsToPrint = selectedItems.length > 0 ? selectedItems : billItems;
-    if (itemsToPrint.length === 0) return;
-    const receiptData = buildReceiptDataFromItems(itemsToPrint, 'PHIẾU ORDER');
-    await printUsingConfiguredRoute('Order tạm', buildPrintableContent(itemsToPrint, 'Order'), {
-      templateKey: resolveTemplateKeyForPrintFamily('order_slip'),
-      receipt80mmData: receiptData,
-    });
+    if (billItems.length === 0) return;
+    await requestPrintAction({ type: 'order_slip', selectedLineIds });
   };
 
   const openTransferModal = async (skipUnsavedCheck = false) => {
@@ -519,6 +504,29 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
               </button>
               <button type="button" className="primary-btn" onClick={() => saveThenOpenTransferModal().catch(() => undefined)}>
                 Lưu rồi tách
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showPrintSaveConfirm && (
+        <div className="orders-confirm-overlay" onClick={() => { setShowPrintSaveConfirm(false); setPendingPrintAction(null); }}>
+          <div className="orders-confirm-modal" onClick={(event) => event.stopPropagation()}>
+            <h3>Có thay đổi chưa lưu</h3>
+            <p>Bạn cần lưu hóa đơn trước khi in để đảm bảo dữ liệu in đúng với dữ liệu đã lưu.</p>
+            <div className="orders-confirm-actions">
+              <button type="button" className="ghost-btn" onClick={() => { setShowPrintSaveConfirm(false); setPendingPrintAction(null); }}>
+                Huỷ
+              </button>
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={async () => {
+                  setShowPrintSaveConfirm(false);
+                  await saveThenPrint().catch(() => undefined);
+                }}
+              >
+                Lưu rồi in
               </button>
             </div>
           </div>
@@ -735,6 +743,14 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
           initialPaymentMethod={initialData?.paymentMethod}
           initialIsDebtMarked={initialData?.isDebtMarked}
           onSaveOrder={handleSaveOrder}
+          onPaymentDraftChange={({ paidAmount, paymentMethod, isDebtMarked }) => {
+            pendingPaidAmountRef.current = paidAmount;
+            pendingPaymentMethodRef.current = paymentMethod;
+            pendingIsDebtMarkedRef.current = isDebtMarked;
+            setPaidAmountDraft(paidAmount);
+            setPaymentMethodDraft(paymentMethod);
+            setIsDebtMarkedDraft(isDebtMarked);
+          }}
           onPrintInvoice={() => onPrintInvoice().catch(() => undefined)}
           onPrintOrder={(selectedLineIds) => onPrintOrder(selectedLineIds).catch(() => undefined)}
           showTransferButton={mode === 'edit' && Boolean(onTransferOrderItems)}

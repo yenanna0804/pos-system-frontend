@@ -41,6 +41,7 @@ type Props = {
   initialPaymentMethod?: PaymentMethod;
   initialIsDebtMarked?: boolean;
   onSaveOrder: (paidAmount: number, paymentMethod: PaymentMethod, isDebtMarked: boolean) => void;
+  onPaymentDraftChange?: (payload: { paidAmount: number; paymentMethod: PaymentMethod; isDebtMarked: boolean }) => void;
   onPrintInvoice: () => void;
   onPrintOrder: (selectedLineIds: string[]) => void;
   onOpenTransferModal?: () => void;
@@ -81,6 +82,7 @@ export default function OrderBillsPanel({
   initialPaymentMethod,
   initialIsDebtMarked,
   onSaveOrder,
+  onPaymentDraftChange,
   onPrintInvoice,
   onPrintOrder,
   onOpenTransferModal,
@@ -123,6 +125,14 @@ export default function OrderBillsPanel({
   useEffect(() => {
     setIsDebtMarked(Boolean(initialIsDebtMarked));
   }, [initialIsDebtMarked]);
+
+  useEffect(() => {
+    onPaymentDraftChange?.({
+      paidAmount: Math.max(0, Math.trunc(Number(customerPaidInput) || 0)),
+      paymentMethod,
+      isDebtMarked,
+    });
+  }, [customerPaidInput, paymentMethod, isDebtMarked, onPaymentDraftChange]);
 
   const subtotal = billItems.reduce((sum, item) => sum + getLineAmount(item), 0);
   const discountRaw = discountMode === 'amount' ? toAmountNumber(discountValue) : toPercentNumber(discountValue);

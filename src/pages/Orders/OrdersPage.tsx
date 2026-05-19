@@ -1249,6 +1249,46 @@ export default function OrdersPage() {
     }
   };
 
+  const printSavedInvoiceFromEditor = async ({ orderId }: { orderId: string }) => {
+    const response = await orderService.getById(orderId);
+    const detail = response.data as (OrderDetail & { orderState?: OrderState });
+    const normalizedDetail = {
+      ...detail,
+      orderState: normalizeOrderState(detail),
+    };
+    if (normalizedDetail.orderState === 'DELETED') {
+      throw new Error('Không thể in hóa đơn đã xóa');
+    }
+    await printUsingConfiguredRoute(`Hóa đơn ${normalizedDetail.code}`, buildOrderA4Content(normalizedDetail), {
+      templateKey: resolveTemplateKeyForPrintFamily('invoice'),
+      receipt80mmData: buildReceipt80mmData(normalizedDetail, user?.fullName || user?.username),
+    });
+    showToast('success', 'Đã gửi lệnh in hóa đơn');
+  };
+
+  const printSavedOrderSlipFromEditor = async ({ orderId, selectedLineIds }: { orderId: string; selectedLineIds: string[] }) => {
+    const response = await orderService.getById(orderId);
+    const detail = response.data as (OrderDetail & { orderState?: OrderState });
+    const normalizedDetail = {
+      ...detail,
+      orderState: normalizeOrderState(detail),
+    };
+    if (normalizedDetail.orderState === 'DELETED') {
+      throw new Error('Không thể in phiếu order đã xóa');
+    }
+    const selectedItems = normalizedDetail.items.filter((item) => selectedLineIds.includes(item.lineId));
+    const itemsToPrint = selectedItems.length > 0 ? selectedItems : normalizedDetail.items;
+    const orderSlipDetail = {
+      ...normalizedDetail,
+      items: itemsToPrint,
+    };
+    await printUsingConfiguredRoute(`Phiếu order ${normalizedDetail.code}`, buildOrderSlipA4Content(orderSlipDetail), {
+      templateKey: resolveTemplateKeyForPrintFamily('order_slip'),
+      receipt80mmData: buildOrderSlip80mmData(orderSlipDetail, user?.fullName || user?.username),
+    });
+    showToast('success', 'Đã gửi lệnh in phiếu order');
+  };
+
   const {
     detailHeaderDiscount,
     detailHeaderSurcharge,
@@ -1682,6 +1722,8 @@ export default function OrdersPage() {
             setEditingDraftBillItems(latestEditingState.billItems);
             await loadOrders();
           }}
+          onPrintSavedInvoice={printSavedInvoiceFromEditor}
+          onPrintSavedOrderSlip={printSavedOrderSlipFromEditor}
         />
       </>
     );
