@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import ExcelJS from 'exceljs';
 import { useAuth } from '../../contexts/AuthContext';
 import { categoryService, reportService } from '../../services/api';
@@ -9,15 +9,6 @@ import '../Orders/OrdersPage.css';
 import './SalesEndOfDayPage.css';
 
 type Category = { id: string; name: string };
-
-type OrderDetail = {
-  orderId: string;
-  orderCode: string;
-  createdAt: string;
-  quantity: number;
-  unitPrice: number;
-  lineTotal: number;
-};
 
 type ProductRow = {
   productId: string;
@@ -32,7 +23,6 @@ type ProductRow = {
   surchargeAmount: number;
   netAmount: number;
   grossProfit: number | null;
-  orderDetails: OrderDetail[];
 };
 
 const fmt = formatNumberVi;
@@ -73,8 +63,12 @@ export default function ProductReportPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
   const [rows, setRows] = useState<ProductRow[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const PAGE_SIZE = 100;
 
   useEffect(() => {
     categoryService.list().then((res) => {
@@ -82,7 +76,7 @@ export default function ProductReportPage() {
     }).catch(() => setCategories([]));
   }, []);
 
-  const loadReport = async () => {
+  const loadReport = async (targetPage: number, append = false) => {
     if (!branchId) { setRows([]); return; }
     setIsLoading(true);
     setError('');
@@ -92,9 +86,12 @@ export default function ProductReportPage() {
         startDate: startDate && startTime ? toISOWithVNOffset(startDate, startTime) : undefined,
         endDate: endDate && endTime ? toISOWithVNOffset(endDate, endTime, true) : undefined,
         categoryId: categoryFilter || undefined,
+        page: targetPage,
+        pageSize: PAGE_SIZE,
       });
       const nextRows: ProductRow[] = Array.isArray(res.data?.rows) ? res.data.rows : [];
-      setRows(nextRows);
+      setRows((prev) => (append ? [...prev, ...nextRows] : nextRows));
+      setTotalPages(Math.max(1, Number(res.data?.pagination?.totalPages || 1)));
     } catch {
       setError('Không tải được báo cáo hàng hóa');
     } finally {
@@ -103,9 +100,29 @@ export default function ProductReportPage() {
   };
 
   useEffect(() => {
-    loadReport().catch(() => undefined);
+    setPage(1);
+    loadReport(1, false).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId, startDate, startTime, endDate, endTime, categoryFilter]);
+
+  useEffect(() => {
+    if (page <= 1) return;
+    loadReport(page, true).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
+  useEffect(() => {
+    const node = loadMoreRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver((entries) => {
+      const first = entries[0];
+      if (!first?.isIntersecting) return;
+      if (isLoading) return;
+      setPage((prev) => (prev < totalPages ? prev + 1 : prev));
+    }, { rootMargin: '200px 0px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [isLoading, totalPages]);
 
   const resetFilters = () => {
     const resetStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
@@ -315,6 +332,10 @@ export default function ProductReportPage() {
           </tbody>
         </table>
       </div>
+
+      <div ref={loadMoreRef} style={{ height: 1 }} />
+      {isLoading && <div className="sales-report-loading">Đang tải dữ liệu...</div>}
+      {!isLoading && page < totalPages && <div className="sales-report-loading">Cuộn để tải thêm...</div>}
     </div>
   );
 }

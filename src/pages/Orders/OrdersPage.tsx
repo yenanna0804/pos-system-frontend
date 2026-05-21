@@ -30,6 +30,7 @@ type OrderRow = {
   paymentMethod?: 'CASH' | 'BANKING' | null;
   orderState: 'DRAFT' | 'PAYING' | 'PAID' | 'DELETED' | 'PARTIAL' | 'UNPAID';
   createdAt: string;
+  leftTime?: string | null;
 };
 
 type OrderState = OrderRow['orderState'];
@@ -2062,7 +2063,8 @@ export default function OrdersPage() {
                 </th>
               )}
               <th className="orders-col-code">Mã hóa đơn</th>
-              <th>Thời gian tạo</th>
+              <th>Giờ vào</th>
+              <th>Giờ ra</th>
               <th className="orders-col-room-table">Phòng/Bàn</th>
               <th className="num-col orders-col-amount">Phải thanh toán</th>
               <th className="num-col orders-col-paid">Khách thanh toán</th>
@@ -2075,7 +2077,7 @@ export default function OrdersPage() {
           <tbody>
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={10} className="orders-empty-row">
+                <td colSpan={canDeleteOrder ? 11 : 10} className="orders-empty-row">
                   Chưa có hóa đơn
                 </td>
               </tr>
@@ -2106,6 +2108,7 @@ export default function OrdersPage() {
                     </button>
                   </td>
                   <td>{formatDateTimeVN(order.createdAt)}</td>
+                  <td>{order.leftTime ? formatDateTimeVN(order.leftTime) : '-'}</td>
                   <td className="orders-col-room-table">{order.tableName}</td>
                   <td className="num-col orders-col-amount">{Math.trunc(Number(order.finalAmount ?? order.totalAmount)).toLocaleString('vi-VN')}</td>
                   <td className="num-col orders-col-paid">{Math.trunc(Number(order.paidAmount || 0)).toLocaleString('vi-VN')}</td>
@@ -2278,7 +2281,7 @@ export default function OrdersPage() {
                 <>
                   <div className="orders-detail-grid">
                     <div>
-                      <span className="orders-detail-label">Thời gian tạo</span>
+                      <span className="orders-detail-label">Giờ vào</span>
                       <div>{formatDateTimeVN(detailOrder.createdAt)}</div>
                     </div>
                     <div>

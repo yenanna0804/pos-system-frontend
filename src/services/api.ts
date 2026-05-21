@@ -226,6 +226,8 @@ export type ProductReportParams = {
   search?: string;
   type?: 'SINGLE' | 'COMBO' | 'TIME';
   stockStatus?: 'all' | 'in_stock' | 'out_of_stock';
+  page?: number;
+  pageSize?: number;
 };
 
 export const reportService = {
