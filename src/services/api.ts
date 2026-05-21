@@ -66,6 +66,7 @@ export const productService = {
     page?: number;
     pageSize?: number;
     type?: 'SINGLE' | 'COMBO' | 'TIME';
+    types?: string;
     categoryId?: string;
     stockStatus?: 'all' | 'in_stock' | 'out_of_stock';
     branchId?: string;
