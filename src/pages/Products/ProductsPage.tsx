@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, UIEvent } from 'react';
 import { branchService, categoryService, productService } from '../../services/api';
 import { DeleteActionIcon, EditActionIcon } from '../../components/ActionIcons';
 import FormFieldError from '../../components/FormFieldError';
@@ -210,7 +210,13 @@ export default function ProductsPage() {
   const [branchConfigs, setBranchConfigs] = useState<BranchConfig[]>([]);
   const [comboItems, setComboItems] = useState<ComboItem[]>([]);
   const [comboCatalog, setComboCatalog] = useState<Product[]>([]);
-  const [comboCatalogLoadedBranchKey, setComboCatalogLoadedBranchKey] = useState<string | null>(null);
+  const comboCatalogRequestSeqRef = useRef(0);
+  const comboCatalogCacheRef = useRef<Record<string, { items: Product[]; page: number; totalPages: number }>>({});
+  const comboCatalogCacheKeysRef = useRef<string[]>([]);
+  const [comboCatalogPage, setComboCatalogPage] = useState(1);
+  const [comboCatalogHasMore, setComboCatalogHasMore] = useState(false);
+  const [comboCatalogLoading, setComboCatalogLoading] = useState(false);
+  const [comboCatalogQuery, setComboCatalogQuery] = useState('');
   const [comboSearchTerms, setComboSearchTerms] = useState<string[]>([]);
   const [activeComboDropdown, setActiveComboDropdown] = useState<number | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -223,6 +229,7 @@ export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const comboSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [page, setPage] = useState(1);
   const pageSize = PAGE_SIZE;
   const [totalPages, setTotalPages] = useState(1);
@@ -336,23 +343,90 @@ export default function ProductsPage() {
 
   const allCurrentPageChecked = products.length > 0 && products.every((item) => selectedProductIds.includes(item.id));
 
-  const loadComboCatalog = async () => {
-    const branchKey = filterBranchId || '';
-    const res = await productService.list({ page: 1, pageSize: 100, branchId: filterBranchId || undefined });
-    const data = res.data;
-    const rows: Product[] = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
-    const singleRows = rows.filter((item) => (item.type || 'SINGLE') === 'SINGLE');
-    setComboCatalog(singleRows);
-    setComboCatalogLoadedBranchKey(branchKey);
-    return singleRows;
+  const normalizeComboQuery = (value: string) => value.trim().toLowerCase();
+  const getComboCacheKey = (query: string) => `${filterBranchId || ''}::${normalizeComboQuery(query)}`;
+  const COMBO_CACHE_LIMIT = 30;
+
+  const setComboCatalogCache = (cacheKey: string, value: { items: Product[]; page: number; totalPages: number }) => {
+    comboCatalogCacheRef.current[cacheKey] = value;
+    comboCatalogCacheKeysRef.current = [
+      cacheKey,
+      ...comboCatalogCacheKeysRef.current.filter((key) => key !== cacheKey),
+    ];
+    if (comboCatalogCacheKeysRef.current.length > COMBO_CACHE_LIMIT) {
+      const removedKeys = comboCatalogCacheKeysRef.current.slice(COMBO_CACHE_LIMIT);
+      comboCatalogCacheKeysRef.current = comboCatalogCacheKeysRef.current.slice(0, COMBO_CACHE_LIMIT);
+      removedKeys.forEach((key) => {
+        delete comboCatalogCacheRef.current[key];
+      });
+    }
   };
 
-  const ensureComboCatalogLoaded = async () => {
-    const branchKey = filterBranchId || '';
-    if (comboCatalogLoadedBranchKey === branchKey) {
-      return comboCatalog;
+  const loadComboCatalog = async (query: string, pageToLoad = 1, force = false) => {
+    const normalizedQuery = normalizeComboQuery(query);
+    const cacheKey = getComboCacheKey(normalizedQuery);
+    if (!force && pageToLoad === 1 && comboCatalogCacheRef.current[cacheKey]) {
+      const cached = comboCatalogCacheRef.current[cacheKey];
+      setComboCatalog(cached.items);
+      setComboCatalogPage(cached.page);
+      setComboCatalogHasMore(cached.page < cached.totalPages);
+      setComboCatalogQuery(normalizedQuery);
+      return cached.items;
     }
-    return loadComboCatalog();
+
+    const requestSeq = ++comboCatalogRequestSeqRef.current;
+    setComboCatalogLoading(true);
+    try {
+      const res = await productService.list({
+        page: pageToLoad,
+        pageSize: 50,
+        branchId: filterBranchId || undefined,
+        search: normalizedQuery || undefined,
+        types: 'SINGLE,TIME',
+      });
+      const data = res.data;
+      const rows: Product[] = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+      const totalPagesFromApi = Math.max(1, Number(data?.pagination?.totalPages || 1));
+
+      if (requestSeq !== comboCatalogRequestSeqRef.current) {
+        return comboCatalog;
+      }
+
+      const prevItems = pageToLoad > 1 ? (comboCatalogCacheRef.current[cacheKey]?.items || []) : [];
+      const mergedItems = [...prevItems, ...rows].filter((entry, idx, all) => idx === all.findIndex((x) => x.id === entry.id));
+      setComboCatalogCache(cacheKey, {
+        items: mergedItems,
+        page: pageToLoad,
+        totalPages: totalPagesFromApi,
+      });
+
+      setComboCatalog(mergedItems);
+      setComboCatalogPage(pageToLoad);
+      setComboCatalogHasMore(pageToLoad < totalPagesFromApi);
+      setComboCatalogQuery(normalizedQuery);
+      return mergedItems;
+    } finally {
+      if (requestSeq === comboCatalogRequestSeqRef.current) {
+        setComboCatalogLoading(false);
+      }
+    }
+  };
+
+  const ensureComboCatalogLoaded = async (query = '') => loadComboCatalog(query, 1, false);
+
+  const loadMoreComboCatalog = async () => {
+    if (comboCatalogLoading || !comboCatalogHasMore) return;
+    await loadComboCatalog(comboCatalogQuery, comboCatalogPage + 1, true);
+  };
+
+  const handleComboDropdownScroll = (event: UIEvent<HTMLDivElement>) => {
+    if (comboCatalogLoading || !comboCatalogHasMore) return;
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    if (scrollHeight - (scrollTop + clientHeight) <= 32) {
+      loadMoreComboCatalog().catch(() => {
+        pushToast('error', 'Không tải thêm được danh sách hàng hóa');
+      });
+    }
   };
 
   const formatComboProductLabel = (product: Product | undefined) => {
@@ -381,6 +455,7 @@ export default function ProductsPage() {
   useEffect(() => {
     return () => {
       if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
+      if (comboSearchTimeoutRef.current) clearTimeout(comboSearchTimeoutRef.current);
     };
   }, [pendingPreviewUrl]);
 
@@ -506,20 +581,18 @@ export default function ProductsPage() {
         ? (JSON.parse(details.comboItems) as ComboItem[])
         : (details.comboItems as ComboItem[] | undefined) || [];
     if ((details.type || 'SINGLE') === 'COMBO') {
-      let comboRows: Product[] = comboCatalog;
-      try {
-        comboRows = await ensureComboCatalogLoaded();
-      } catch {
-        pushToast('error', 'Không tải được danh sách hàng hóa thành phần');
-      }
-
       const normalizedComboItems = rawComboItems.map((item) => ({
         itemProductId: item.itemProductId,
         quantity: Number(item.quantity || 1),
       }));
       setComboItems(normalizedComboItems);
       setComboSearchTerms(
-        normalizedComboItems.map((item) => formatComboProductLabel(comboRows.find((entry) => entry.id === item.itemProductId))),
+        rawComboItems.map((item) => {
+          const name = String((item as { itemName?: string }).itemName || '').trim();
+          const unit = String((item as { itemUnit?: string }).itemUnit || '').trim();
+          if (!name) return '';
+          return unit ? `${name} - ${unit}` : name;
+        }),
       );
     } else {
       setComboItems([]);
@@ -1466,11 +1539,6 @@ export default function ProductsPage() {
                         weight: nextType === 'TIME' ? '' : prev.weight,
                         unit: nextType === 'TIME' ? '' : prev.unit,
                       }));
-                      if (nextType === 'COMBO') {
-                        ensureComboCatalogLoaded().catch(() => {
-                          pushToast('error', 'Không tải được danh sách hàng hóa thành phần');
-                        });
-                      }
                     }}
                   >
                     <option value="SINGLE">Hàng hóa riêng lẻ</option>
@@ -1697,7 +1765,12 @@ export default function ProductsPage() {
                         <input
                           className={`combo-select ${productFieldErrors.comboItems ? 'field-invalid' : ''}`}
                           value={comboSearchTerms[idx] || ''}
-                          onFocus={() => setActiveComboDropdown(idx)}
+                          onFocus={() => {
+                            setActiveComboDropdown(idx);
+                            ensureComboCatalogLoaded(comboSearchTerms[idx] || '').catch(() => {
+                              pushToast('error', 'Không tải được danh sách hàng hóa thành phần');
+                            });
+                          }}
                           onBlur={() => {
                             setTimeout(() => {
                               setActiveComboDropdown((prev) => (prev === idx ? null : prev));
@@ -1723,17 +1796,20 @@ export default function ProductsPage() {
                               ),
                             );
                             setActiveComboDropdown(idx);
+                            if (comboSearchTimeoutRef.current) clearTimeout(comboSearchTimeoutRef.current);
+                            comboSearchTimeoutRef.current = setTimeout(() => {
+                              ensureComboCatalogLoaded(nextValue).catch(() => {
+                                pushToast('error', 'Không tải được danh sách hàng hóa thành phần');
+                              });
+                            }, 250);
                           }}
                           placeholder="Gõ để tìm hàng hóa"
                         />
 
                         {activeComboDropdown === idx && (
-                          <div className="combo-dropdown">
+                          <div className="combo-dropdown" onScroll={handleComboDropdownScroll}>
                             {comboCatalog
                               .filter((entry) => entry.id !== editingProductId)
-                              .filter((entry) =>
-                                formatComboProductLabel(entry).toLowerCase().includes((comboSearchTerms[idx] || '').trim().toLowerCase()),
-                              )
                               .map((entry) => {
                                 const label = formatComboProductLabel(entry);
                                 return (
@@ -1761,6 +1837,11 @@ export default function ProductsPage() {
                                   </button>
                                 );
                               })}
+                            {comboCatalogLoading && <div className="combo-dropdown-item">Đang tải...</div>}
+                            {!comboCatalogLoading && comboCatalog.length === 0 && (
+                              <div className="combo-dropdown-item">Không có dữ liệu</div>
+                            )}
+                            {!comboCatalogLoading && comboCatalogHasMore && <div className="combo-dropdown-item">Cuộn để tải thêm...</div>}
                           </div>
                         )}
                       </div>
