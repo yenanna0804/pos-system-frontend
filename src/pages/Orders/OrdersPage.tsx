@@ -28,7 +28,7 @@ type OrderRow = {
   paidAmount?: number;
   isDebtMarked?: boolean;
   paymentMethod?: 'CASH' | 'BANKING' | null;
-  orderState: 'DRAFT' | 'PAID' | 'DELETED' | 'PARTIAL' | 'UNPAID';
+  orderState: 'DRAFT' | 'PAYING' | 'PAID' | 'DELETED' | 'PARTIAL' | 'UNPAID';
   createdAt: string;
 };
 
@@ -370,7 +370,7 @@ export default function OrdersPage() {
   const [totalItems, setTotalItems] = useState(0);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [statusFilters, setStatusFilters] = useState<string[]>(['DRAFT', 'PAID', 'PARTIAL', 'UNPAID']);
+  const [statusFilters, setStatusFilters] = useState<string[]>(['DRAFT', 'PAYING', 'PAID', 'PARTIAL', 'UNPAID']);
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<'' | 'CASH' | 'BANKING'>('');
   const [areaFilter, setAreaFilter] = useState('');
   const [roomFilter, setRoomFilter] = useState('');
@@ -438,7 +438,7 @@ export default function OrdersPage() {
   const resetListFilters = () => {
     setSearch('');
     setDebouncedSearch('');
-    setStatusFilters(['DRAFT', 'PAID', 'PARTIAL', 'UNPAID']);
+    setStatusFilters(['DRAFT', 'PAYING', 'PAID', 'PARTIAL', 'UNPAID']);
     setPaymentMethodFilter('');
     setAreaFilter('');
     setRoomFilter('');
@@ -940,6 +940,8 @@ export default function OrdersPage() {
       showToast('error', 'Không thể in hóa đơn đã xóa');
       return;
     }
+    let printSuccess = false;
+    let printMessage = '';
     try {
       const detailRes = await orderService.getById(order.id);
       const detail = detailRes.data as OrderDetail;
@@ -947,9 +949,18 @@ export default function OrdersPage() {
         templateKey: resolveTemplateKeyForPrintFamily('invoice'),
         receipt80mmData: buildReceipt80mmData(detail, user?.fullName || user?.username),
       });
+      printSuccess = true;
       showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {
-      showToast('error', getErrorMessage(error));
+      printMessage = getErrorMessage(error);
+      showToast('error', printMessage);
+    } finally {
+      try {
+        await orderService.print(order.id, { success: printSuccess, printType: 'INVOICE', message: printMessage || undefined });
+        await loadOrders();
+      } catch {
+        // keep print UX unaffected if logging fails
+      }
     }
   };
 
@@ -958,6 +969,8 @@ export default function OrdersPage() {
       showToast('error', 'Không thể in phiếu order đã xóa');
       return;
     }
+    let printSuccess = false;
+    let printMessage = '';
     try {
       const detailRes = await orderService.getById(order.id);
       const detail = detailRes.data as OrderDetail;
@@ -965,9 +978,18 @@ export default function OrdersPage() {
         templateKey: resolveTemplateKeyForPrintFamily('order_slip'),
         receipt80mmData: buildOrderSlip80mmData(detail, user?.fullName || user?.username),
       });
+      printSuccess = true;
       showToast('success', 'Đã gửi lệnh in phiếu order');
     } catch (error) {
-      showToast('error', getErrorMessage(error));
+      printMessage = getErrorMessage(error);
+      showToast('error', printMessage);
+    } finally {
+      try {
+        await orderService.print(order.id, { success: printSuccess, printType: 'ORDER_SLIP', message: printMessage || undefined });
+        await loadOrders();
+      } catch {
+        // keep print UX unaffected if logging fails
+      }
     }
   };
 
@@ -1221,14 +1243,27 @@ export default function OrdersPage() {
       showToast('error', 'Không thể in hóa đơn đã xóa');
       return;
     }
+    let printSuccess = false;
+    let printMessage = '';
     try {
       await printUsingConfiguredRoute(`Hóa đơn ${detailOrder.code}`, buildOrderA4Content(detailOrder), {
         templateKey: resolveTemplateKeyForPrintFamily('invoice'),
         receipt80mmData: buildReceipt80mmData(detailOrder, user?.fullName || user?.username),
       });
+      printSuccess = true;
       showToast('success', 'Đã gửi lệnh in hóa đơn');
     } catch (error) {
-      showToast('error', getErrorMessage(error));
+      printMessage = getErrorMessage(error);
+      showToast('error', printMessage);
+    } finally {
+      try {
+        await orderService.print(detailOrder.id, { success: printSuccess, printType: 'INVOICE', message: printMessage || undefined });
+        const latestDetailResponse = await orderService.getById(detailOrder.id);
+        setDetailOrder(latestDetailResponse.data as OrderDetail);
+        await loadOrders();
+      } catch {
+        // keep print UX unaffected if logging fails
+      }
     }
   };
 
@@ -1238,14 +1273,27 @@ export default function OrdersPage() {
       showToast('error', 'Không thể in phiếu order đã xóa');
       return;
     }
+    let printSuccess = false;
+    let printMessage = '';
     try {
       await printUsingConfiguredRoute(`Phiếu order ${detailOrder.code}`, buildOrderSlipA4Content(detailOrder), {
         templateKey: resolveTemplateKeyForPrintFamily('order_slip'),
         receipt80mmData: buildOrderSlip80mmData(detailOrder, user?.fullName || user?.username),
       });
+      printSuccess = true;
       showToast('success', 'Đã gửi lệnh in phiếu order');
     } catch (error) {
-      showToast('error', getErrorMessage(error));
+      printMessage = getErrorMessage(error);
+      showToast('error', printMessage);
+    } finally {
+      try {
+        await orderService.print(detailOrder.id, { success: printSuccess, printType: 'ORDER_SLIP', message: printMessage || undefined });
+        const latestDetailResponse = await orderService.getById(detailOrder.id);
+        setDetailOrder(latestDetailResponse.data as OrderDetail);
+        await loadOrders();
+      } catch {
+        // keep print UX unaffected if logging fails
+      }
     }
   };
 
@@ -1415,6 +1463,9 @@ export default function OrdersPage() {
           defaultTab={createDraft?.activeTab || 'table'}
           initialData={createInitialData}
           onDraftChange={handleCreateDraftChange}
+          onAfterRemotePrint={async () => {
+            await loadOrders();
+          }}
 
           onBack={async () => {
             clearDraftAutosaveTimeout();
@@ -1582,6 +1633,13 @@ export default function OrdersPage() {
               showToast('error', getErrorMessage(error));
               throw error;
             }
+          }}
+          onAfterRemotePrint={async (printedOrderId) => {
+            const latestDetailResponse = await orderService.getById(printedOrderId);
+            const latestEditingState = mapOrderDetailToEditingState(latestDetailResponse.data as OrderDetail);
+            setEditingOrder(latestEditingState);
+            setEditingDraftBillItems(latestEditingState.billItems);
+            await loadOrders();
           }}
           onSaveOrder={async (payload) => {
           try {
@@ -1848,6 +1906,7 @@ export default function OrdersPage() {
                 <div className="orders-multi-select-menu">
                   {[
                     { value: 'DRAFT', label: 'Nháp' },
+                    { value: 'PAYING', label: 'Đang thanh toán' },
                     { value: 'PAID', label: 'Đã thanh toán' },
                     { value: 'PARTIAL', label: 'Nợ' },
                     { value: 'UNPAID', label: 'Chưa thanh toán' },

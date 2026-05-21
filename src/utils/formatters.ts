@@ -1,8 +1,21 @@
-const VN_OFFSET = '+07:00';
+const getLocalOffset = (date: Date): string => {
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const absolute = Math.abs(offsetMinutes);
+  const hours = String(Math.floor(absolute / 60)).padStart(2, '0');
+  const minutes = String(absolute % 60).padStart(2, '0');
+  return `${sign}${hours}:${minutes}`;
+};
+
+const getBrowserTimeZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 
 export const toISOWithVNOffset = (datePart: string, timePart: string, endOfMinute = false): string => {
   const seconds = endOfMinute ? '59' : '00';
-  return `${datePart}T${timePart}:${seconds}${VN_OFFSET}`;
+  const localDate = new Date(`${datePart}T${timePart}:${seconds}`);
+  if (Number.isNaN(localDate.getTime())) {
+    return `${datePart}T${timePart}:${seconds}+00:00`;
+  }
+  return `${datePart}T${timePart}:${seconds}${getLocalOffset(localDate)}`;
 };
 
 export const formatDateTimeVN = (iso: string | null | undefined): string => {
@@ -10,7 +23,7 @@ export const formatDateTimeVN = (iso: string | null | undefined): string => {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '-';
   return d.toLocaleString('vi-VN', {
-    timeZone: 'Asia/Ho_Chi_Minh',
+    timeZone: getBrowserTimeZone(),
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: false,
   });
@@ -33,11 +46,12 @@ export const formatUnitPriceDisplay = (price: number, pricingType?: 'FIXED' | 'T
   return `${normalizedPrice} / ${minutes} phút`;
 };
 
-export type OrderState = 'DRAFT' | 'PAID' | 'DELETED' | 'PARTIAL' | 'UNPAID';
+export type OrderState = 'DRAFT' | 'PAYING' | 'PAID' | 'DELETED' | 'PARTIAL' | 'UNPAID';
 export type PaymentMethod = 'CASH' | 'BANKING';
 
 export const ORDER_STATE_LABEL: Record<OrderState, string> = {
   DRAFT: 'Nháp',
+  PAYING: 'Đang thanh toán',
   PAID: 'Đã thanh toán',
   DELETED: 'Đã xóa',
   PARTIAL: 'Nợ',
@@ -46,6 +60,7 @@ export const ORDER_STATE_LABEL: Record<OrderState, string> = {
 
 export const ORDER_STATE_CLASS: Record<OrderState, string> = {
   DRAFT: 'orders-status-tag is-draft',
+  PAYING: 'orders-status-tag is-paying',
   PAID: 'orders-status-tag is-paid',
   DELETED: 'orders-status-tag is-deleted',
   PARTIAL: 'orders-status-tag is-partial',

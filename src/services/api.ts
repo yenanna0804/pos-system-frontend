@@ -197,7 +197,8 @@ export const orderService = {
   getById: (id: string) => api.get(`/orders/${id}`),
   create: (payload: OrderPayload) => api.post('/orders', payload),
   update: (id: string, payload: Partial<OrderPayload>) => api.patch(`/orders/${id}`, payload),
-  print: (id: string) => api.post(`/orders/${id}/print`),
+  print: (id: string, payload?: { success?: boolean; printType?: 'INVOICE' | 'ORDER_SLIP'; message?: string }) =>
+    api.post(`/orders/${id}/print`, payload),
   remove: (id: string) => api.delete(`/orders/${id}`),
   hardRemove: (id: string) => api.delete(`/orders/${id}/hard`),
   history: (id: string) => api.get(`/orders/${id}/logs`),
