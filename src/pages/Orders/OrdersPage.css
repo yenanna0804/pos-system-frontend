@@ -1059,6 +1059,7 @@
 .orders-table-row {
   background: #fff;
   cursor: pointer;
+  min-height: 54px;
   width: 100%;
 }
 
@@ -1071,6 +1072,14 @@
   border-color: #84caff;
 }
 
+.orders-table-row.has-active-orders,
+.orders-room-row.has-active-orders {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  border-left: 5px solid #f59e0b;
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.08);
+}
+
 .orders-selected-tag {
   background: #d1fadf;
   border-radius: 999px;
@@ -1078,6 +1087,72 @@
   font-size: 12px;
   font-weight: 600;
   padding: 3px 10px;
+}
+
+.orders-tree-row-right {
+  align-items: center;
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.orders-location-count-pill {
+  align-items: center;
+  background: #efe4be;
+  border-radius: 999px;
+  color: #92400e;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 6px;
+  justify-content: center;
+  line-height: 1;
+  padding: 6px 10px;
+  position: relative;
+  white-space: nowrap;
+}
+
+.orders-location-count-pill svg {
+  height: 14px;
+  width: 14px;
+}
+
+.orders-location-count-pill span {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.orders-location-count-pill.is-paying {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.orders-location-count-pill.is-unpaid {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.orders-location-count-tooltip {
+  background: #1f2937;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  left: 50%;
+  opacity: 0;
+  padding: 6px 8px;
+  pointer-events: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  transform: translateX(-50%);
+  transition: opacity 0.16s ease;
+  white-space: nowrap;
+  z-index: 5;
+}
+
+.orders-location-count-pill:hover .orders-location-count-tooltip {
+  opacity: 1;
 }
 
 .orders-tree-node-label {
@@ -1111,6 +1186,7 @@
   border: 1px solid #eceff5;
   cursor: pointer;
   font-weight: 700;
+  min-height: 54px;
   width: 100%;
 }
 
@@ -1126,9 +1202,9 @@
 
 .orders-room-children {
   border-left: 4px solid #e5e7eb;
-  margin-left: 6px;
+  margin-left: 20px;
   margin-top: 0;
-  padding-left: 10px;
+  padding-left: 18px;
   display: grid;
   gap: 8px;
   grid-template-columns: 1fr;
@@ -1138,7 +1214,7 @@
   background: #fff;
   border-color: #d8dde6;
   border-radius: 14px;
-  min-height: 54px;
+  min-height: 40px;
 }
 
 .orders-child-table-row:hover {

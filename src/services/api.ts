@@ -199,6 +199,7 @@ export const orderService = {
   update: (id: string, payload: Partial<OrderPayload>) => api.patch(`/orders/${id}`, payload),
   print: (id: string, payload?: { success?: boolean; printType?: 'INVOICE' | 'ORDER_SLIP'; message?: string }) =>
     api.post(`/orders/${id}/print`, payload),
+  activeLocationCounts: (params?: { branchId?: string }) => api.get('/orders/active-location-counts', { params }),
   remove: (id: string) => api.delete(`/orders/${id}`),
   hardRemove: (id: string) => api.delete(`/orders/${id}/hard`),
   history: (id: string) => api.get(`/orders/${id}/logs`),

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { areaService, diningTableService, roomService } from '../../../services/api';
+import { areaService, diningTableService, orderService, roomService } from '../../../services/api';
 import type { SelectableTable } from '../types';
 
 type Area = {
@@ -45,12 +45,15 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
   const [roomFilter, setRoomFilter] = useState('');
   const [tableFilter, setTableFilter] = useState('');
   const [error, setError] = useState('');
+  const [tableActiveCounts, setTableActiveCounts] = useState<Record<string, { payingCount: number; unpaidCount: number }>>({});
+  const [roomActiveCounts, setRoomActiveCounts] = useState<Record<string, { payingCount: number; unpaidCount: number }>>({});
 
   const loadAll = async () => {
-    const [areasRes, roomsRes, tablesRes] = await Promise.all([
+    const [areasRes, roomsRes, tablesRes, activeCountsRes] = await Promise.all([
       areaService.list(branchId || undefined),
       roomService.list({ branchId: branchId || undefined }),
       diningTableService.options({ branchId: branchId || undefined }),
+      orderService.activeLocationCounts({ branchId: branchId || undefined }),
     ]);
 
     setAreas((areasRes.data || []) as Area[]);
@@ -63,6 +66,27 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
 
     const tableRows: DiningTable[] = Array.isArray(tablesRes.data) ? tablesRes.data : [];
     setTables(tableRows);
+
+    const tableCountsMap: Record<string, { payingCount: number; unpaidCount: number }> = {};
+    const roomCountsMap: Record<string, { payingCount: number; unpaidCount: number }> = {};
+    const tableCountsRows = Array.isArray(activeCountsRes.data?.tableCounts) ? activeCountsRes.data.tableCounts : [];
+    const roomCountsRows = Array.isArray(activeCountsRes.data?.roomCounts) ? activeCountsRes.data.roomCounts : [];
+    tableCountsRows.forEach((row: { tableId: string; payingCount?: number; unpaidCount?: number }) => {
+      if (!row?.tableId) return;
+      tableCountsMap[row.tableId] = {
+        payingCount: Math.max(0, Math.trunc(Number(row.payingCount || 0))),
+        unpaidCount: Math.max(0, Math.trunc(Number(row.unpaidCount || 0))),
+      };
+    });
+    roomCountsRows.forEach((row: { roomId: string; payingCount?: number; unpaidCount?: number }) => {
+      if (!row?.roomId) return;
+      roomCountsMap[row.roomId] = {
+        payingCount: Math.max(0, Math.trunc(Number(row.payingCount || 0))),
+        unpaidCount: Math.max(0, Math.trunc(Number(row.unpaidCount || 0))),
+      };
+    });
+    setTableActiveCounts(tableCountsMap);
+    setRoomActiveCounts(roomCountsMap);
   };
 
   useEffect(() => {
@@ -111,6 +135,38 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
     setSearch('');
     setRoomFilter('');
     setTableFilter('');
+  };
+
+  const renderActiveBadges = (counts: { payingCount: number; unpaidCount: number }) => {
+    const hasPaying = counts.payingCount > 0;
+    const hasUnpaid = counts.unpaidCount > 0;
+    if (!hasPaying && !hasUnpaid) return null;
+    return (
+      <span className="orders-tree-row-right">
+        {hasPaying && (
+          <span className="orders-location-count-pill is-paying" role="img" aria-label={`${counts.payingCount} hóa đơn đang thanh toán`}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 3" />
+            </svg>
+            <span>{counts.payingCount}</span>
+            <span className="orders-location-count-tooltip">{counts.payingCount} hóa đơn đang thanh toán</span>
+          </span>
+        )}
+        {hasUnpaid && (
+          <span className="orders-location-count-pill is-unpaid" role="img" aria-label={`${counts.unpaidCount} hóa đơn chưa thanh toán`}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <path d="M7 3h8l4 4v14H7z" />
+              <path d="M15 3v5h5" />
+              <path d="M11 12h4" />
+              <path d="M11 16h4" />
+            </svg>
+            <span>{counts.unpaidCount}</span>
+            <span className="orders-location-count-tooltip">{counts.unpaidCount} hóa đơn chưa thanh toán</span>
+          </span>
+        )}
+      </span>
+    );
   };
 
   return (
@@ -218,10 +274,12 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
             <div className="orders-tree-content" key={group.area.id}>
               {group.directTables.map((table) => {
                 const isSelected = selectedTableId === table.id;
+                const counts = tableActiveCounts[table.id] || { payingCount: 0, unpaidCount: 0 };
+                const hasActiveOrders = counts.payingCount > 0 || counts.unpaidCount > 0;
                 return (
                   <button
                     type="button"
-                    className={`orders-tree-row orders-table-row ${isSelected ? 'is-selected' : ''}`}
+                    className={`orders-tree-row orders-table-row ${isSelected ? 'is-selected' : ''} ${hasActiveOrders ? 'has-active-orders' : ''}`}
                     key={table.id}
                     onClick={() => onSelectTable({ ...table, entityType: 'TABLE' })}
                   >
@@ -229,16 +287,20 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
                       <span className="orders-tree-dot orders-table-dot" />
                       <span>Bàn: {table.name}</span>
                     </span>
-                    {isSelected && <span className="orders-selected-tag">Đã chọn</span>}
+                    {renderActiveBadges(counts)}
                   </button>
                 );
               })}
 
               {group.roomGroups.map((roomGroup) => (
                 <div className="orders-room-block" key={roomGroup.room.id}>
+                  {(() => {
+                    const counts = roomActiveCounts[roomGroup.room.id] || { payingCount: 0, unpaidCount: 0 };
+                    const hasActiveOrders = counts.payingCount > 0 || counts.unpaidCount > 0;
+                    return (
                   <button
                     type="button"
-                    className={`orders-tree-row orders-room-row ${selectedTableId === roomGroup.room.id ? 'is-selected' : ''}`}
+                    className={`orders-tree-row orders-room-row ${selectedTableId === roomGroup.room.id ? 'is-selected' : ''} ${hasActiveOrders ? 'has-active-orders' : ''}`}
                     onClick={() =>
                       onSelectTable({
                         entityType: 'ROOM',
@@ -255,17 +317,21 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
                       <span className="orders-tree-dot orders-room-dot" />
                       <span>Phòng: {roomGroup.room.name}</span>
                     </span>
-                    {selectedTableId === roomGroup.room.id && <span className="orders-selected-tag">Đã chọn</span>}
+                    {renderActiveBadges(counts)}
                   </button>
+                    );
+                  })()}
 
                   {roomGroup.tables.length > 0 && (
                     <div className="orders-room-children">
                       {roomGroup.tables.map((table) => {
                         const isSelected = selectedTableId === table.id;
+                        const counts = tableActiveCounts[table.id] || { payingCount: 0, unpaidCount: 0 };
+                        const hasActiveOrders = counts.payingCount > 0 || counts.unpaidCount > 0;
                         return (
                           <button
                             type="button"
-                            className={`orders-tree-row orders-table-row orders-child-table-row ${isSelected ? 'is-selected' : ''}`}
+                            className={`orders-tree-row orders-table-row orders-child-table-row ${isSelected ? 'is-selected' : ''} ${hasActiveOrders ? 'has-active-orders' : ''}`}
                             key={table.id}
                             onClick={() => onSelectTable({ ...table, entityType: 'TABLE' })}
                           >
@@ -273,7 +339,7 @@ export default function OrdersTablePicker({ branchId, selectedTableId, onSelectT
                               <span className="orders-tree-dot orders-table-dot" />
                               <span>Bàn: {table.name}</span>
                             </span>
-                            {isSelected && <span className="orders-selected-tag">Đã chọn</span>}
+                            {renderActiveBadges(counts)}
                           </button>
                         );
                       })}
