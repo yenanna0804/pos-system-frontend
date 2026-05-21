@@ -1463,9 +1463,6 @@ export default function OrdersPage() {
           defaultTab={createDraft?.activeTab || 'table'}
           initialData={createInitialData}
           onDraftChange={handleCreateDraftChange}
-          onAfterRemotePrint={async () => {
-            await loadOrders();
-          }}
 
           onBack={async () => {
             clearDraftAutosaveTimeout();
@@ -1633,13 +1630,6 @@ export default function OrdersPage() {
               showToast('error', getErrorMessage(error));
               throw error;
             }
-          }}
-          onAfterRemotePrint={async (printedOrderId) => {
-            const latestDetailResponse = await orderService.getById(printedOrderId);
-            const latestEditingState = mapOrderDetailToEditingState(latestDetailResponse.data as OrderDetail);
-            setEditingOrder(latestEditingState);
-            setEditingDraftBillItems(latestEditingState.billItems);
-            await loadOrders();
           }}
           onSaveOrder={async (payload) => {
           try {

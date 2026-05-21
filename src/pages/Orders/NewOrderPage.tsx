@@ -90,7 +90,7 @@ type Props = {
 };
 
 export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', orderCode, orderId, initialData, defaultTab = 'table', activeTab: controlledActiveTab, onActiveTabChange, onToggleTimeLineTimer, onUpdateTimeLineTimestamp, onBillItemsChange, onDraftChange, transferFilterRange, onFetchTransferCandidateOrders, onTransferOrderItems, onPrintSavedInvoice, onPrintSavedOrderSlip }: Props) {
-  const { branchId, user } = useAuth();
+  const { branchId } = useAuth();
   const [internalActiveTab, setInternalActiveTab] = useState<'table' | 'product'>(defaultTab);
   const activeTab = controlledActiveTab ?? internalActiveTab;
   const setActiveTab = (tab: 'table' | 'product') => {
@@ -120,7 +120,7 @@ export default function NewOrderPage({ onBack, onSaveOrder, mode = 'create', ord
   const [transferMode, setTransferMode] = useState<'ALL' | 'PARTIAL'>('PARTIAL');
   const [transferQuantities, setTransferQuantities] = useState<Record<string, string>>({});
   const [isTransferringOrder, setIsTransferringOrder] = useState(false);
-  const [paidAmountDraft, setPaidAmountDraft] = useState<number>(Math.max(0, Math.trunc(initialData?.paidAmount ?? totalAmount)));
+  const [paidAmountDraft, setPaidAmountDraft] = useState<number>(Math.max(0, Math.trunc(initialData?.paidAmount ?? 0)));
   const [paymentMethodDraft, setPaymentMethodDraft] = useState<'CASH' | 'BANKING'>(initialData?.paymentMethod ?? 'CASH');
   const [isDebtMarkedDraft, setIsDebtMarkedDraft] = useState<boolean>(Boolean(initialData?.isDebtMarked));
   const { timerLoadingLineIds, timerErrorLineIds, timerUnsyncedLineIds, markLineUnsynced, markLineSynced, createToggleHandler } = useOrderTimer();
